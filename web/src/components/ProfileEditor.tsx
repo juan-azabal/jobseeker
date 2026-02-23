@@ -28,6 +28,8 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved }: Props) {
   const [locationPref, setLocationPref] = useState('b');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [newDomain, setNewDomain] = useState('');
+  const [newSkill, setNewSkill] = useState('');
 
   const handleActivate = async () => {
     setError(null);
@@ -54,6 +56,26 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved }: Props) {
   const removeSkill = (s: string) => setSkills(skills.filter((x) => x !== s));
   const removeLocation = (l: string) => setLocations(locations.filter((x) => x !== l));
 
+  const addDomain = () => {
+    const key = newDomain.trim().toLowerCase();
+    if (!key || key in domains) return;
+    setDomains({ ...domains, [key]: 10 });
+    setNewDomain('');
+  };
+
+  const removeDomain = (key: string) => {
+    const next = { ...domains };
+    delete next[key];
+    setDomains(next);
+  };
+
+  const addSkill = () => {
+    const s = newSkill.trim();
+    if (!s || skills.includes(s)) return;
+    setSkills([...skills, s]);
+    setNewSkill('');
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -69,7 +91,7 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved }: Props) {
         <label className="block text-zinc-300 text-sm font-medium mb-2">Domain weights</label>
         {Object.entries(domains).map(([domain, weight]) => (
           <div key={domain} className="flex items-center gap-3 mb-2">
-            <span className="text-zinc-400 text-sm w-24">{domain}</span>
+            <span className="text-zinc-400 text-sm w-24 truncate">{domain}</span>
             <input
               type="range"
               min={0}
@@ -79,8 +101,28 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved }: Props) {
               onChange={(e) => setDomains({ ...domains, [domain]: Number(e.target.value) })}
             />
             <span className="text-zinc-400 text-sm w-6">{weight}</span>
+            <button
+              onClick={() => removeDomain(domain)}
+              className="text-zinc-600 hover:text-red-400 transition-colors text-sm leading-none"
+              title="Remove domain"
+            >×</button>
           </div>
         ))}
+        <div className="mt-3 flex gap-2">
+          <input
+            className="flex-1 rounded bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+            placeholder="Add domain…"
+            value={newDomain}
+            onChange={(e) => setNewDomain(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addDomain()}
+          />
+          <button
+            onClick={addDomain}
+            className="rounded bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-600 hover:text-white"
+          >
+            Add
+          </button>
+        </div>
       </div>
 
       <div>
@@ -95,6 +137,21 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved }: Props) {
               <button className="text-zinc-400 hover:text-white" onClick={() => removeSkill(s)}>×</button>
             </span>
           ))}
+        </div>
+        <div className="mt-3 flex gap-2">
+          <input
+            className="flex-1 rounded bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+            placeholder="Add skill…"
+            value={newSkill}
+            onChange={(e) => setNewSkill(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addSkill()}
+          />
+          <button
+            onClick={addSkill}
+            className="rounded bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-600 hover:text-white"
+          >
+            Add
+          </button>
         </div>
       </div>
 
