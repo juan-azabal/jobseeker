@@ -11,6 +11,7 @@ app = FastAPI(title="JobSeeker")
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.environ.get("SESSION_SECRET", "dev-secret-change-in-prod"),
+    session_cookie="oauth_state",  # rename to avoid clashing with our auth cookie "jsk"
 )
 
 

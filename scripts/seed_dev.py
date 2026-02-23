@@ -4,15 +4,11 @@ Seed a dev user + session so you can test the web without Google OAuth.
 Usage (from the jobseeker/ root):
     venv/bin/python scripts/seed_dev.py
 
-Then open http://localhost:5173 — the cookie is printed below.
-To inject it manually:
-  Chrome DevTools → Application → Cookies → http://localhost:5173
-  Add:  Name=session  Value=<token>  Domain=localhost  Path=/
+Then open http://localhost:5173 and paste the cookie command shown below.
 """
 
 import os
 import sys
-import secrets
 from pathlib import Path
 
 # ── make sure we can import api modules ──────────────────────────────────────
@@ -27,16 +23,16 @@ from api.db.init import init_db
 from api.db.queries import upsert_user, create_session
 
 # ── config ───────────────────────────────────────────────────────────────────
-DB_PATH   = os.environ.get("DB_PATH", "data/jobseeker.db")
-TOKEN     = "dev-session-juan"        # fixed token — easy to set in DevTools
-EXPIRES   = "2099-12-31T23:59:59"    # won't expire
+DB_PATH = os.environ.get("DB_PATH", "data/jobseeker.db")
+TOKEN   = "dev-jsk-juan"          # fixed token — easy to type in DevTools
+EXPIRES = "2099-12-31T23:59:59"   # never expires in dev
 
 USER = {
     "google_id":  "dev-juan-azabal",
     "email":      "j.azabal@gmail.com",
     "name":       "Juan Azabal",
     "avatar_url": None,
-    "profile_id": "juan",             # matches jobagent config/profiles/juan.yaml
+    "profile_id": "juan",         # matches jobagent config/profiles/juan.yaml
 }
 
 # ── seed ─────────────────────────────────────────────────────────────────────
@@ -53,16 +49,9 @@ print(f"    user id: {user['id']}")
 print(f"    email:   {user['email']}")
 print(f"    profile: {user['profile_id']}")
 print()
-print("🍪  Inyecta esta cookie en el navegador:")
+print("🍪  Pega esto en la consola del navegador (http://localhost:5173):")
 print()
-print(f"    Name:    session")
-print(f"    Value:   {TOKEN}")
-print(f"    Domain:  localhost")
-print(f"    Path:    /")
+print(f'    document.cookie = "jsk={TOKEN}; path=/"')
 print()
-print("👉  Chrome DevTools → Application → Cookies → http://localhost:5173")
-print("    → haz clic en la fila vacía del fondo y rellena los campos.")
-print()
-print("    O pégalo directamente en la consola del navegador:")
-print(f'    document.cookie = "session={TOKEN}; path=/"')
+print("    Luego recarga la página → entras como Juan Azabal.")
 print()

@@ -19,7 +19,7 @@ oauth.register(
     client_kwargs={"scope": "openid profile email"},
 )
 
-SESSION_COOKIE = "session"
+SESSION_COOKIE = "jsk"
 SESSION_TTL_DAYS = 30
 
 

@@ -65,7 +65,7 @@ def test_me_with_valid_session(tmp_path, monkeypatch):
     create_session(db_path, "valid_token", user["id"], "2099-01-01T00:00:00")
 
     c = TestClient(app)
-    c.cookies.set("session", "valid_token")
+    c.cookies.set("jsk", "valid_token")
     resp = c.get("/api/auth/me")
     assert resp.status_code == 200
     assert resp.json()["email"] == "u@e.com"

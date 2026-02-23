@@ -30,7 +30,7 @@ def authed_client(tmp_path, monkeypatch):
     })
     create_session(db_path, "tok", user["id"], "2099-01-01T00:00:00")
     c = TestClient(app)
-    c.cookies.set("session", "tok")
+    c.cookies.set("jsk", "tok")
     return c
 
 

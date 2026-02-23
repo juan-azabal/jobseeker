@@ -3,7 +3,7 @@ from fastapi import Depends, HTTPException, Request
 from api.db.queries import get_session, get_user_by_google_id
 import sqlite3
 
-SESSION_COOKIE = "session"
+SESSION_COOKIE = "jsk"
 
 
 def _db_path() -> str:
