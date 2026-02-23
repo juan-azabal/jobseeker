@@ -20,8 +20,11 @@ function AppRoutes() {
 
   return (
     <div className="min-h-screen bg-zinc-950">
-      <header className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-        <span className="text-lg font-bold text-white">JobSeeker</span>
+      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-zinc-800/60 bg-zinc-950/90 px-6 py-3 backdrop-blur-sm">
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-violet-500" />
+          <span className="text-sm font-bold tracking-tight text-white">JobSeeker</span>
+        </div>
         <UserMenu />
       </header>
       <Routes>

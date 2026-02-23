@@ -10,17 +10,23 @@ interface Props {
 
 const PERIODS = [
   { label: 'Today', value: 'today' },
-  { label: 'This Week', value: 'week' },
-  { label: 'This Month', value: 'month' },
-  { label: 'All', value: 'all' },
+  { label: 'This week', value: 'week' },
+  { label: 'This month', value: 'month' },
+  { label: 'All time', value: 'all' },
 ];
 
 const TIERS = ['A', 'B', 'C'];
 
 const TIER_ACTIVE: Record<string, string> = {
-  A: 'bg-emerald-500 text-white',
-  B: 'bg-amber-400 text-zinc-900',
-  C: 'bg-zinc-500 text-white',
+  A: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40',
+  B: 'bg-amber-400/15 text-amber-300 border-amber-400/40',
+  C: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/40',
+};
+
+const TIER_LABELS: Record<string, string> = {
+  A: 'Apply',
+  B: 'Review',
+  C: 'Skip',
 };
 
 export default function FilterBar({ filters, onChange }: Props) {
@@ -34,34 +40,37 @@ export default function FilterBar({ filters, onChange }: Props) {
   const setPeriod = (period: string) => onChange({ ...filters, period });
 
   return (
-    <div className="flex flex-wrap items-center gap-3 pb-4">
+    <div className="mb-6 flex flex-wrap items-center gap-2">
       <div className="flex gap-1">
         {PERIODS.map(({ label, value }) => (
           <button
             key={value}
             onClick={() => setPeriod(value)}
-            className={`rounded px-3 py-1 text-sm font-medium transition-colors ${
+            className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-all duration-150 ${
               filters.period === value
-                ? 'bg-orange-500 text-white'
-                : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                ? 'border border-violet-500/40 bg-violet-500/15 text-violet-300 shadow-sm'
+                : 'border border-transparent text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
             }`}
           >
             {label}
           </button>
         ))}
       </div>
+
+      <span className="h-4 w-px bg-zinc-800" />
+
       <div className="flex gap-1">
         {TIERS.map((tier) => (
           <button
             key={tier}
             onClick={() => toggleTier(tier)}
-            className={`rounded px-3 py-1 text-sm font-bold transition-colors ${
+            className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-all duration-150 ${
               filters.tiers.includes(tier)
                 ? TIER_ACTIVE[tier]
-                : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'
+                : 'border-transparent text-zinc-600 hover:border-zinc-700 hover:text-zinc-400'
             }`}
           >
-            {tier}
+            {TIER_LABELS[tier]}
           </button>
         ))}
       </div>
