@@ -34,7 +34,7 @@ under each company, which uses _single underscore italics_ on its own line.
 
 ## Summary
 
-4-5 sentences of prose. Must include at least one sentence about scope limitations or
+3-4 sentences of prose. Must include at least one sentence about scope limitations or
 what you are NOT looking for (e.g. "Not looking for...", "I work best in contexts
 where..."). No generic language.
 
@@ -44,15 +44,13 @@ where..."). No generic language.
 - Bullet 2: different domain, mix of metrics and qualitative impact.
 - Bullet 3: another high-impact achievement.
 - Bullet 4: cross-functional or strategic result.
-- Bullet 5: a sixth bullet if there are strong additional wins across the career.
+- Bullet 5: a fifth bullet only if the career has additional wins in a different area.
 
 ## Core Skills
 
 Theme Name: Prose describing skills in this theme. No bullet points. No bold markers.
 
 Another Theme: Another prose paragraph.
-
-Third Theme: A third theme if warranted by the role.
 
 ## Projects
 
@@ -67,20 +65,17 @@ _One sentence: what the company does and your scope/team size._
 - Bullet: result + mechanism. Max 2 lines.
 - Bullet: another achievement with metric.
 - Bullet: third impact.
-- Bullet: fourth if the tenure warrants it.
 
 ### Previous Company - Role	MM/YYYY - MM/YYYY
 _Context line._
 
 - Bullet: result + mechanism.
 - Bullet: another achievement.
-- Bullet: third bullet.
 
 ### Earlier Company - Role	MM/YYYY - MM/YYYY
 _Context line._
 
 - Bullet: result.
-- Bullet: another result.
 
 ## Education and Certifications
 
@@ -117,20 +112,26 @@ Spanish (native) | English (advanced)
 
 ---
 
-## Content volume rules (CRITICAL — do not produce a thin CV)
+## Content volume rules (CRITICAL — follow exactly)
 
 7. Work Experience: include EVERY company from the master CV, ordered
-   chronologically (most recent first). Do NOT silently drop older roles.
-   Write 3-5 bullets per company; reduce to 2 only for roles older than 8 years.
+   chronologically (most recent first). Apply this recency bullet budget:
+   - Most recent company: 3-4 bullets
+   - Roles from 2-5 years ago: 2-3 bullets
+   - Roles older than 5 years: 1-2 bullets
+   - Roles older than 8 years: 1 bullet; omit only if career spans 15+ years
+     and space is exhausted
+   - TOTAL across ALL Work Experience entries: 12 bullets maximum
 
-8. Selected Impact: write 5-7 bullets drawing from the FULL career, not just the
+8. Selected Impact: write 4-5 bullets drawing from the FULL career, not just the
    most recent role. Each bullet must come from a different achievement.
 
-9. Target length: the finished CV must fill 1.5 to 2 pages in a standard Word
-   document. If your draft would be under 1.5 pages, add more bullets from the
-   master CV rather than leaving sections thin.
+9. Length hard cap: the CV MUST fit within 3 pages — exceeding 3 pages is a hard
+   failure. Target 2 pages. When content would push past 3 pages, cut bullets from
+   the oldest roles first. If the draft would be under 1.5 pages, add bullets from
+   the master CV.
 
-10. Core Skills: write 3-5 themes. Each theme paragraph must be 1-2 sentences of
+10. Core Skills: write 2-3 themes. Each theme paragraph must be 1-2 sentences of
     specific, non-generic prose (name technologies, methods, or contexts).
 
 ---

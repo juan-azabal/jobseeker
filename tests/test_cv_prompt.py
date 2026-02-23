@@ -270,7 +270,7 @@ def test_user_cv_included_when_provided(monkeypatch, mock_references_dir):
 
 
 def test_system_prompt_contains_volume_rules(monkeypatch, mock_references_dir):
-    """System prompt must include content volume rules: all companies, 3-5 bullets, 1.5-2 pages."""
+    """System prompt must include content volume rules: all companies, recency budget, hard cap."""
     monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
 
     import importlib
@@ -283,16 +283,19 @@ def test_system_prompt_contains_volume_rules(monkeypatch, mock_references_dir):
     assert "every company" in system_lower or "all compan" in system_lower, (
         "Prompt must instruct LLM to include every company from master CV"
     )
-    assert "3-5 bullet" in system_lower or "3–5 bullet" in system_lower or "3 to 5 bullet" in system_lower, (
-        "Prompt must specify 3-5 bullets per company"
+    assert "12 bullet" in system_lower or "12 bullets" in system_lower, (
+        "Prompt must specify a total Work Experience bullet cap (12 bullets max)"
+    )
+    assert "3 page" in system_lower or "3-page" in system_lower, (
+        "Prompt must set a hard page cap (3 pages)"
     )
     assert "1.5" in system and "page" in system_lower, (
-        "Prompt must set a target length (1.5 pages minimum)"
+        "Prompt must reference 1.5 pages as minimum threshold"
     )
 
 
 def test_system_prompt_contains_selected_impact_volume(monkeypatch, mock_references_dir):
-    """System prompt must instruct LLM to write 5-7 Selected Impact bullets."""
+    """System prompt must instruct LLM to write 4-5 Selected Impact bullets."""
     monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
 
     import importlib
@@ -301,13 +304,13 @@ def test_system_prompt_contains_selected_impact_volume(monkeypatch, mock_referen
 
     system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
 
-    assert "5-7" in system or "5–7" in system, (
-        "Prompt must specify 5-7 bullets for Selected Impact"
+    assert "4-5" in system or "4–5" in system, (
+        "Prompt must specify 4-5 bullets for Selected Impact"
     )
 
 
 def test_system_prompt_selected_impact_example_has_five_bullets(monkeypatch, mock_references_dir):
-    """The Selected Impact format example must show at least 5 bullet lines."""
+    """The Selected Impact format example must show at least 4 bullet lines."""
     monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
 
     import importlib
@@ -324,6 +327,6 @@ def test_system_prompt_selected_impact_example_has_five_bullets(monkeypatch, moc
     )
     assert impact_block is not None, "Selected Impact section not found in system prompt"
     bullets = [l for l in impact_block.group(1).splitlines() if l.strip().startswith("-")]
-    assert len(bullets) >= 5, (
-        f"Selected Impact example must have ≥5 bullets, found {len(bullets)}"
+    assert len(bullets) >= 4, (
+        f"Selected Impact example must have ≥4 bullets, found {len(bullets)}"
     )
