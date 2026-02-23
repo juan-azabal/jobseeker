@@ -9,6 +9,7 @@ export interface JobSummary {
   tier: 'A' | 'B' | 'C';
   first_seen: string;
   url: string;
+  applied_at: string | null;
 }
 
 export interface ScoreBreakdown {

@@ -36,26 +36,55 @@ def get_jobs(
     tiers: list[str] | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    user_id: int | None = None,
 ) -> list[dict]:
     con = _connect(db_path)
-    sql = "SELECT job_id, title, company, location, location_type, domain, score, tier, first_seen, url FROM jobs WHERE 1=1"
-    params: list[Any] = []
+    sql = """
+        SELECT j.job_id, j.title, j.company, j.location, j.location_type, j.domain,
+               j.score, j.tier, j.first_seen, j.url,
+               s.applied_at
+        FROM jobs j
+        LEFT JOIN user_job_status s ON s.job_id = j.job_id AND s.user_id = ?
+        WHERE 1=1
+    """
+    params: list[Any] = [user_id]
 
     if tiers:
         placeholders = ",".join("?" * len(tiers))
-        sql += f" AND tier IN ({placeholders})"
+        sql += f" AND j.tier IN ({placeholders})"
         params.extend(tiers)
     if date_from:
-        sql += " AND first_seen >= ?"
+        sql += " AND j.first_seen >= ?"
         params.append(date_from)
     if date_to:
-        sql += " AND first_seen <= ?"
+        sql += " AND j.first_seen <= ?"
         params.append(date_to)
 
-    sql += " ORDER BY score DESC"
+    sql += " ORDER BY j.score DESC"
     rows = con.execute(sql, params).fetchall()
     con.close()
     return [dict(r) for r in rows]
+
+
+def set_job_applied(db_path: str, user_id: int, job_id: str, applied: bool) -> None:
+    from datetime import datetime, timezone
+    con = _connect(db_path)
+    if applied:
+        con.execute(
+            """
+            INSERT INTO user_job_status (user_id, job_id, applied_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id, job_id) DO UPDATE SET applied_at = excluded.applied_at
+            """,
+            (user_id, job_id, datetime.now(timezone.utc).isoformat()),
+        )
+    else:
+        con.execute(
+            "DELETE FROM user_job_status WHERE user_id = ? AND job_id = ?",
+            (user_id, job_id),
+        )
+    con.commit()
+    con.close()
 
 
 def get_job_by_id(db_path: str, job_id: str) -> dict | None:

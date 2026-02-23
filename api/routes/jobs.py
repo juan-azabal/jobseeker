@@ -4,11 +4,12 @@ from datetime import date, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
-from api.db.queries import get_jobs, get_job_by_id
+from api.db.queries import get_jobs, get_job_by_id, set_job_applied
 from api.middleware.auth import get_current_user
 
-router = APIRouter(prefix="/api/jobs", tags=["jobs"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 PERIOD_DAYS = {"today": 0, "week": 7, "month": 30}
 
@@ -34,10 +35,17 @@ def list_jobs(
     period: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    user: dict = Depends(get_current_user),
 ):
     effective_date_from = date_from or _period_to_date_from(period)
     tiers = [t.upper() for t in tier] if tier else None
-    jobs = get_jobs(_db_path(), tiers=tiers, date_from=effective_date_from, date_to=date_to)
+    jobs = get_jobs(
+        _db_path(),
+        tiers=tiers,
+        date_from=effective_date_from,
+        date_to=date_to,
+        user_id=user["id"],
+    )
     return {
         "jobs": jobs,
         "filters": {"tier": tier, "period": period or "all"},
@@ -46,10 +54,23 @@ def list_jobs(
 
 
 @router.get("/{job_id}")
-def get_job(job_id: str):
+def get_job(job_id: str, user: dict = Depends(get_current_user)):
     row = get_job_by_id(_db_path(), job_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Job not found")
     row["parsed"] = json.loads(row["parsed"]) if row.get("parsed") else None
     row["scored"] = json.loads(row["scored"]) if row.get("scored") else None
     return row
+
+
+class ApplyPayload(BaseModel):
+    applied: bool
+
+
+@router.post("/{job_id}/apply")
+def apply_job(job_id: str, payload: ApplyPayload, user: dict = Depends(get_current_user)):
+    row = get_job_by_id(_db_path(), job_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    set_job_applied(_db_path(), user["id"], job_id, payload.applied)
+    return {"job_id": job_id, "applied": payload.applied}
