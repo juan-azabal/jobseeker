@@ -9,7 +9,7 @@ Provider-agnostic interface configured via environment variables:
 import os
 
 _DEFAULTS = {
-    "anthropic": "claude-sonnet-4-5-20250514",
+    "anthropic": "claude-sonnet-4-5-20250929",
     "openai": "gpt-4o",
 }
 

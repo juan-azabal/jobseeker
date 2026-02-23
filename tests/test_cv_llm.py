@@ -20,7 +20,7 @@ def test_anthropic_provider_calls_correct_client(monkeypatch):
 
     mock_client.messages.create.assert_called_once()
     call_kwargs = mock_client.messages.create.call_args.kwargs
-    assert call_kwargs["model"] == "claude-sonnet-4-5-20250514"
+    assert call_kwargs["model"] == "claude-sonnet-4-5-20250929"
     assert call_kwargs["max_tokens"] == 4096
     assert call_kwargs["system"] == "system prompt"
     assert call_kwargs["messages"][0]["content"] == "user prompt"

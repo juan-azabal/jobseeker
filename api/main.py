@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-load_dotenv()  # Must be before route imports — auth.py reads env vars at module level
+load_dotenv(override=True)  # Must be before route imports — auth.py reads env vars at module level
 
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
