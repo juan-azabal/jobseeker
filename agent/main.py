@@ -481,9 +481,11 @@ def main():
     _load_heuristic_config(profile)
 
     # Resolve profile-specific paths
-    seen_ids_path  = profile.get("seen_ids", f"config/seen_ids/{profile_id}.txt")
+    seen_ids_path    = profile.get("seen_ids", f"config/seen_ids/{profile_id}.txt")
     preferences_path = profile.get("preferences", "config/preferences.yaml")
-    applied_path   = "config/applied.yaml"  # personal, always per-instance
+    searches_path    = profile.get("searches", "config/searches.yaml")
+    watchlist_path   = profile.get("watchlist", "config/watchlist.yaml")
+    applied_path     = "config/applied.yaml"  # personal, always per-instance
 
     start_time = time.time()
 
@@ -500,7 +502,7 @@ def main():
     print("=" * 70)
 
     # Step 1a: Scrape job boards
-    jobs = run_scraper()
+    jobs = run_scraper(config_path=searches_path)
 
     # Step 1b: Poll ATS watchlist
     existing_ids = {j["id"] for j in jobs}
@@ -631,13 +633,13 @@ def main():
             n_searches = 0
             n_watchlist = 0
             try:
-                with open("config/searches.yaml") as f:
+                with open(searches_path) as f:
                     searches_cfg = yaml.safe_load(f) or {}
                 n_searches = len(searches_cfg.get("searches", []))
             except Exception:
                 pass
             try:
-                with open("config/watchlist.yaml") as f:
+                with open(watchlist_path) as f:
                     wl_cfg = yaml.safe_load(f) or {}
                 n_watchlist = len(wl_cfg.get("greenhouse", []) or []) + len(wl_cfg.get("lever", []) or [])
             except Exception:

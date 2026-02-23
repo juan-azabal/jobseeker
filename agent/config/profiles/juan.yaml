@@ -186,8 +186,8 @@ stories:
   "b2b": ["H4", "H9"]
   "saas": ["H4"]
 
-# Paths to config files (shared across users by default)
+# Paths to config files (per-user where available, shared otherwise)
 preferences: "config/preferences.yaml"
-searches: "config/searches.yaml"
+searches: "config/profiles/juan-searches.yaml"
 watchlist: "config/watchlist.yaml"
 seen_ids: "config/seen_ids/juan.txt"
