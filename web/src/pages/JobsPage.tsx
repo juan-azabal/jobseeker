@@ -14,6 +14,7 @@ function filtersToQuery(f: Filters): string {
   const params = new URLSearchParams();
   f.tiers.forEach((t) => params.append('tier', t.toLowerCase()));
   if (f.period !== 'all') params.set('period', f.period);
+  if (f.hideApplied) params.set('hide_applied', 'true');
   return params.toString();
 }
 
@@ -29,7 +30,7 @@ function buildCVPrompt(jobs: JobSummary[]): string {
 export default function JobsPage() {
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<Filters>({ tiers: ['A', 'B'], period: 'all' });
+  const [filters, setFilters] = useState<Filters>({ tiers: ['A', 'B'], period: 'all', hideApplied: false });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
   const navigate = useNavigate();
@@ -88,7 +89,7 @@ export default function JobsPage() {
           <div className="mt-16 text-center">
             <p className="text-sm text-zinc-600">No jobs match your current filters.</p>
             <button
-              onClick={() => setFilters({ tiers: ['A', 'B'], period: 'all' })}
+              onClick={() => setFilters({ tiers: ['A', 'B'], period: 'all', hideApplied: false })}
               className="mt-3 text-xs text-zinc-500 underline hover:text-zinc-300 transition-colors"
             >
               Reset filters

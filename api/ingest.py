@@ -50,7 +50,6 @@ def ingest(db_path: str, jobagent_dir: str) -> dict:
             # Use RAG score when available; fall back to heuristic fit_score saved by
             # jobagent's save_results(). Default 0 only when neither is present.
             score = rag.get("score", 0) if rag else int(raw.get("fit_score") or 0)
-            tier = _compute_tier(score)
 
             parsed = raw.get("parsed") or {}
             # Preserve raw description in parsed blob so CV generation can use it
@@ -59,6 +58,10 @@ def ingest(db_path: str, jobagent_dir: str) -> dict:
                 parsed["description"] = raw["description"]
             location_type = parsed.get("location_type") or ("remote" if raw.get("is_remote") else "unknown")
             domain = parsed.get("domain")
+
+            # Raw score stored as-is; relocation penalty is applied per-user at
+            # query time in api/routes/jobs.py using the user's profile home_locations.
+            tier = _compute_tier(score)
 
             date_posted = _to_date(raw.get("date_posted"))
 

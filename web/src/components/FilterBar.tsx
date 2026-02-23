@@ -1,6 +1,7 @@
 export interface Filters {
   tiers: string[];
   period: string;
+  hideApplied: boolean;
 }
 
 interface Props {
@@ -38,6 +39,7 @@ export default function FilterBar({ filters, onChange }: Props) {
   };
 
   const setPeriod = (period: string) => onChange({ ...filters, period });
+  const toggleHideApplied = () => onChange({ ...filters, hideApplied: !filters.hideApplied });
 
   return (
     <div className="mb-6 flex flex-wrap items-center gap-2">
@@ -74,6 +76,19 @@ export default function FilterBar({ filters, onChange }: Props) {
           </button>
         ))}
       </div>
+
+      <span className="h-4 w-px bg-zinc-800" />
+
+      <button
+        onClick={toggleHideApplied}
+        className={`rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all duration-150 ${
+          filters.hideApplied
+            ? 'border-zinc-600 bg-zinc-700/40 text-zinc-300'
+            : 'border-transparent text-zinc-600 hover:border-zinc-700 hover:text-zinc-400'
+        }`}
+      >
+        {filters.hideApplied ? 'Show applied' : 'Hide applied'}
+      </button>
     </div>
   );
 }

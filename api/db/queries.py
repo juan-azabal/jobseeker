@@ -38,30 +38,65 @@ def get_jobs(
     date_from: str | None = None,
     date_to: str | None = None,
     user_id: int | None = None,
+    hide_applied: bool = False,
+    limit: int = 100,
 ) -> list[dict]:
     con = _connect(db_path)
-    sql = """
-        SELECT j.job_id, j.title, j.company, j.location, j.location_type, j.domain,
-               j.score, j.tier, j.first_seen, j.url,
-               s.applied_at
-        FROM jobs j
-        LEFT JOIN user_job_status s ON s.job_id = j.job_id AND s.user_id = ?
-        WHERE 1=1
-    """
-    params: list[Any] = [user_id]
 
+    # Build optional filter fragments applied inside the ranked CTE
+    filter_clauses: list[str] = []
+    filter_params: list[Any] = []
     if tiers:
         placeholders = ",".join("?" * len(tiers))
-        sql += f" AND j.tier IN ({placeholders})"
-        params.extend(tiers)
+        filter_clauses.append(f"j.tier IN ({placeholders})")
+        filter_params.extend(tiers)
     if date_from:
-        sql += " AND j.first_seen >= ?"
-        params.append(date_from)
+        filter_clauses.append("j.first_seen >= ?")
+        filter_params.append(date_from)
     if date_to:
-        sql += " AND j.first_seen <= ?"
-        params.append(date_to)
+        filter_clauses.append("j.first_seen <= ?")
+        filter_params.append(date_to)
 
-    sql += " ORDER BY j.score DESC"
+    where_fragment = ("AND " + " AND ".join(filter_clauses)) if filter_clauses else ""
+    hide_fragment = "AND ag.applied_at IS NULL" if hide_applied else ""
+
+    # Deduplicate by (company, normalised title), keeping the highest-scoring row.
+    # applied_groups aggregates applied_at across all duplicates so the badge shows
+    # even when the user marked a lower-scored duplicate.
+    sql = f"""
+        WITH ranked AS (
+            SELECT
+                j.job_id, j.title, j.company, j.location, j.location_type, j.domain,
+                j.score, j.tier, j.first_seen, j.url,
+                ROW_NUMBER() OVER (
+                    PARTITION BY j.company, LOWER(TRIM(j.title))
+                    ORDER BY j.score DESC
+                ) AS rn
+            FROM jobs j
+            WHERE 1=1 {where_fragment}
+        ),
+        applied_groups AS (
+            SELECT
+                j.company,
+                LOWER(TRIM(j.title)) AS title_key,
+                MAX(s.applied_at)    AS applied_at
+            FROM jobs j
+            JOIN user_job_status s ON s.job_id = j.job_id AND s.user_id = ?
+            GROUP BY j.company, LOWER(TRIM(j.title))
+        )
+        SELECT
+            r.job_id, r.title, r.company, r.location, r.location_type, r.domain,
+            r.score, r.tier, r.first_seen, r.url,
+            ag.applied_at
+        FROM ranked r
+        LEFT JOIN applied_groups ag
+            ON ag.company = r.company AND ag.title_key = LOWER(TRIM(r.title))
+        WHERE r.rn = 1
+          {hide_fragment}
+        ORDER BY r.score DESC
+        LIMIT ?
+    """
+    params: list[Any] = filter_params + [user_id, limit]
     rows = con.execute(sql, params).fetchall()
     con.close()
     return [dict(r) for r in rows]

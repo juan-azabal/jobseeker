@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated
 
+import yaml
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -33,6 +34,33 @@ def _period_to_date_from(period: str | None) -> str | None:
     return (date.today() - timedelta(days=days)).isoformat()
 
 
+def _load_home_locations(profile_id: str | None) -> list[str]:
+    """Return home_locations from the user's jobagent profile YAML, or [] if unavailable."""
+    if not profile_id:
+        return []
+    jobagent_dir = os.environ.get("JOBAGENT_DIR", "../jobagent")
+    profile_path = Path(jobagent_dir) / "config" / "profiles" / f"{profile_id}.yaml"
+    try:
+        data = yaml.safe_load(profile_path.read_text())
+        return [loc.lower() for loc in data.get("user", {}).get("home_locations", [])]
+    except Exception:
+        return []
+
+
+def _apply_reloc_penalty(jobs: list[dict], home_locations: list[str]) -> list[dict]:
+    """Subtract 15 pts from jobs that require relocation (not remote, not in home cities)."""
+    if not home_locations:
+        return jobs
+    for job in jobs:
+        loc_type = job.get("location_type") or ""
+        job_loc = (job.get("location") or "").lower()
+        is_reloc = loc_type != "remote" and not any(h in job_loc for h in home_locations)
+        if is_reloc and job["score"] > 0:
+            job["score"] = max(0, job["score"] - 15)
+    jobs.sort(key=lambda j: j["score"], reverse=True)
+    return jobs
+
+
 def _slugify(text: str, max_len: int = 30) -> str:
     """Convert text to a URL/filename-safe slug."""
     slug = text.lower().strip()
@@ -48,6 +76,8 @@ def list_jobs(
     period: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    hide_applied: bool = Query(default=False),
+    limit: int = Query(default=100, ge=1, le=500),
     user: dict = Depends(get_current_user),
 ):
     effective_date_from = date_from or _period_to_date_from(period)
@@ -58,7 +88,11 @@ def list_jobs(
         date_from=effective_date_from,
         date_to=date_to,
         user_id=user["id"],
+        hide_applied=hide_applied,
+        limit=limit,
     )
+    home_locations = _load_home_locations(user.get("profile_id"))
+    jobs = _apply_reloc_penalty(jobs, home_locations)
     return {
         "jobs": jobs,
         "filters": {"tier": tier, "period": period or "all"},
