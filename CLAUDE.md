@@ -45,9 +45,16 @@ Job search CRM web product. Browse, filter, and manage scored job matches. Daily
 - Phase 1 — MVP: Ingest + browse jobs with period/tier filters
 - Phase 2 — Auth: Google OAuth (authlib + SessionMiddleware, HTTP-only cookie, protected API, frontend guards)
 - Phase 3 — Onboarding: CV upload (.docx) → generate-profile → edit → save-profile → jobagent files written
+- Phase 4 — UI overhaul + job tracking + profile page
+  - Design: dark theme (zinc-950), violet-500 primary accent, semantic tier colors (emerald/amber/zinc)
+  - Job tracking: `user_job_status` table (migration 003), per-user `applied_at`, `POST /jobs/{id}/apply`
+  - CV generation: single-job "Generate CV" button (copies prompt to clipboard); bulk selection + floating action bar
+  - Profile page `/profile`: view/edit current profile, "Replace CV" flow to re-upload and regenerate
+  - Header: sticky frosted-glass, "My CV" link navigates to `/profile`
+  - Tier C hidden by default in listing filters
 
 ### Current
-Phase 4 — Email integration: Dual links in digest
+Phase 5 — Harden: errors, mobile, security, multi-user isolation
 
 ### Pending
 - Phase 5 — Harden: Errors, mobile, security, multi-user isolation
@@ -63,6 +70,10 @@ Phase 4 — Email integration: Dual links in digest
 - Run backend tests from `/Users/juanazabal/Proyectos/jobseeker/` dir, not from `web/`
 - openai added to requirements.txt (needed because jobagent/onboard.py imports it at module level)
 - Users with `profile_id: null` are redirected to `/onboard`; test mocks must include `profile_id: 'user'`
+- PyYAML available in venv via jobagent dependency — not in requirements.txt but importable as `import yaml`
+- YAML profile (jobagent format) is nested: `user.{name,email,home_locations}`, `target.{domains,seniority}`, top-level `skills`. ProfileEditor expects flat format — normalize in `GET /api/onboard/profile`
+- Dev session: insert token `dev-jsk-juan` in sessions table; inject cookie via `document.cookie = "jsk=dev-jsk-juan; path=/"`
+- CV generation prompt: copies formatted job context to clipboard for pasting into Claude with career-helper skill active (actual skill invocation TBD — specs pending)
 
 ### Blockers
 {none}
