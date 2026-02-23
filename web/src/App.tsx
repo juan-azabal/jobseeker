@@ -1,6 +1,9 @@
 import { Routes, Route, Navigate, useNavigate, useParams } from 'react-router';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import JobsPage from './pages/JobsPage';
 import JobDetailPage from './pages/JobDetailPage';
+import LoginPage from './pages/LoginPage';
+import UserMenu from './components/UserMenu';
 
 function JobDetailRoute() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -8,11 +11,17 @@ function JobDetailRoute() {
   return <JobDetailPage jobId={jobId!} onBack={() => navigate(-1)} />;
 }
 
-export default function App() {
+function AppRoutes() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) return <div className="min-h-screen bg-zinc-950" />;
+  if (!isAuthenticated) return <LoginPage />;
+
   return (
     <div className="min-h-screen bg-zinc-950">
-      <header className="border-b border-zinc-800 px-4 py-3">
+      <header className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
         <span className="text-lg font-bold text-white">JobSeeker</span>
+        <UserMenu />
       </header>
       <Routes>
         <Route path="/" element={<Navigate to="/jobs" replace />} />
@@ -20,5 +29,13 @@ export default function App() {
         <Route path="/jobs/:jobId" element={<JobDetailRoute />} />
       </Routes>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
   );
 }

@@ -3,21 +3,23 @@ import { vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import App from './App';
 
-beforeEach(() => {
-  global.fetch = vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => ({ jobs: [], total: 0, filters: { tier: [], period: 'all' } }),
-  } as Response);
-});
+const MOCK_USER = { id: 1, email: 'u@e.com', name: 'User', avatar_url: null, profile_id: null };
+const MOCK_JOBS = { jobs: [], total: 0, filters: { tier: [], period: 'all' } };
 
 afterEach(() => vi.restoreAllMocks());
 
-test('renders JobSeeker header', async () => {
+test('renders JobSeeker header when authenticated', async () => {
+  global.fetch = vi.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => MOCK_USER } as Response)
+    .mockResolvedValue({ ok: true, json: async () => MOCK_JOBS } as Response);
   render(<MemoryRouter><App /></MemoryRouter>);
-  expect(screen.getByText('JobSeeker')).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByText('JobSeeker')).toBeInTheDocument());
 });
 
-test('/ redirects to /jobs page', async () => {
+test('/ redirects to /jobs page when authenticated', async () => {
+  global.fetch = vi.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => MOCK_USER } as Response)
+    .mockResolvedValue({ ok: true, json: async () => MOCK_JOBS } as Response);
   render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>);
   await waitFor(() => expect(screen.getByRole('heading', { name: /^jobs$/i })).toBeInTheDocument());
 });
