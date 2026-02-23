@@ -1,0 +1,146 @@
+"""
+Scoring baseline regression tests.
+
+Captures the exact heuristic scores and rubric output for Juan's profile
+as of pre-Phase-7. Any refactor that changes scoring behavior will break
+these tests, serving as a safety net.
+
+Created: Phase 7.1
+"""
+
+import sys
+import os
+
+# Allow importing agent modules from the agent/ directory
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from user_config import load_profile
+from main import _load_heuristic_config, _heuristic_score
+from scorer import _build_scoring_prompt
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+def _load_juan_profile():
+    """Load Juan's profile and initialize heuristic config."""
+    profile = load_profile("juan")
+    _load_heuristic_config(profile)
+    return profile
+
+
+# Job 1: Strong fit — remote, principal, data domain, strong skill overlap
+JOB_STRONG_FIT = {
+    "title": "Principal Product Manager - Data Platform",
+    "company": "Acme Data Co",
+    "location": "Remote, Europe",
+    "parsed": {
+        "seniority": "principal",
+        "location_type": "remote",
+        "domain": "data",
+        "must_have_skills": ["data platform", "event tracking", "SQL", "stakeholder management"],
+        "nice_to_have_skills": ["Snowplow", "Kafka", "dbt"],
+        "technical_stack": ["Snowflake", "Kafka", "dbt", "Python"],
+        "responsibilities_summary": "Own the data platform strategy, define event taxonomy, align 5+ engineering teams.",
+        "salary_mentioned": "120000-140000 EUR",
+        "red_flags": [],
+        "key_phrases": ["data platform ownership", "event taxonomy", "real-time pipeline"],
+    },
+}
+
+# Job 2: Medium fit — hybrid Barcelona, senior, saas, some skill overlap
+JOB_MEDIUM_FIT = {
+    "title": "Senior Product Manager - Analytics",
+    "company": "BarcelonaTech",
+    "location": "Barcelona, Spain (hybrid)",
+    "parsed": {
+        "seniority": "senior",
+        "location_type": "hybrid",
+        "domain": "saas",
+        "must_have_skills": ["analytics", "product roadmap", "SQL"],
+        "nice_to_have_skills": ["experimentation", "data visualization"],
+        "technical_stack": ["Looker", "BigQuery", "Python"],
+        "responsibilities_summary": "Drive analytics product roadmap for B2B SaaS platform.",
+        "salary_mentioned": "not mentioned",
+        "red_flags": [],
+        "key_phrases": ["analytics platform", "product strategy"],
+    },
+}
+
+# Job 3: Low fit — onsite NYC, mid-level, healthcare, no skill overlap
+JOB_LOW_FIT = {
+    "title": "Product Manager - Healthcare",
+    "company": "HealthCorp",
+    "location": "New York, NY",
+    "parsed": {
+        "seniority": "mid",
+        "location_type": "onsite",
+        "domain": "healthcare",
+        "must_have_skills": ["HIPAA", "EHR systems", "clinical workflows"],
+        "nice_to_have_skills": ["HL7", "FHIR"],
+        "technical_stack": ["Epic", "Cerner"],
+        "responsibilities_summary": "Own healthcare workflow features for clinical staff.",
+        "salary_mentioned": "90000-110000 USD",
+        "red_flags": ["requires medical domain experience"],
+        "key_phrases": ["clinical workflow", "patient engagement"],
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Heuristic score regression
+# ---------------------------------------------------------------------------
+
+class TestHeuristicScoreBaseline:
+    """Exact heuristic scores for Juan's profile — regression safety net."""
+
+    def setup_method(self):
+        self.profile = _load_juan_profile()
+
+    def test_strong_fit_score(self):
+        assert _heuristic_score(JOB_STRONG_FIT) == 70
+
+    def test_medium_fit_score(self):
+        assert _heuristic_score(JOB_MEDIUM_FIT) == 37
+
+    def test_low_fit_score(self):
+        assert _heuristic_score(JOB_LOW_FIT) == 0
+
+
+# ---------------------------------------------------------------------------
+# Rubric prompt regression
+# ---------------------------------------------------------------------------
+
+class TestRubricPromptBaseline:
+    """Rubric prompt output for Juan's profile — regression safety net."""
+
+    def setup_method(self):
+        self.profile = _load_juan_profile()
+        self.rubric = _build_scoring_prompt(self.profile)
+
+    def test_rubric_contains_name(self):
+        assert "Juan Azabal" in self.rubric
+
+    def test_rubric_contains_core_domains(self):
+        assert "adtech, data, ml" in self.rubric
+
+    def test_rubric_contains_adjacent_domains(self):
+        # Juan's saas domain (weight 8) is the only adjacent (6 <= w < 12)
+        assert "Adjacent domains (saas)" in self.rubric
+
+    def test_rubric_contains_target_levels(self):
+        assert "principal/staff/director" in self.rubric
+
+    def test_rubric_no_hardcoded_saas_b2b_fallback(self):
+        # With Juan's profile, adjacent_str resolves to "saas" (not the fallback "SaaS, B2B")
+        assert "SaaS, B2B" not in self.rubric
+
+    def test_rubric_contains_pm_role_type(self):
+        # Currently hardcoded as "PM" in the rubric template — this will be
+        # parameterized in 7.2 but must stay "PM" for Juan's profile after.
+        assert "experienced PM" in self.rubric
+
+    def test_rubric_contains_eu_geography(self):
+        # Currently hardcoded as "EU or remote" — parameterized in 7.2
+        assert "EU or remote" in self.rubric
