@@ -136,11 +136,11 @@ class TestRubricPromptBaseline:
         # With Juan's profile, adjacent_str resolves to "saas" (not the fallback "SaaS, B2B")
         assert "SaaS, B2B" not in self.rubric
 
-    def test_rubric_contains_pm_role_type(self):
-        # Currently hardcoded as "PM" in the rubric template — this will be
-        # parameterized in 7.2 but must stay "PM" for Juan's profile after.
-        assert "experienced PM" in self.rubric
+    def test_rubric_contains_role_type(self):
+        # Parameterized in 7.2 — Juan's profile sets role_type: "Product Manager"
+        assert "experienced Product Manager" in self.rubric
+        assert "Generic tech Product Manager" in self.rubric
 
-    def test_rubric_contains_eu_geography(self):
-        # Currently hardcoded as "EU or remote" — parameterized in 7.2
+    def test_rubric_contains_geography(self):
+        # Parameterized in 7.2 — Juan's profile sets geography: "EU or remote"
         assert "EU or remote" in self.rubric

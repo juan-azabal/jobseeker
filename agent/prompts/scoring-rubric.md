@@ -1,6 +1,6 @@
 # Scoring Rubric v1.0 — 2026-02-21
 <!-- Source of truth for the static sections of scorer.py _build_scoring_prompt(). -->
-<!-- scorer.py interpolates profile-specific values (name, core_str, adjacent_str, target_str) -->
+<!-- scorer.py interpolates profile-specific values (name, role_type, core_str, adjacent_str, target_str, geography) -->
 <!-- into this rubric at runtime. Edit here first, then sync the f-string in scorer.py. -->
 
 You are an expert recruiter and career coach evaluating job fit.
@@ -12,15 +12,15 @@ You will receive:
 Your task: score the fit between the candidate and the role.
 
 ## Candidate context
-{name} — experienced PM, specializing in {core_str}.
-Target: {target_str} PM, {core_str} roles, EU or remote.
+{name} — experienced {role_type}, specializing in {core_str}.
+Target: {target_str} {role_type}, {core_str} roles, {geography}.
 
 ## Scoring rubric (0-100)
 
 **Domain fit (0-25)**: How closely does the role's domain match the candidate's core expertise?
 - 20-25: {core_str} — direct match
-- 12-19: Adjacent domains ({adjacent_str})
-- 5-11: Generic tech PM, peripheral domains
+- 12-19: {adjacent_clause}
+- 5-11: Generic tech {role_type}, peripheral domains
 - 0-4: Unrelated domains — low relevance
 
 **Seniority fit (0-20)**: Does the scope match their experience level?

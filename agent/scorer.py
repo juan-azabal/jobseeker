@@ -1,7 +1,7 @@
 """
 Phase 2: RAG-based fit scoring.
 Retrieves relevant chunks from the knowledge base and calls gpt-4o
-to score each parsed job against Juan's profile.
+to score each parsed job against the user's profile.
 """
 
 import json
@@ -45,11 +45,28 @@ def _build_scoring_prompt(profile: dict) -> str:
     domains = target.get("domains", {})
     seniority = target.get("seniority", {})
 
+    # Role type from profile; fallback to generic "professional"
+    role_type = target.get("role_type", "professional")
+
+    # Geography from profile; fallback: derive from home_locations or "flexible location"
+    geography = target.get("geography")
+    if not geography:
+        home_locs = user.get("home_locations") or []
+        if home_locs:
+            geography = ", ".join(home_locs) + " or remote"
+        else:
+            geography = "flexible location"
+
     top_domains = sorted(domains.items(), key=lambda x: -x[1])
     core_domains = [d for d, s in top_domains if s >= 12]
     adjacent_domains = [d for d, s in top_domains if 6 <= s < 12]
     core_str = ", ".join(core_domains) if core_domains else "tech"
-    adjacent_str = ", ".join(adjacent_domains) if adjacent_domains else "SaaS, B2B"
+
+    # Adjacent clause: if adjacent domains exist, list them; otherwise omit
+    if adjacent_domains:
+        adjacent_clause = "Adjacent domains (" + ", ".join(adjacent_domains) + ")"
+    else:
+        adjacent_clause = "Tangentially related domains"
 
     top_levels = sorted(seniority.items(), key=lambda x: -x[1])
     target_levels = [l for l, s in top_levels if s >= 10]
@@ -60,9 +77,11 @@ def _build_scoring_prompt(profile: dict) -> str:
     return (
         rubric
         .replace("{name}", name)
+        .replace("{role_type}", role_type)
         .replace("{core_str}", core_str)
-        .replace("{adjacent_str}", adjacent_str)
+        .replace("{adjacent_clause}", adjacent_clause)
         .replace("{target_str}", target_str)
+        .replace("{geography}", geography)
     )
 
 

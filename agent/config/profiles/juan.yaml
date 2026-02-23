@@ -33,6 +33,8 @@ target:
     gaming: -5
     igaming: -8
     other: 0
+  role_type: "Product Manager"
+  geography: "EU or remote"
   salary_display_threshold: 130000  # jobs above this get [+++] indicator in terminal
 
   salary_min: 60000
