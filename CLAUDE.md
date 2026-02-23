@@ -54,12 +54,19 @@ Job search CRM web product. Browse, filter, and manage scored job matches. Daily
   - Profile editing: add/remove domains (with weight slider), add/remove skills inline
   - Data safety: `save_profile` with existing `profile_id` only updates `cv.md` — never overwrites YAML
   - Tier C hidden by default in listing filters
+- Phase 5 — CV Generation (in-app tailored CV download)
+  - LLM provider configurable via CV_LLM_PROVIDER (anthropic|openai), model via CV_LLM_MODEL
+  - .docx built with python-docx for ATS compliance (pandoc rejected: generates tables and unicode bullets in XML)
+  - CV reference files gitignored (contain personal data), loaded from CV_REFERENCES_DIR
+  - ATS audit runs post-build as safety net, result in X-ATS-Audit response header
+  - LLM output follows strict structured markdown contract, docx_builder parses deterministically
+  - Post-processing auto-fixes em dashes, Oxford commas, unicode bullets as last line of defense
+  - "Generate CV" button replaces clipboard-copy: POSTs to /api/jobs/{id}/generate-cv, triggers browser download
 
 ### Current
-Phase 5 — TBD (to be planned)
+Phase F — Ship
 
 ### Pending
-- Phase 5 — TBD
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
@@ -75,7 +82,7 @@ Phase 5 — TBD (to be planned)
 - PyYAML available in venv via jobagent dependency — not in requirements.txt but importable as `import yaml`
 - YAML profile (jobagent format) is nested: `user.{name,email,home_locations}`, `target.{domains,seniority}`, top-level `skills`. ProfileEditor expects flat format — normalize in `GET /api/onboard/profile`
 - Dev session: insert token `dev-jsk-juan` in sessions table; inject cookie via `document.cookie = "jsk=dev-jsk-juan; path=/"`
-- CV generation prompt: copies formatted job context to clipboard for pasting into Claude with career-helper skill active (actual skill invocation TBD — specs pending)
+- CV generation: POST /api/jobs/{id}/generate-cv → LLM (anthropic/openai) → python-docx .docx → FileResponse. ATS audit in X-ATS-Audit header.
 - `save_profile` guard: if `user.profile_id` exists → only write `cv.md`, never regenerate YAML. First-time onboarding (no profile_id) still does full YAML generation.
 - `juan.yaml` was accidentally overwritten by onboarding flow; restored via `git checkout be89638 -- config/profiles/juan.yaml` from jobagent repo
 - Hamburger menu (`HamburgerMenu` component in `App.tsx`) replaces inline nav links; dropdown closes on outside click via `mousedown` listener + `useRef`
