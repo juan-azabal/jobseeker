@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
+import { MemoryRouter } from 'react-router';
 import JobsPage from './pages/JobsPage';
 
 const MOCK_JOBS = [
@@ -18,14 +19,14 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 test('renders job cards for all tiers', async () => {
-  render(<JobsPage />);
+  render(<MemoryRouter><JobsPage /></MemoryRouter>);
   await waitFor(() => expect(screen.getByText('Senior PM')).toBeInTheDocument());
   expect(screen.getByText('ML PM')).toBeInTheDocument();
   expect(screen.getByText('Growth PM')).toBeInTheDocument();
 });
 
 test('shows tier badges', async () => {
-  render(<JobsPage />);
+  render(<MemoryRouter><JobsPage /></MemoryRouter>);
   await waitFor(() => screen.getByText('Senior PM'));
   expect(screen.getAllByText('A').length).toBeGreaterThan(0);
   expect(screen.getAllByText('B').length).toBeGreaterThan(0);
@@ -33,7 +34,7 @@ test('shows tier badges', async () => {
 });
 
 test('shows company names', async () => {
-  render(<JobsPage />);
+  render(<MemoryRouter><JobsPage /></MemoryRouter>);
   await waitFor(() => expect(screen.getByText(/Acme/)).toBeInTheDocument());
   expect(screen.getByText(/Beta/)).toBeInTheDocument();
 });

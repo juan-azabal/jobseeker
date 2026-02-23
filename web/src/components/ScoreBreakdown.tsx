@@ -1,4 +1,4 @@
-import { ScoreBreakdown as SB } from '../types/job';
+import { type ScoreBreakdown as SB } from '../types/job';
 
 const DIMENSIONS: { key: keyof SB; label: string; max: number }[] = [
   { key: 'domain_fit', label: 'Domain Fit', max: 25 },

@@ -1,4 +1,4 @@
-import { JobSummary } from '../types/job';
+import { type JobSummary } from '../types/job';
 
 const TIER_STYLES: Record<string, string> = {
   A: 'bg-emerald-500 text-white',

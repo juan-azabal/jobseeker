@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
 import JobCard from '../components/JobCard';
-import FilterBar, { Filters } from '../components/FilterBar';
-import { JobSummary, JobsResponse } from '../types/job';
+import FilterBar, { type Filters } from '../components/FilterBar';
+import { type JobSummary, type JobsResponse } from '../types/job';
 
 const TIER_LABELS: Record<string, string> = {
   A: 'Tier A — Apply',
@@ -19,6 +20,7 @@ function filtersToQuery(f: Filters): string {
 export default function JobsPage() {
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [filters, setFilters] = useState<Filters>({ tiers: ['A', 'B', 'C'], period: 'all' });
+  const navigate = useNavigate();
 
   useEffect(() => {
     const qs = filtersToQuery(filters);
@@ -52,7 +54,7 @@ export default function JobsPage() {
               </h2>
               <div className="space-y-2">
                 {tierJobs.map((job) => (
-                  <JobCard key={job.job_id} job={job} />
+                  <JobCard key={job.job_id} job={job} onClick={() => navigate(`/jobs/${job.job_id}`)} />
                 ))}
               </div>
             </section>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import ScoreBreakdown from '../components/ScoreBreakdown';
-import { JobDetail } from '../types/job';
+import { type JobDetail } from '../types/job';
 
 const TIER_STYLES: Record<string, string> = {
   A: 'bg-emerald-500 text-white',
