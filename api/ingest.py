@@ -47,7 +47,9 @@ def ingest(db_path: str, jobagent_dir: str) -> dict:
                 continue
 
             rag = raw.get("rag_score") or {}
-            score = rag.get("score", 0) if rag else 0
+            # Use RAG score when available; fall back to heuristic fit_score saved by
+            # jobagent's save_results(). Default 0 only when neither is present.
+            score = rag.get("score", 0) if rag else int(raw.get("fit_score") or 0)
             tier = _compute_tier(score)
 
             parsed = raw.get("parsed") or {}
