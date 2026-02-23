@@ -1,0 +1,42 @@
+[
+  {
+    "id": "job001",
+    "title": "Senior Data PM",
+    "company": "Acme",
+    "location": "Paris, FR",
+    "job_url": "https://example.com/1",
+    "is_remote": false,
+    "date_posted": "2026-02-20T09:00:00Z",
+    "parsed": {
+      "location_type": "hybrid",
+      "domain": "data"
+    },
+    "rag_score": {
+      "score": 72,
+      "score_breakdown": {"domain_fit": 20, "seniority_fit": 15, "technical_depth": 18, "profile_evidence": 15, "strategic_impact": 4},
+      "strengths": [],
+      "gaps": []
+    },
+    "parse_error": null
+  },
+  {
+    "id": "job002",
+    "title": "ML Product Manager",
+    "company": "BetaCorp",
+    "location": "Remote",
+    "job_url": "https://example.com/2",
+    "is_remote": true,
+    "date_posted": "2026-02-21T09:00:00Z",
+    "parsed": {
+      "location_type": "remote",
+      "domain": "ml"
+    },
+    "rag_score": {
+      "score": 35,
+      "score_breakdown": {"domain_fit": 10, "seniority_fit": 10, "technical_depth": 8, "profile_evidence": 5, "strategic_impact": 2},
+      "strengths": [],
+      "gaps": []
+    },
+    "parse_error": null
+  }
+]
