@@ -1,9 +1,10 @@
-import { Routes, Route, Navigate, useNavigate, useParams } from 'react-router';
+import { Routes, Route, Navigate, Link, useNavigate, useParams } from 'react-router';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import JobsPage from './pages/JobsPage';
 import JobDetailPage from './pages/JobDetailPage';
 import LoginPage from './pages/LoginPage';
 import OnboardPage from './pages/OnboardPage';
+import ProfilePage from './pages/ProfilePage';
 import UserMenu from './components/UserMenu';
 
 function JobDetailRoute() {
@@ -25,13 +26,22 @@ function AppRoutes() {
           <span className="h-2 w-2 rounded-full bg-violet-500" />
           <span className="text-sm font-bold tracking-tight text-white">JobSeeker</span>
         </div>
-        <UserMenu />
+        <div className="flex items-center gap-5">
+          <Link
+            to="/profile"
+            className="text-xs font-medium text-zinc-400 transition-colors hover:text-zinc-200"
+          >
+            My CV
+          </Link>
+          <UserMenu />
+        </div>
       </header>
       <Routes>
         <Route path="/onboard" element={<OnboardPage onComplete={() => window.location.replace('/jobs')} />} />
         <Route path="/" element={<Navigate to={user?.profile_id ? '/jobs' : '/onboard'} replace />} />
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/jobs/:jobId" element={<JobDetailRoute />} />
+        <Route path="/profile" element={<ProfilePage />} />
       </Routes>
     </div>
   );

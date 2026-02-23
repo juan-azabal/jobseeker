@@ -4,6 +4,7 @@ import tempfile
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from pydantic import BaseModel
+import yaml
 
 from api.middleware.auth import get_current_user
 from api.db.queries import update_user_profile_id
@@ -101,6 +102,46 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
     update_user_profile_id(db_path, user["id"], profile_id)
 
     return {"profile_id": profile_id}
+
+
+@router.get("/profile")
+async def get_profile(user: dict = Depends(get_current_user)):
+    profile_id = user.get("profile_id")
+    if not profile_id:
+        raise HTTPException(status_code=404, detail="No profile found")
+
+    jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "../jobagent"))
+    yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}.yaml")
+    cv_path = os.path.join(jobagent_dir, "knowledge", profile_id, "cv.md")
+
+    if not os.path.exists(yaml_path):
+        raise HTTPException(status_code=404, detail="Profile file not found")
+
+    with open(yaml_path) as f:
+        raw = yaml.safe_load(f)
+
+    # Normalize nested YAML (jobagent format) → flat format ProfileEditor expects
+    user_block = raw.get("user", {})
+    target_block = raw.get("target", {})
+    profile_data = {
+        "name": user_block.get("name", ""),
+        "email": user_block.get("email", None),
+        "languages": user_block.get("languages", []),
+        "home_locations": user_block.get("home_locations", []),
+        "current_level": "",
+        "track": "",
+        "target_level": "",
+        "domains": target_block.get("domains", {}),
+        "skills": raw.get("skills", []),
+        "exclude_companies": user_block.get("exclude_companies", []),
+    }
+
+    cv_markdown = ""
+    if os.path.exists(cv_path):
+        with open(cv_path) as f:
+            cv_markdown = f.read()
+
+    return {"profile": profile_data, "cv_markdown": cv_markdown}
 
 
 @router.post("/upload-cv", dependencies=[Depends(get_current_user)])
