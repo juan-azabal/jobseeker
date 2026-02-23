@@ -98,9 +98,10 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - Content volume controls: 3-page hard cap, 2-page soft cap, max 12 WE bullets total with recency budget
   - Company names / Core Skills themes / project names use COLOR_ACCENT (#1F4E79) instead of bold
 - Phase 7 — Deparameterize Scoring (rubric role_type/geography, adjacent domains, home locations)
+- Phase 8 — Per-Profile Pipeline (searches, watchlist, prefilter per-user)
 
 ### Current
-Phase 8 — Per-Profile Pipeline (in progress)
+Phase 8 — Completed
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)

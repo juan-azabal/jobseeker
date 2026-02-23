@@ -97,7 +97,8 @@ No active bugs.
 ## Multi-User Scoring
 
 - Scoring parameterized for multi-user: role_type, geography, adjacent domains derived from profile. No hardcoded personal values in scorer.py, main.py, notifier.py, or prefilter.py.
-- Per-profile searches, watchlist, prefilter preferences (Phase 8 — in progress).
+- Per-profile searches, watchlist, prefilter preferences. Each profile points to its own config files; fallback to shared config if field absent.
+- 72 tests covering regression, parameterization, home locations, per-profile config loading, and end-to-end non-Juan scoring.
 
 ## Future Phases
 
