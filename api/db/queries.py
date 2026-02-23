@@ -23,6 +23,7 @@ def upsert_job(db_path: str, job: dict[str, Any]) -> None:
           ingested_at = excluded.ingested_at,
           score       = excluded.score,
           tier        = excluded.tier,
+          parsed      = excluded.parsed,
           scored      = excluded.scored
         """,
         job,

@@ -51,6 +51,10 @@ def ingest(db_path: str, jobagent_dir: str) -> dict:
             tier = _compute_tier(score)
 
             parsed = raw.get("parsed") or {}
+            # Preserve raw description in parsed blob so CV generation can use it
+            if raw.get("description") and not parsed.get("description"):
+                parsed = dict(parsed)
+                parsed["description"] = raw["description"]
             location_type = parsed.get("location_type") or ("remote" if raw.get("is_remote") else "unknown")
             domain = parsed.get("domain")
 
