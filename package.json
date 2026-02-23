@@ -1,8 +1,12 @@
 {
+  "scripts": {
+    "dev": "concurrently --names api,web --prefix-colors cyan,magenta \"venv/bin/uvicorn api.main:app --reload --port 8000\" \"npm run dev --prefix web\""
+  },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "concurrently": "^9.2.1",
     "jsdom": "^28.1.0",
     "vitest": "^4.0.18"
   }
