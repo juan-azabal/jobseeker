@@ -62,11 +62,16 @@ def audit_docx(path: str) -> dict:
 
     for para in all_paragraphs:
         text = para.text
+        stripped = text.strip()
 
-        # Count headings and track found section headers
-        if para.style.name == "Heading 2":
+        # Detect section headers: "Heading 2" style (Phase 5) OR exact text match
+        # against required headers (Phase 6 uses Normal style with explicit formatting)
+        is_section_header = (
+            para.style.name == "Heading 2"
+            or stripped in _REQUIRED_HEADERS
+        )
+        if is_section_header:
             section_count += 1
-            stripped = text.strip()
             for required in _REQUIRED_HEADERS:
                 if required.lower() in stripped.lower():
                     found_headers.add(required)
