@@ -33,6 +33,7 @@ export default function JobsPage() {
   const [filters, setFilters] = useState<Filters>({ tiers: ['A', 'B'], period: 'all', hideApplied: false });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
+  const [applying, setApplying] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -60,6 +61,25 @@ export default function JobsPage() {
       else next.delete(jobId);
       return next;
     });
+  };
+
+  const handleBulkApply = async () => {
+    setApplying(true);
+    await Promise.all(
+      [...selected].map((id) =>
+        fetch(`/api/jobs/${id}/apply`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ applied: true }),
+        }),
+      ),
+    );
+    setApplying(false);
+    setSelected(new Set());
+    // Refresh list — if hiding applied, they'll disappear; otherwise badge appears
+    const qs = filtersToQuery(filters);
+    const data: JobsResponse = await fetch(`/api/jobs${qs ? '?' + qs : ''}`).then((r) => r.json());
+    setJobs(data.jobs);
   };
 
   const handleBulkCVCopy = () => {
@@ -150,6 +170,13 @@ export default function JobsPage() {
                   Generate CVs
                 </>
               )}
+            </button>
+            <button
+              onClick={handleBulkApply}
+              disabled={applying}
+              className="flex items-center gap-2 rounded-lg bg-emerald-700 px-3.5 py-1.5 text-sm font-semibold text-white transition-all hover:bg-emerald-600 disabled:opacity-50"
+            >
+              {applying ? 'Applying…' : 'Mark applied'}
             </button>
             <button
               onClick={() => setSelected(new Set())}
