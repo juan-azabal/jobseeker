@@ -50,14 +50,16 @@ Job search CRM web product. Browse, filter, and manage scored job matches. Daily
   - Job tracking: `user_job_status` table (migration 003), per-user `applied_at`, `POST /jobs/{id}/apply`
   - CV generation: single-job "Generate CV" button (copies prompt to clipboard); bulk selection + floating action bar
   - Profile page `/profile`: view/edit current profile, "Replace CV" flow to re-upload and regenerate
-  - Header: sticky frosted-glass, "My CV" link navigates to `/profile`
+  - Header: sticky frosted-glass, logo links to `/jobs`, hamburger menu (Jobs / My Profile / Sign out)
+  - Profile editing: add/remove domains (with weight slider), add/remove skills inline
+  - Data safety: `save_profile` with existing `profile_id` only updates `cv.md` — never overwrites YAML
   - Tier C hidden by default in listing filters
 
 ### Current
-Phase 5 — Harden: errors, mobile, security, multi-user isolation
+Phase 5 — TBD (to be planned)
 
 ### Pending
-- Phase 5 — Harden: Errors, mobile, security, multi-user isolation
+- Phase 5 — TBD
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
@@ -74,6 +76,10 @@ Phase 5 — Harden: errors, mobile, security, multi-user isolation
 - YAML profile (jobagent format) is nested: `user.{name,email,home_locations}`, `target.{domains,seniority}`, top-level `skills`. ProfileEditor expects flat format — normalize in `GET /api/onboard/profile`
 - Dev session: insert token `dev-jsk-juan` in sessions table; inject cookie via `document.cookie = "jsk=dev-jsk-juan; path=/"`
 - CV generation prompt: copies formatted job context to clipboard for pasting into Claude with career-helper skill active (actual skill invocation TBD — specs pending)
+- `save_profile` guard: if `user.profile_id` exists → only write `cv.md`, never regenerate YAML. First-time onboarding (no profile_id) still does full YAML generation.
+- `juan.yaml` was accidentally overwritten by onboarding flow; restored via `git checkout be89638 -- config/profiles/juan.yaml` from jobagent repo
+- Hamburger menu (`HamburgerMenu` component in `App.tsx`) replaces inline nav links; dropdown closes on outside click via `mousedown` listener + `useRef`
+- ProfileEditor: `addDomain` adds with weight 10; `removeDomain` deletes key from state; `addSkill`/`removeSkill` mutate array. Enter key supported on both inputs.
 
 ### Blockers
 {none}

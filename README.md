@@ -12,7 +12,8 @@ Powered by [jobagent](../jobagent) for scoring and profile management.
 - **Score breakdown** — per-job AI scoring across domain fit, seniority, technical depth, profile evidence, strategic impact
 - **Applied tracking** — mark jobs as applied; applied state persists per user
 - **CV generation** — copy a tailored prompt to clipboard (single job or bulk selection) for use with the career-helper Claude skill
-- **Profile page** — view and edit your job-matching preferences (domain weights, skills, locations); replace your CV to re-generate the full profile
+- **Profile page** — view and edit job-matching preferences: add/remove domains (with weight sliders), add/remove skills; replace your master CV without touching manually-crafted YAML config
+- **Navigation** — hamburger menu (Jobs / My Profile / Sign out); logo links to the job listing
 - **Google OAuth** — sign in with Google; HTTP-only session cookie
 
 ---
