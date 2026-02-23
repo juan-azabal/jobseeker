@@ -1,0 +1,10 @@
+.env
+venv/
+__pycache__/
+output/
+chroma_db/
+*.pyc
+.claude/
+!.claude/rules/
+!.claude/rules/**
+data/

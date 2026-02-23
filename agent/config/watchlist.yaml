@@ -1,0 +1,42 @@
+# Target companies watchlist
+# Format: board_token is the slug from the company's careers URL
+
+greenhouse:
+  - token: "elastic"
+    name: "Elastic"
+  - token: "gitlab"
+    name: "GitLab"
+  - token: "mongodb"
+    name: "MongoDB"
+  - token: "datadog"
+    name: "Datadog"
+  - token: "clickhouse"
+    name: "ClickHouse"
+  - token: "grafanalabs"
+    name: "Grafana Labs"
+  - token: "dbtlabsinc"
+    name: "dbt Labs"
+  # Airbyte: verified no public Greenhouse board (tried: airbyte, airbytehq) as of Feb 2026
+
+# Companies without public ATS boards (verified Feb 2026):
+# - Airbyte: no board found on Greenhouse/Lever/Ashby
+# - Timescale: no board found on Lever/Greenhouse/Ashby
+# - RudderStack: no board found on Lever/Greenhouse
+# - Confluent: custom careers site
+# - Snowflake: uses Workday
+# Cover these via LinkedIn targeted searches in searches.yaml.
+
+lever: []
+  # No active Lever boards found for target companies as of Feb 2026
+
+ashby: []
+
+# Title filter: only fetch jobs matching these patterns
+title_patterns:
+  - "product manager"
+  - "product lead"
+  - "product owner"
+  - "head of product"
+  - "director of product"
+  - "principal pm"
+  - "staff pm"

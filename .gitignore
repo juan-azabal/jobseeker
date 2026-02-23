@@ -44,4 +44,12 @@ Thumbs.db
 # CV reference files (contain personal data — never commit)
 api/cv/references/*.md
 !api/cv/references/README.md
-.claude/
+.claude/*
+!.claude/rules/
+
+# Agent runtime
+agent/output/
+agent/chroma_db/
+agent/data/
+agent/.env
+agent/venv/

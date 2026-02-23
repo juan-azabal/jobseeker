@@ -1,0 +1,63 @@
+name: Daily Job Digest
+on:
+  schedule:
+    - cron: '0 6 * * 1-5'  # 06:00 UTC = 07:00 CET, Mon-Fri
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Profile to run (leave empty for all active)'
+        required: false
+        default: ''
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write  # needed to push seen_ids back to repo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run JobAgent for all active profiles
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          for profile_file in config/profiles/*.yaml; do
+            profile_id=$(basename "$profile_file" .yaml)
+            active=$(python scripts/check_active.py "$profile_file")
+            if [ "$active" = "false" ]; then
+              echo "=== Skipping inactive profile: $profile_id ==="
+              continue
+            fi
+            echo "=== Running JobAgent for profile: $profile_id ==="
+            python main.py --notify --profile "$profile_id"
+          done
+
+      - name: Persist seen jobs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add config/seen_ids/
+          git diff --cached --quiet || git commit -m "update seen jobs [skip ci]"
+          git push
+
+      - name: Upload results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ github.run_id }}
+          path: output/
+          retention-days: 30
+          if-no-files-found: ignore

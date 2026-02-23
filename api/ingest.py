@@ -98,7 +98,7 @@ if __name__ == "__main__":
     from api.db.init import init_db
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--jobagent-dir", default="../jobagent")
+    parser.add_argument("--jobagent-dir", default="agent")
     parser.add_argument("--db", default="data/jobseeker.db")
     args = parser.parse_args()
 

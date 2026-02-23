@@ -1,0 +1,48 @@
+# Track applied and not-interesting jobs to skip in future runs.
+# Copy this file to applied.yaml (which is gitignored).
+#
+# --- APPLIED ---
+# applied.companies: skip ALL roles from these companies for 90 days after applying.
+#   Format: {name: "Company", date: "YYYY-MM-DD"}
+#   After 90 days the entry expires automatically — the company reappears in results
+#   and the pipeline prints a reminder so you can clean up the file.
+#
+# applied.ids: skip specific jobs by ID (the 12-char hash in output JSON)
+#   Format: {id: "a1b2c3d4e5f6", note: "Senior PM @ SomeCompany"}
+#
+# --- NOT INTERESTED ---
+# not_interested.ids:     specific job IDs you've reviewed and don't want
+# not_interested.titles:  title patterns to skip globally (e.g. "security", "mobile")
+#                         Use sparingly — filters ALL companies.
+#
+# Note: "not_interested.companies" is intentionally NOT supported.
+# A company can have interesting roles at different times.
+# Use ids to skip specific roles, or titles to skip entire role categories.
+#
+# To find a job's ID:
+#   cat output/jobs_LATEST.json | python -c "
+#     import json,sys
+#     for j in json.load(sys.stdin): print(j['id'], j['title'][:50], '@', j['company'])
+#   "
+#
+# To mark jobs from the digest:
+#   python track.py applied 1 3    # mark jobs #1 and #3 as applied
+#   python track.py skip 7 12      # mark jobs #7 and #12 as not interested
+#   python track.py list           # show current state
+
+applied:
+  companies: []
+    # Example:
+    # - {name: "Acme Corp", date: "2026-02-20"}
+  ids: []
+    # Example:
+    # - {id: "a1b2c3d4e5f6", note: "Senior PM @ SomeCompany"}
+
+not_interested:
+  ids: []
+    # Example:
+    # - {id: "b2c3d4e5f6a1", note: "PM Growth @ SpamCo"}
+  titles: []
+    # Example:
+    # - "security"
+    # - "mobile"

@@ -38,7 +38,7 @@ def _load_home_locations(profile_id: str | None) -> list[str]:
     """Return home_locations from the user's jobagent profile YAML, or [] if unavailable."""
     if not profile_id:
         return []
-    jobagent_dir = os.environ.get("JOBAGENT_DIR", "../jobagent")
+    jobagent_dir = os.environ.get("JOBAGENT_DIR", "agent")
     profile_path = Path(jobagent_dir) / "config" / "profiles" / f"{profile_id}.yaml"
     try:
         data = yaml.safe_load(profile_path.read_text())
@@ -224,7 +224,7 @@ def generate_cv_endpoint(
     user_cv_markdown = ""
     profile_id = user.get("profile_id")
     if profile_id:
-        jobagent_dir = os.environ.get("JOBAGENT_DIR", "../jobagent")
+        jobagent_dir = os.environ.get("JOBAGENT_DIR", "agent")
         cv_path = Path(jobagent_dir) / "knowledge" / profile_id / "cv.md"
         if cv_path.exists():
             user_cv_markdown = cv_path.read_text(encoding="utf-8")

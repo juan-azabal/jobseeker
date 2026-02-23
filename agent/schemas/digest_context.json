@@ -1,0 +1,83 @@
+{
+  "_comment": "Jinja2 template context passed to templates/email_digest.html.j2. Built by notifier._build_context(). All job dicts in tiers are flattened via _flatten_job() — never raw pipeline dicts.",
+
+  "date": "21 Feb 2026",
+  "headline": "Acme Corp · remote",
+  "n_apply": 3,
+  "n_review": 5,
+  "n_skip": 8,
+  "n_prefiltered": 147,
+
+  "tier_a": [
+    {
+      "_comment": "score >= 50. Sorted: no-reloc first, score desc, salary desc.",
+      "title": "Principal PM - Data Platform",
+      "company": "Acme Corp",
+      "location": "Remote, Europe",
+      "location_type": "remote",
+      "requires_reloc": false,
+      "salary_display": "~€130K",
+      "score": 82,
+      "strength": "Led event tracking platform at 2B events/day scale",
+      "gap": "No Elasticsearch experience",
+      "stories": "H4, H1, H5",
+      "url": "https://example.com/jobs/123"
+    }
+  ],
+
+  "tier_b": [
+    {
+      "_comment": "30 <= score < 50. Same sort order as tier_a.",
+      "title": "Senior PM - Analytics",
+      "company": "Other Corp",
+      "location": "Barcelona, Spain",
+      "location_type": "hybrid",
+      "requires_reloc": false,
+      "salary_display": "~€95K",
+      "score": 42,
+      "strength": "SQL, A/B testing",
+      "gap": "",
+      "stories": "",
+      "url": "https://example.com/jobs/456"
+    }
+  ],
+
+  "tier_c": [
+    {
+      "_comment": "score < 30. Sorted: score desc.",
+      "title": "Product Manager - Growth",
+      "company": "Startup Inc",
+      "location": "London, UK",
+      "location_type": "onsite",
+      "requires_reloc": true,
+      "salary_display": "",
+      "score": 18,
+      "strength": "",
+      "gap": "",
+      "stories": "",
+      "url": "https://example.com/jobs/789"
+    }
+  ],
+
+  "rejected_stats": {
+    "total": 175,
+    "passed": 28,
+    "already_seen": 42,
+    "already_applied": 49,
+    "not_interested": 0,
+    "us_only": 5,
+    "no_pm_keyword": 54,
+    "deal_breaker": 14,
+    "title_excluded": 2,
+    "excluded_company": 1,
+    "aggregator": 0
+  },
+
+  "run_meta": {
+    "n_searches": 6,
+    "n_watchlist": 12,
+    "duration_s": 94,
+    "cost_usd": 0.052,
+    "date": "21 Feb 2026"
+  }
+}

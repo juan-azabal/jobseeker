@@ -1,0 +1,22 @@
+{
+  "_comment": "One JSONL line per scored job in data/gap_history/{user_id}.jsonl. Source: gap_tracker.py append_gap_history(). Entries older than 90 days are pruned on each write.",
+  "date": "2026-02-21",
+  "role_id": "a1b2c3d4e5f6",
+  "title": "Principal Product Manager - Data Platform",
+  "company": "Acme Corp",
+  "score": 72,
+  "salary_eur": 130000,
+  "domain": "data",
+  "seniority": "principal",
+  "strengths": [
+    "Led event tracking platform serving 2B events/day"
+  ],
+  "gaps": [
+    "No Elasticsearch experience"
+  ],
+  "gap_severities": [
+    "low"
+  ],
+  "location_type": "remote",
+  "url": "https://example.com/jobs/123"
+}

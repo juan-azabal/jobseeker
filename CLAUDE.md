@@ -1,13 +1,22 @@
-# JobSeeker
+# JobSearch (Monorepo)
 
 ## Description
-Job search CRM web product. Browse, filter, and manage scored job matches. Daily email digest links to the web for full detail. Powered by jobagent engine. Users self-onboard via CV upload.
+Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous scraping/scoring engine. Daily email digest links to the web for full detail. Users self-onboard via CV upload.
+
+## Monorepo Layout
+- `api/` — FastAPI backend
+- `web/` — React frontend
+- `agent/` — scraping/scoring engine (formerly standalone `jobagent` repo)
+- `data/` — SQLite DB (gitignored)
+- `tests/` — backend tests
+- `scripts/` — utility scripts
 
 ## Commands
-- Dev backend: `uvicorn api.main:app --reload --port 8000`
+- Dev backend: `venv/bin/uvicorn api.main:app --reload --port 8000`
 - Dev frontend: `cd web && npm run dev`
-- Dev both: `docker compose up`
-- Ingest jobs: `python -m api.ingest --jobagent-dir ../jobagent`
+- Dev both: `bash dev.sh`
+- Ingest jobs: `python -m api.ingest`
+- Run agent: `cd agent && ../venv/bin/python main.py --profile juan --notify`
 - Test backend: `pytest tests/`
 - Test frontend: `cd web && npm test`
 - Lint: `ruff check .`
@@ -17,21 +26,28 @@ Job search CRM web product. Browse, filter, and manage scored job matches. Daily
 - Backend: `api/`
   - `api/main.py` — FastAPI app
   - `api/routes/` — one file per resource
-  - `api/adapters/` — wrappers around jobagent imports
   - `api/db/` — SQLite init, migrations, queries
   - `api/ingest.py` — pipeline output → SQLite
+  - `api/cv/` — CV generation pipeline
 - Frontend: `web/`
   - `web/src/components/` — React components
   - `web/src/pages/` — route-level pages
   - `web/src/context/` — React Context providers
   - `web/src/types/` — TypeScript types
+- Agent: `agent/`
+  - `agent/main.py` — pipeline orchestrator (scrape → parse → score → notify)
+  - `agent/config/profiles/*.yaml` — per-user profiles
+  - `agent/knowledge/` — CV knowledge base (per user)
+  - `agent/output/` — job results JSON (gitignored)
+  - `agent/prompts/` — LLM prompts (parser, scoring rubric)
+  - `agent/scripts/` — utility scripts (reparse, rescore)
 - Tests: `tests/` (backend), `web/src/__tests__/` (frontend)
 - DB: `data/jobseeker.db` (gitignored)
 - Static build: `web/dist/` (gitignored)
 
 ## Conventions
 - Commits: conventional (`type: description`)
-- Backend imports jobagent as package — never copy or modify jobagent code
+- Backend imports agent modules via sys.path (JOBAGENT_DIR=agent)
 - API routes: one file per resource in `api/routes/`
 - SQL: raw sqlite3, migrations in `api/db/migrations/` as numbered .sql files
 - Frontend: functional components, React Context for global state, TypeScript strict
@@ -94,8 +110,8 @@ Phase 6 — Completed
 - Test files excluded from tsconfig.app.json to avoid TS errors on `global`
 - Auth: Google OAuth via authlib, session token in HTTP-only cookie, `get_current_user` FastAPI dependency on jobs router
 - LoginPage uses `<a href="/api/auth/login">` (not a button) — tests must use `getByRole('link', ...)`
-- jobagent imported via sys.path (no setup.py in jobagent) — `_load_jobagent()` called at module load adds JOBAGENT_DIR to sys.path
-- Run backend tests from `/Users/juanazabal/Proyectos/jobseeker/` dir, not from `web/`
+- Agent imported via sys.path — `_load_jobagent()` called at module load adds `JOBAGENT_DIR` (default `agent`) to sys.path
+- Run backend tests from project root (`~/Proyectos/jobsearch/`), not from `web/`
 - openai added to requirements.txt (needed because jobagent/onboard.py imports it at module level)
 - Users with `profile_id: null` are redirected to `/onboard`; test mocks must include `profile_id: 'user'`
 - PyYAML available in venv via jobagent dependency — not in requirements.txt but importable as `import yaml`
@@ -106,7 +122,7 @@ Phase 6 — Completed
 - Validator slop blacklist: "strong track record", "proven ability", "passionate about", "results-driven", "data-driven leader", "leveraging", "utilizing" + more. Gerund-start bullet detection with regex.
 - strip_analysis() in llm.py: auto-strips <analysis>...</analysis> from LLM output so prompt.py and endpoint never see chain-of-thought content.
 - `save_profile` guard: if `user.profile_id` exists → only write `cv.md`, never regenerate YAML. First-time onboarding (no profile_id) still does full YAML generation.
-- `juan.yaml` was accidentally overwritten by onboarding flow; restored via `git checkout be89638 -- config/profiles/juan.yaml` from jobagent repo
+- `juan.yaml` was accidentally overwritten by onboarding flow; profile YAML lives at `agent/config/profiles/juan.yaml`
 - Hamburger menu (`HamburgerMenu` component in `App.tsx`) replaces inline nav links; dropdown closes on outside click via `mousedown` listener + `useRef`
 - ProfileEditor: `addDomain` adds with weight 10; `removeDomain` deletes key from state; `addSkill`/`removeSkill` mutate array. Enter key supported on both inputs.
 

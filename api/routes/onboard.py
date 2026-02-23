@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/onboard", tags=["onboard"])
 
 def _load_jobagent():
     """Add JOBAGENT_DIR to sys.path so we can import from jobagent."""
-    jobagent_dir = os.environ.get("JOBAGENT_DIR", "../jobagent")
+    jobagent_dir = os.environ.get("JOBAGENT_DIR", "agent")
     jobagent_dir = os.path.abspath(jobagent_dir)
     if jobagent_dir not in sys.path:
         sys.path.insert(0, jobagent_dir)
@@ -90,7 +90,7 @@ class SaveProfileRequest(BaseModel):
 
 @router.post("/save-profile")
 async def save_profile(body: SaveProfileRequest, request: Request, user: dict = Depends(get_current_user)):
-    jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "../jobagent"))
+    jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "agent"))
     existing_profile_id = user.get("profile_id")
 
     if existing_profile_id:
@@ -121,7 +121,7 @@ async def get_profile(user: dict = Depends(get_current_user)):
     if not profile_id:
         raise HTTPException(status_code=404, detail="No profile found")
 
-    jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "../jobagent"))
+    jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "agent"))
     yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}.yaml")
     cv_path = os.path.join(jobagent_dir, "knowledge", profile_id, "cv.md")
 
@@ -175,7 +175,7 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
     if not profile_id:
         raise HTTPException(status_code=404, detail="No profile found")
 
-    jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "../jobagent"))
+    jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "agent"))
     yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}.yaml")
 
     if not os.path.exists(yaml_path):

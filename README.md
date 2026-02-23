@@ -1,8 +1,6 @@
-# JobSeeker
+# JobSearch
 
-A personal job search CRM. Scored job matches land in a browsable web UI — filter by tier, track applications, and generate tailored CV prompts in one click.
-
-Powered by [jobagent](../jobagent) for scoring and profile management.
+A personal job search platform. Web CRM + autonomous scraping/scoring engine in a single monorepo.
 
 ---
 
@@ -11,10 +9,10 @@ Powered by [jobagent](../jobagent) for scoring and profile management.
 - **Job listing** — browse matches grouped by tier (Apply / Review / Skip), filterable by period
 - **Score breakdown** — per-job AI scoring across domain fit, seniority, technical depth, profile evidence, strategic impact
 - **Applied tracking** — mark jobs as applied; applied state persists per user
-- **CV generation** — copy a tailored prompt to clipboard (single job or bulk selection) for use with the career-helper Claude skill
-- **Profile page** — view and edit job-matching preferences: add/remove domains (with weight sliders), add/remove skills; replace your master CV without touching manually-crafted YAML config
-- **Navigation** — hamburger menu (Jobs / My Profile / Sign out); logo links to the job listing
+- **CV generation** — generate a tailored .docx CV for any job (single or bulk)
+- **Profile page** — view and edit job-matching preferences: domains, skills, locations, salary
 - **Google OAuth** — sign in with Google; HTTP-only session cookie
+- **Daily digest** — automated scraping + email notification (GitHub Actions cron)
 
 ---
 
@@ -25,7 +23,7 @@ Powered by [jobagent](../jobagent) for scoring and profile management.
 | Backend | Python · FastAPI · SQLite |
 | Frontend | React 19 · TypeScript · Vite · Tailwind CSS v4 |
 | Auth | Google OAuth via Authlib |
-| Profile/scoring | jobagent (local dependency) |
+| Agent | Python · JobSpy · ChromaDB · OpenAI (gpt-4o/mini) |
 
 ---
 
@@ -33,35 +31,24 @@ Powered by [jobagent](../jobagent) for scoring and profile management.
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - Node 20+
-- jobagent repo at `../jobagent` (or set `JOBAGENT_DIR`)
 - Google OAuth credentials
 
-### Backend
+### Install
 
 ```bash
-cd jobseeker
-python -m venv venv
+cd jobsearch
+python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-pip install -e ../jobagent
-cp .env.example .env   # fill in GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SESSION_SECRET
-uvicorn api.main:app --reload --port 8000
+cp .env.example .env   # fill in credentials
 ```
 
-### Frontend
+### Run
 
 ```bash
-cd web
-npm install
-npm run dev            # proxies /api/* to :8000
-```
-
-### Both at once
-
-```bash
-docker compose up
+bash dev.sh            # starts backend (:8000) + frontend (:5173)
 ```
 
 ---
@@ -74,58 +61,44 @@ docker compose up
 | `GOOGLE_CLIENT_SECRET` | OAuth client secret | — |
 | `SESSION_SECRET` | Session signing key | `dev-secret-change-in-prod` |
 | `DB_PATH` | SQLite database path | `data/jobseeker.db` |
-| `JOBAGENT_DIR` | Path to jobagent repo | `../jobagent` |
+| `JOBAGENT_DIR` | Path to agent engine | `agent` |
+| `OPENAI_API_KEY` | OpenAI API key (agent) | — |
+| `ANTHROPIC_API_KEY` | Anthropic API key (CV gen) | — |
 
 ---
 
 ## Project structure
 
 ```
-jobseeker/
-├── api/
-│   ├── main.py              # FastAPI app, middleware, routers
-│   ├── routes/
-│   │   ├── auth.py          # Google OAuth login/callback/logout/me
-│   │   ├── jobs.py          # List, detail, apply endpoints
-│   │   └── onboard.py       # CV upload, profile generation, profile read
-│   ├── middleware/
-│   │   └── auth.py          # get_current_user FastAPI dependency
-│   └── db/
-│       ├── init.py          # Run migrations on startup
-│       ├── queries.py       # SQL wrappers
-│       └── migrations/      # 001_jobs · 002_users · 003_job_status
-├── web/
+jobsearch/
+├── api/                    # FastAPI backend
+│   ├── main.py
+│   ├── routes/             # auth, jobs, onboard
+│   ├── cv/                 # CV generation pipeline
+│   ├── db/                 # SQLite init, migrations, queries
+│   └── ingest.py           # agent output → SQLite
+├── web/                    # React frontend
 │   └── src/
-│       ├── pages/           # LoginPage · OnboardPage · JobsPage · JobDetailPage · ProfilePage
-│       ├── components/      # FilterBar · JobCard · ScoreBreakdown · ProfileEditor · FileUpload · UserMenu
-│       ├── context/         # AuthContext
-│       └── types/           # job.ts
-├── data/                    # jobseeker.db (gitignored)
-├── requirements.txt
-└── docker-compose.yml
-```
-
----
-
-## User flow
-
-```
-Sign in with Google
-  └─ profile_id == null → /onboard
-       Upload .docx CV → extract markdown → generate profile → edit → activate
-       └─ profile_id set → /jobs
-
-/jobs  browse · filter · select · mark applied
-/jobs/:id  detail · score breakdown · strengths · gaps · generate CV prompt · mark applied
-/profile  view/edit preferences · replace CV
+│       ├── pages/          # Login, Onboard, Jobs, JobDetail, Profile
+│       ├── components/     # FilterBar, JobCard, ProfileEditor, etc.
+│       └── types/          # TypeScript types
+├── agent/                  # Scraping/scoring engine
+│   ├── main.py             # Pipeline orchestrator
+│   ├── config/profiles/    # Per-user YAML profiles
+│   ├── knowledge/          # CV knowledge base
+│   ├── prompts/            # LLM prompts (parser, scoring)
+│   └── scripts/            # reparse, rescore utilities
+├── data/                   # jobseeker.db (gitignored)
+├── tests/                  # Backend tests
+└── requirements.txt        # Merged deps (web + agent)
 ```
 
 ---
 
 ## Development notes
 
-- **Ingest jobs**: `python -m api.ingest --jobagent-dir ../jobagent`
+- **Ingest jobs**: `python -m api.ingest`
+- **Run agent**: `cd agent && ../venv/bin/python main.py --profile juan --notify`
 - **Backend tests**: `pytest tests/` (run from repo root)
 - **Frontend tests**: `cd web && npm test`
-- **Lint/format**: `ruff check .` / `ruff format .`
-- **Dev session cookie** (no OAuth): insert a row in `sessions` table with token `dev-jsk-juan`, then `document.cookie = "jsk=dev-jsk-juan; path=/"` in the browser console
+- **Dev session cookie** (no OAuth): `document.cookie = "jsk=dev-jsk-juan; path=/"`
