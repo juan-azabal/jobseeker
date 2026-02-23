@@ -31,6 +31,12 @@ def _base_url() -> str:
     return os.environ.get("BASE_URL", "http://localhost:8000")
 
 
+def _frontend_url() -> str:
+    # In dev, frontend runs on a different port than the API.
+    # In prod, leave empty so the redirect falls back to a relative "/".
+    return os.environ.get("FRONTEND_URL", "")
+
+
 @router.get("/login")
 async def login(request: Request):
     redirect_uri = f"{_base_url()}/api/auth/callback"
@@ -54,7 +60,7 @@ async def callback(request: Request):
     expires_at = (datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS)).isoformat()
     create_session(_db_path(), session_token, user["id"], expires_at)
 
-    response = RedirectResponse(url="/")
+    response = RedirectResponse(url=f"{_frontend_url()}/")
     response.set_cookie(
         SESSION_COOKIE,
         session_token,
