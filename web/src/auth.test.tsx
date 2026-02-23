@@ -23,7 +23,7 @@ test('shows jobs page when authenticated', async () => {
   global.fetch = vi.fn()
     .mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ id: 1, email: 'u@e.com', name: 'User', avatar_url: null }),
+      json: async () => ({ id: 1, email: 'u@e.com', name: 'User', avatar_url: null, profile_id: 'user' }),
     } as Response)
     .mockResolvedValue({
       ok: true,
@@ -40,7 +40,7 @@ test('shows user name in header when authenticated', async () => {
   global.fetch = vi.fn()
     .mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ id: 1, email: 'u@e.com', name: 'Alice', avatar_url: null }),
+      json: async () => ({ id: 1, email: 'u@e.com', name: 'Alice', avatar_url: null, profile_id: 'alice' }),
     } as Response)
     .mockResolvedValue({
       ok: true,

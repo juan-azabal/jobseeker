@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import JobsPage from './pages/JobsPage';
 import JobDetailPage from './pages/JobDetailPage';
 import LoginPage from './pages/LoginPage';
+import OnboardPage from './pages/OnboardPage';
 import UserMenu from './components/UserMenu';
 
 function JobDetailRoute() {
@@ -12,7 +13,7 @@ function JobDetailRoute() {
 }
 
 function AppRoutes() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   if (isLoading) return <div className="min-h-screen bg-zinc-950" />;
   if (!isAuthenticated) return <LoginPage />;
@@ -24,7 +25,8 @@ function AppRoutes() {
         <UserMenu />
       </header>
       <Routes>
-        <Route path="/" element={<Navigate to="/jobs" replace />} />
+        <Route path="/onboard" element={<OnboardPage onComplete={() => window.location.replace('/jobs')} />} />
+        <Route path="/" element={<Navigate to={user?.profile_id ? '/jobs' : '/onboard'} replace />} />
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/jobs/:jobId" element={<JobDetailRoute />} />
       </Routes>

@@ -3,7 +3,7 @@ import { vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import App from './App';
 
-const MOCK_USER = { id: 1, email: 'u@e.com', name: 'User', avatar_url: null, profile_id: null };
+const MOCK_USER = { id: 1, email: 'u@e.com', name: 'User', avatar_url: null, profile_id: 'user' };
 const MOCK_JOBS = { jobs: [], total: 0, filters: { tier: [], period: 'all' } };
 
 afterEach(() => vi.restoreAllMocks());
