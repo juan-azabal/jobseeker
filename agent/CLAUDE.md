@@ -94,6 +94,11 @@ No active bugs.
 
 **Files changed**: `prompts/parser-prompt.md` (version → v1.1), `schemas/parsed_job.json`
 
+## Multi-User Scoring
+
+- Scoring parameterized for multi-user: role_type, geography, adjacent domains derived from profile. No hardcoded personal values in scorer.py, main.py, notifier.py, or prefilter.py.
+- Per-profile searches, watchlist, prefilter preferences (Phase 8 — in progress).
+
 ## Future Phases
 
 - **Phase 6+ — jobseeker**: CV tailoring, auth, onboarding, and dashboard are all live in the companion jobseeker web app.

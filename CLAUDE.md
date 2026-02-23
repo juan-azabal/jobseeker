@@ -97,11 +97,14 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
     → docx → ATS audit. New response headers: X-CV-Validation, X-CV-Fix-Applied, X-ATS-Audit
   - Content volume controls: 3-page hard cap, 2-page soft cap, max 12 WE bullets total with recency budget
   - Company names / Core Skills themes / project names use COLOR_ACCENT (#1F4E79) instead of bold
+- Phase 7 — Deparameterize Scoring (rubric role_type/geography, adjacent domains, home locations)
 
 ### Current
-Phase 6 — Completed
+Phase 8 — Per-Profile Pipeline (in progress)
 
 ### Pending
+- Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
+- Phase R — Refactor & Test Coverage
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
