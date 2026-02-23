@@ -267,3 +267,63 @@ def test_user_cv_included_when_provided(monkeypatch, mock_references_dir):
 
     _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "My personal cv content here.")
     assert "My personal cv content here." in user
+
+
+def test_system_prompt_contains_volume_rules(monkeypatch, mock_references_dir):
+    """System prompt must include content volume rules: all companies, 3-5 bullets, 1.5-2 pages."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
+    system_lower = system.lower()
+
+    assert "every company" in system_lower or "all compan" in system_lower, (
+        "Prompt must instruct LLM to include every company from master CV"
+    )
+    assert "3-5 bullet" in system_lower or "3–5 bullet" in system_lower or "3 to 5 bullet" in system_lower, (
+        "Prompt must specify 3-5 bullets per company"
+    )
+    assert "1.5" in system and "page" in system_lower, (
+        "Prompt must set a target length (1.5 pages minimum)"
+    )
+
+
+def test_system_prompt_contains_selected_impact_volume(monkeypatch, mock_references_dir):
+    """System prompt must instruct LLM to write 5-7 Selected Impact bullets."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
+
+    assert "5-7" in system or "5–7" in system, (
+        "Prompt must specify 5-7 bullets for Selected Impact"
+    )
+
+
+def test_system_prompt_selected_impact_example_has_five_bullets(monkeypatch, mock_references_dir):
+    """The Selected Impact format example must show at least 5 bullet lines."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
+
+    # Count bullet lines in the Selected Impact section of the output contract
+    # (between "## Selected Impact" and the next "##")
+    import re
+    impact_block = re.search(
+        r"## Selected Impact\s*(.*?)(?=##|\Z)", system, re.DOTALL
+    )
+    assert impact_block is not None, "Selected Impact section not found in system prompt"
+    bullets = [l for l in impact_block.group(1).splitlines() if l.strip().startswith("-")]
+    assert len(bullets) >= 5, (
+        f"Selected Impact example must have ≥5 bullets, found {len(bullets)}"
+    )

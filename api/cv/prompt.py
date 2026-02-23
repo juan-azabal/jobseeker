@@ -34,20 +34,25 @@ under each company, which uses _single underscore italics_ on its own line.
 
 ## Summary
 
-3-5 lines of prose. Must include at least one sentence about scope limitations or
+4-5 sentences of prose. Must include at least one sentence about scope limitations or
 what you are NOT looking for (e.g. "Not looking for...", "I work best in contexts
 where..."). No generic language.
 
 ## Selected Impact
 
-- Bullet: problem, action, result. Max 2 lines per bullet.
-- Bullet: mix metrics and qualitative impact.
+- Bullet 1: problem, action, result with metric.
+- Bullet 2: different domain, mix of metrics and qualitative impact.
+- Bullet 3: another high-impact achievement.
+- Bullet 4: cross-functional or strategic result.
+- Bullet 5: a sixth bullet if there are strong additional wins across the career.
 
 ## Core Skills
 
 Theme Name: Prose describing skills in this theme. No bullet points. No bold markers.
 
 Another Theme: Another prose paragraph.
+
+Third Theme: A third theme if warranted by the role.
 
 ## Projects
 
@@ -56,20 +61,32 @@ Another Theme: Another prose paragraph.
 
 ## Work Experience
 
-### Company Name - Role Title	Date Range
-_One sentence explaining what the company does and your scope there._
+### Most Recent Company - Role Title	MM/YYYY - Present
+_One sentence: what the company does and your scope/team size._
 
-- Bullet one. Max 2 lines. Result + mechanism only.
-- Bullet two.
+- Bullet: result + mechanism. Max 2 lines.
+- Bullet: another achievement with metric.
+- Bullet: third impact.
+- Bullet: fourth if the tenure warrants it.
 
-### Another Company - Role	Date Range
+### Previous Company - Role	MM/YYYY - MM/YYYY
 _Context line._
 
-- Bullet.
+- Bullet: result + mechanism.
+- Bullet: another achievement.
+- Bullet: third bullet.
+
+### Earlier Company - Role	MM/YYYY - MM/YYYY
+_Context line._
+
+- Bullet: result.
+- Bullet: another result.
 
 ## Education and Certifications
 
 Degree - Institution, Year
+
+Certification, Year (if relevant)
 
 ## Languages
 
@@ -97,6 +114,24 @@ Spanish (native) | English (advanced)
 5. Project name and URL on the same ### line, separated by two spaces before the URL.
 
 6. Body text, bullets, and descriptions must be plain text only.
+
+---
+
+## Content volume rules (CRITICAL — do not produce a thin CV)
+
+7. Work Experience: include EVERY company from the master CV, ordered
+   chronologically (most recent first). Do NOT silently drop older roles.
+   Write 3-5 bullets per company; reduce to 2 only for roles older than 8 years.
+
+8. Selected Impact: write 5-7 bullets drawing from the FULL career, not just the
+   most recent role. Each bullet must come from a different achievement.
+
+9. Target length: the finished CV must fill 1.5 to 2 pages in a standard Word
+   document. If your draft would be under 1.5 pages, add more bullets from the
+   master CV rather than leaving sections thin.
+
+10. Core Skills: write 3-5 themes. Each theme paragraph must be 1-2 sentences of
+    specific, non-generic prose (name technologies, methods, or contexts).
 
 ---
 
