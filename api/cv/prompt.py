@@ -245,6 +245,29 @@ def _get_references_dir() -> Path:
     return Path(__file__).parent / "references"
 
 
+def load_reference_files_dict() -> dict[str, str]:
+    """Load the plan-relevant reference files as a filename → content dict.
+
+    Used by the endpoint to pass reference content to build_cv_plan().
+    Returns an empty dict or partial dict if files are missing — the plan
+    builder handles missing files gracefully.
+
+    Returns:
+        Dict with keys "master-cv-profile.md" and "master-cv-experience.md"
+        (and their content as strings).  Missing files are silently skipped.
+    """
+    refs_dir = _get_references_dir()
+    result: dict[str, str] = {}
+    for filename in ("master-cv-profile.md", "master-cv-experience.md"):
+        path = refs_dir / filename
+        if path.exists():
+            try:
+                result[filename] = path.read_text(encoding="utf-8")
+            except OSError:
+                pass
+    return result
+
+
 def _load_reference_files(refs_dir: Path) -> str:
     """Load and concatenate all required reference files.
 

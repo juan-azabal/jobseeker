@@ -97,18 +97,25 @@ def generate_cv_endpoint(
 ):
     """Generate an ATS-compliant tailored CV .docx for the given job.
 
-    Flow:
-    1. Load job (404 if not found)
-    2. Load user cv.md from jobagent knowledge dir (empty string if missing)
-    3. Build prompts (422 if no JD extractable)
-    4. Call LLM (500 if LLM fails)
-    5. Build .docx, run ATS audit
-    6. Return FileResponse with X-ATS-Audit header, cleanup via BackgroundTask
+    Flow (plan-driven pipeline):
+    1.  Load job (404 if not found)
+    2.  Load user cv.md from jobagent knowledge dir (empty string if missing)
+    3.  Load reference files and build deterministic CV plan
+    4.  Build plan-aware prompts (422 if no JD extractable)
+    5.  Call LLM — expensive call, generates full CV markdown
+    6.  Validate CV against plan source_facts (deterministic, instant)
+    7.  If validation fails → run targeted fix call (cheap, one-shot)
+    8.  Re-validate after fix (no further loops)
+    9.  Build .docx from final markdown
+    10. Run ATS audit on .docx
+    11. Return FileResponse with X-ATS-Audit / X-CV-Validation / X-CV-Fix-Applied headers
     """
-    from api.cv.prompt import build_cv_prompts
+    from api.cv.plan import build_cv_plan
+    from api.cv.prompt import build_cv_prompts, load_reference_files_dict
     from api.cv.llm import generate_cv
     from api.cv.docx_builder import build_docx
     from api.cv.ats_audit import audit_docx
+    from api.cv.validator import validate_cv, build_fix_prompt
 
     # 1. Load job
     row = get_job_by_id(_db_path(), job_id)
@@ -124,16 +131,20 @@ def generate_cv_endpoint(
         if cv_path.exists():
             user_cv_markdown = cv_path.read_text(encoding="utf-8")
 
-    # 3. Build prompts
+    # 3. Build deterministic CV plan from scored data + reference files
+    reference_files = load_reference_files_dict()
+    plan = build_cv_plan(row, reference_files)
+
+    # 4. Build plan-aware prompts
     try:
-        system_prompt, user_prompt = build_cv_prompts(row, user_cv_markdown)
-    except ValueError as e:
+        system_prompt, user_prompt = build_cv_prompts(row, user_cv_markdown, plan)
+    except ValueError:
         return JSONResponse(
             status_code=422,
             content={"error": "no_jd", "detail": "Job description not available for CV generation"},
         )
 
-    # 4. Call LLM
+    # 5. Generate CV (expensive LLM call)
     try:
         cv_markdown = generate_cv(system_prompt, user_prompt)
     except Exception as e:
@@ -142,31 +153,57 @@ def generate_cv_endpoint(
             content={"error": "llm_error", "detail": str(e)},
         )
 
-    # 5. Build .docx and run ATS audit
+    # 6. Validate CV against plan source_facts
+    fix_applied = False
+    validation = validate_cv(cv_markdown, plan)
+
+    # 7. Fix if needed — one-shot cheap LLM call
+    if not validation["passed"]:
+        try:
+            fix_system, fix_user = build_fix_prompt(cv_markdown, validation["errors"])
+            cv_markdown = generate_cv(fix_system, fix_user)
+            fix_applied = True
+        except Exception:
+            pass  # Fix call failed — proceed with original markdown
+
+        # 8. Re-validate after fix (no further loops)
+        validation = validate_cv(cv_markdown, plan)
+
+    # 9. Build .docx
     tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
     tmp_path = tmp.name
     tmp.close()
-
     build_docx(cv_markdown, tmp_path)
-    audit_result = audit_docx(tmp_path)
 
+    # 10. ATS audit
+    audit_result = audit_docx(tmp_path)
     ats_header = (
         "pass"
         if audit_result["passed"]
         else f"fail:{len(audit_result['violations'])} violations"
     )
 
-    # Build download filename: cv-{company}-{title}.docx (max 60 chars total)
+    # Build response headers
+    cv_validation_header = json.dumps({
+        "passed": validation["passed"],
+        "warning_count": len(validation.get("warnings", [])),
+    })
+
+    # Build download filename: cv-{company}-{title}.docx
     company_slug = _slugify(row.get("company", "company"))
     title_slug = _slugify(row.get("title", "cv"), max_len=20)
     filename = f"cv-{company_slug}-{title_slug}.docx"
 
-    # 6. Cleanup tempfile after response is sent
+    # 11. Cleanup tempfile after response is sent
     background_tasks.add_task(lambda: Path(tmp_path).unlink(missing_ok=True))
 
     return FileResponse(
         path=tmp_path,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename=filename,
-        headers={"X-ATS-Audit": ats_header},
+        headers={
+            "X-ATS-Audit":      ats_header,
+            "X-CV-Validation":  cv_validation_header,
+            "X-CV-Fix-Applied": "true" if fix_applied else "false",
+        },
     )

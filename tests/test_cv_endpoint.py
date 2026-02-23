@@ -175,3 +175,98 @@ def test_generate_cv_llm_failure_returns_500(authed_client):
     data = resp.json()
     assert data["error"] == "llm_error"
     assert "API quota exceeded" in data["detail"]
+
+
+# ── Plan-driven pipeline headers (Step 6.6) ──────────────────────────────
+
+def test_generate_cv_returns_cv_validation_header(authed_client):
+    """Response includes X-CV-Validation header with passed and warning_count."""
+    with patch("api.cv.llm.generate_cv", return_value=MOCK_CV_MARKDOWN):
+        resp = authed_client.post("/api/jobs/cv_test_1/generate-cv")
+
+    assert resp.status_code == 200
+    assert "x-cv-validation" in resp.headers, (
+        "Response must include X-CV-Validation header"
+    )
+    validation = json.loads(resp.headers["x-cv-validation"])
+    assert "passed" in validation
+    assert "warning_count" in validation
+    assert isinstance(validation["passed"], bool)
+    assert isinstance(validation["warning_count"], int)
+
+
+def test_generate_cv_returns_fix_applied_header_false_when_no_fix(authed_client):
+    """X-CV-Fix-Applied header is 'false' when validation passes on first attempt."""
+    with patch("api.cv.llm.generate_cv", return_value=MOCK_CV_MARKDOWN):
+        resp = authed_client.post("/api/jobs/cv_test_1/generate-cv")
+
+    assert resp.status_code == 200
+    assert "x-cv-fix-applied" in resp.headers
+    # Minimal reference files → empty source_facts → validation passes without fix
+    assert resp.headers["x-cv-fix-applied"] == "false"
+
+
+def test_generate_cv_fix_applied_when_first_validation_fails(authed_client):
+    """When first validation fails, a fix call is triggered and X-CV-Fix-Applied is 'true'."""
+    from api.cv.validator import validate_cv as real_validate_cv
+
+    # First validate call returns failed; second returns passed
+    validate_results = [
+        {"passed": False, "errors": [{"code": "slop_detected", "detail": "Found slop"}], "warnings": []},
+        {"passed": True, "errors": [], "warnings": []},
+    ]
+
+    call_count = 0
+
+    def mock_validate(markdown, plan):
+        nonlocal call_count
+        result = validate_results[min(call_count, len(validate_results) - 1)]
+        call_count += 1
+        return result
+
+    with patch("api.cv.llm.generate_cv", return_value=MOCK_CV_MARKDOWN), \
+         patch("api.cv.validator.validate_cv", side_effect=mock_validate):
+        resp = authed_client.post("/api/jobs/cv_test_1/generate-cv")
+
+    assert resp.status_code == 200
+    assert resp.headers.get("x-cv-fix-applied") == "true", (
+        "X-CV-Fix-Applied must be 'true' when fix call was triggered"
+    )
+
+
+def test_generate_cv_llm_called_twice_when_fix_needed(authed_client):
+    """Two LLM calls are made when validation fails: initial + fix."""
+    validate_results = [
+        {"passed": False, "errors": [{"code": "title_downgraded", "detail": "Title wrong"}], "warnings": []},
+        {"passed": True, "errors": [], "warnings": []},
+    ]
+    call_count = 0
+
+    def mock_validate(markdown, plan):
+        nonlocal call_count
+        result = validate_results[min(call_count, 1)]
+        call_count += 1
+        return result
+
+    with patch("api.cv.llm.generate_cv", return_value=MOCK_CV_MARKDOWN) as mock_llm, \
+         patch("api.cv.validator.validate_cv", side_effect=mock_validate):
+        resp = authed_client.post("/api/jobs/cv_test_1/generate-cv")
+
+    assert resp.status_code == 200
+    assert mock_llm.call_count == 2, (
+        f"Expected 2 LLM calls (initial + fix), got {mock_llm.call_count}"
+    )
+
+
+def test_generate_cv_fix_not_applied_when_validation_passes(authed_client):
+    """When validation passes immediately, only one LLM call is made."""
+    with patch("api.cv.llm.generate_cv", return_value=MOCK_CV_MARKDOWN) as mock_llm, \
+         patch("api.cv.validator.validate_cv",
+               return_value={"passed": True, "errors": [], "warnings": []}):
+        resp = authed_client.post("/api/jobs/cv_test_1/generate-cv")
+
+    assert resp.status_code == 200
+    assert mock_llm.call_count == 1, (
+        f"Expected 1 LLM call (no fix needed), got {mock_llm.call_count}"
+    )
+    assert resp.headers.get("x-cv-fix-applied") == "false"
