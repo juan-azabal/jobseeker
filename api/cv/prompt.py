@@ -22,49 +22,102 @@ _OUTPUT_CONTRACT = """
 Output ONLY the CV content in the structured markdown format specified below.
 No preamble, no explanations, no code fences, no notes after the CV.
 
+Do NOT use **bold** or _italic_ markers anywhere in body text — the document builder
+handles all formatting automatically. The ONLY exception is the role context line
+under each company, which uses _single underscore italics_ on its own line.
+
 ## Required output format
 
 # [Full Name]
-[Title Line]
-[Contact line: City, Country | email | phone | linkedin]
+[Professional Title — plain text, no bold markers]
+[City, Country | email | phone | linkedin | github]
 
 ## Summary
 
-3-5 lines of prose.
+3-5 lines of prose. Must include at least one sentence about scope limitations or
+what you are NOT looking for (e.g. "Not looking for...", "I work best in contexts
+where..."). No generic language.
 
 ## Selected Impact
 
-- Bullet one
-- Bullet two
+- Bullet: problem, action, result. Max 2 lines per bullet.
+- Bullet: mix metrics and qualitative impact.
 
 ## Core Skills
 
-**Theme Name**
-Prose paragraph for this theme.
+Theme Name: Prose describing skills in this theme. No bullet points. No bold markers.
 
-**Another Theme**
-Another prose paragraph.
+Another Theme: Another prose paragraph.
 
 ## Projects
 
-### Project Name
-2-3 lines. Problem, stack, outcome. URL.
+### Project Name  URL-if-applicable
+2-3 lines. Problem, stack, outcome. No bold markers.
 
 ## Work Experience
 
-### Company Name, City, Country
-**Role Title | MM/YYYY - MM/YYYY**
+### Company Name - Role Title	Date Range
+_One sentence explaining what the company does and your scope there._
 
-- Bullet one
-- Bullet two
+- Bullet one. Max 2 lines. Result + mechanism only.
+- Bullet two.
+
+### Another Company - Role	Date Range
+_Context line._
+
+- Bullet.
 
 ## Education and Certifications
 
-- Degree - Institution, Year
+Degree - Institution, Year
 
 ## Languages
 
-- Language - Level
+Spanish (native) | English (advanced)
+
+---
+
+## Formatting rules
+
+1. Company + Role + Date on ONE line (### heading). Use a LITERAL TAB character
+   between the role title and the date range. Example:
+   ### Acme Corp - Senior PM\t07/2024 - Present
+   (where \t is a real tab character, not the two characters backslash-t)
+
+2. Under each company, add a one-sentence context line wrapped in _single underscores_
+   (italic) describing the company and your high-level scope. This line comes immediately
+   after the ### company line, before the bullets.
+
+3. Core Skills: format as "Theme Name: prose text on same line". Do NOT use **bold**
+   markers or separate lines for theme/prose. Each theme is one paragraph.
+
+4. Do NOT wrap any text in **bold** markers anywhere. The builder determines bold based
+   on element position (name, headers, company line run 1).
+
+5. Project name and URL on the same ### line, separated by two spaces before the URL.
+
+6. Body text, bullets, and descriptions must be plain text only.
+
+---
+
+## Content quality rules
+
+1. The Summary MUST contain at least one sentence about limits: what you are not looking
+   for, or the contexts where you work best.
+
+2. The Summary MUST NOT contain: "strong track record", "drive measurable business impact",
+   "proven ability", "results-driven", "data-driven leader", "passionate about", or any
+   generic PM aspirational language that could apply to any candidate.
+
+3. Each bullet under Work Experience: max 2 lines. Result + mechanism only. No narrative
+   arcs, no "I", no adjectives. Start with a verb or a noun phrase.
+
+4. Years of experience: if the master CV states 10+ years, do not write "7+ years".
+
+5. Bullets must be rewritten for the target role — not copy-pasted from the master CV.
+
+6. If the target role involves consulting, working across multiple clients, or embedded
+   product work, include a sentence about adaptability to different environments.
 """
 
 

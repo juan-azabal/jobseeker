@@ -79,6 +79,84 @@ def test_system_prompt_contains_output_contract(monkeypatch, mock_references_dir
     assert "## Work Experience" in system
 
 
+def test_system_prompt_no_bold_markers_in_format_example(monkeypatch, mock_references_dir):
+    """Format example must not use **bold** markers (builder handles bold via element type)."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
+
+    # The format example must not instruct LLM to output **bold** markers in role lines
+    assert "**Role" not in system, "Format example must not use **Role** pattern"
+    assert "**Theme" not in system, "Format example must not use **Theme** pattern"
+
+
+def test_system_prompt_contains_italic_context_line_instruction(monkeypatch, mock_references_dir):
+    """System prompt must instruct LLM to output _italic context lines_ under each company."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
+
+    assert "_single underscore" in system or "context line" in system.lower(), (
+        "Prompt must mention italic context lines under each company"
+    )
+
+
+def test_system_prompt_contains_tab_date_format(monkeypatch, mock_references_dir):
+    """System prompt must show tab-separated Company - Role + Date format."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
+
+    # Must mention TAB as the separator between role and date
+    assert "TAB" in system or "\t" in system, (
+        "Prompt must specify tab character as role/date separator"
+    )
+
+
+def test_system_prompt_contains_anti_slop_rules(monkeypatch, mock_references_dir):
+    """System prompt must prohibit generic AI language in the Summary."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
+
+    assert "strong track record" in system.lower(), (
+        "Prompt must explicitly prohibit 'strong track record'"
+    )
+
+
+def test_system_prompt_contains_limits_clause_requirement(monkeypatch, mock_references_dir):
+    """System prompt must require Summary to contain a limits/not-looking-for sentence."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
+
+    # Should mention "not looking for" or "limits" requirement
+    system_lower = system.lower()
+    assert "not looking for" in system_lower or "limits" in system_lower, (
+        "Prompt must require a limits clause in the Summary"
+    )
+
+
 def test_system_prompt_is_substantial(monkeypatch, mock_references_dir):
     """System prompt must be > 5000 chars (includes real reference content)."""
     monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
