@@ -1,0 +1,49 @@
+# Synthetic test profile — Senior Data Engineer, US-based
+user:
+  id: "test-de"
+  name: "Alice Chen"
+  email: "alice@example.com"
+  active: true
+  home_locations:
+    - new york
+    - us
+
+target:
+  role_type: "Data Engineer"
+  geography: "US, remote-preferred"
+  seniority:
+    senior: 15
+    staff: 12
+    mid: 0
+    unknown: 2
+  domains:
+    data: 15
+    ml: 12
+    saas: 5
+    other: 0
+  salary_display_threshold: 150000
+  salary_min: 80000
+
+skills:
+  - sql
+  - python
+  - spark
+  - dbt
+  - airflow
+  - snowflake
+  - kafka
+  - data pipeline
+  - data warehouse
+  - etl
+  - data model
+
+knowledge:
+  dir: "knowledge/test-de"
+  collection_name: "test_de_profile"
+
+stories: {}
+
+preferences: "tests/fixtures/de-preferences.yaml"
+searches: "tests/fixtures/de-searches.yaml"
+watchlist: "config/watchlist.yaml"
+seen_ids: "config/seen_ids/test-de.txt"

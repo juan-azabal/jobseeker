@@ -1,0 +1,41 @@
+# Prefilter preferences for test Data Engineer profile
+prefilter:
+  deal_breakers:
+    - "junior"
+    - "intern"
+    - "internship"
+    - "entry level"
+    - "entry-level"
+
+  title_must_contain_one_of:
+    - "data engineer"
+    - "analytics engineer"
+    - "staff data engineer"
+    - "senior data engineer"
+    - "principal data engineer"
+    - "data platform engineer"
+
+  title_exclude:
+    - "project manager"
+    - "sales"
+    - "marketing"
+    - "account manager"
+
+  exclude_companies: []
+
+  location:
+    accept_remote: true
+    accept_hybrid: true
+    accept_onsite_cities:
+      - "New York"
+      - "San Francisco"
+
+scoring:
+  auto_generate_package: 65
+  manual_review: 50
+  auto_reject: 50
+
+salary:
+  min_eur: 100000
+  max_eur: 200000
+  currency: "USD"

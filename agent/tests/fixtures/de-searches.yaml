@@ -1,0 +1,15 @@
+# Minimal search config for test Data Engineer profile
+searches:
+  - term: "Senior Data Engineer"
+    location: "United States"
+    sites: ["indeed"]
+    results_wanted: 10
+    hours_old: 72
+
+  - term: "Staff Data Engineer remote"
+    location: ""
+    sites: ["indeed"]
+    results_wanted: 10
+    hours_old: 72
+
+is_remote: true
