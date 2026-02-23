@@ -114,6 +114,7 @@ export default function JobsPage() {
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-6">
       <div className="mx-auto max-w-2xl">
+        <h1 className="sr-only">Jobs</h1>
         <FilterBar filters={filters} onChange={setFilters} />
 
         {loading ? (

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import FilterBar from './components/FilterBar';
 
-const DEFAULT_FILTERS = { tiers: ['A', 'B', 'C'], period: 'all' };
+const DEFAULT_FILTERS = { tiers: ['A', 'B', 'C'], period: 'all', hideApplied: false };
 
 test('renders period and tier buttons', () => {
   render(<FilterBar filters={DEFAULT_FILTERS} onChange={vi.fn()} />);
@@ -11,9 +11,9 @@ test('renders period and tier buttons', () => {
   expect(screen.getByRole('button', { name: /this week/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /this month/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /all/i })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /^A$/ })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /^B$/ })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /^C$/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /^Apply$/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /^Review$/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /^Skip$/ })).toBeInTheDocument();
 });
 
 test('calls onChange when period button clicked', async () => {
@@ -26,7 +26,7 @@ test('calls onChange when period button clicked', async () => {
 test('calls onChange when tier toggled off', async () => {
   const onChange = vi.fn();
   render(<FilterBar filters={DEFAULT_FILTERS} onChange={onChange} />);
-  await userEvent.click(screen.getByRole('button', { name: /^A$/ }));
+  await userEvent.click(screen.getByRole('button', { name: /^Apply$/ }));
   expect(onChange).toHaveBeenCalledWith(
     expect.objectContaining({ tiers: expect.not.arrayContaining(['A']) })
   );

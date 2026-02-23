@@ -28,9 +28,9 @@ test('renders job cards for all tiers', async () => {
 test('shows tier badges', async () => {
   render(<MemoryRouter><JobsPage /></MemoryRouter>);
   await waitFor(() => screen.getByText('Senior PM'));
-  expect(screen.getAllByText('A').length).toBeGreaterThan(0);
-  expect(screen.getAllByText('B').length).toBeGreaterThan(0);
-  expect(screen.getAllByText('C').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Apply').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Review').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Skip').length).toBeGreaterThan(0);
 });
 
 test('shows company names', async () => {

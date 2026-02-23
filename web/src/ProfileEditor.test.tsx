@@ -46,6 +46,7 @@ test('calls save API and triggers onSaved', async () => {
         profile={MOCK_PROFILE}
         cvMarkdown="# Alice"
         onSaved={onSaved}
+        isNew={true}
       />
     </MemoryRouter>
   );
@@ -66,6 +67,7 @@ test('shows error when save fails', async () => {
         profile={MOCK_PROFILE}
         cvMarkdown="# Alice"
         onSaved={() => {}}
+        isNew={true}
       />
     </MemoryRouter>
   );

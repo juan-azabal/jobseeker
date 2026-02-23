@@ -26,7 +26,7 @@ const MOCK_JOB = {
       strategic_impact: 4,
     },
     strengths: [{ claim: 'Strong data background', evidence: '5 years' }],
-    gaps: [{ skill: 'Rust', severity: 'low', mitigation: 'nice to have' }],
+    gaps: [{ gap: 'Rust', severity: 'low', mitigation: 'nice to have' }],
   },
 };
 
