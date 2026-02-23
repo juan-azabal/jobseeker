@@ -330,3 +330,230 @@ def test_system_prompt_selected_impact_example_has_five_bullets(monkeypatch, moc
     assert len(bullets) >= 4, (
         f"Selected Impact example must have ≥4 bullets, found {len(bullets)}"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Plan-aware prompt tests (Step 6.3)
+# ══════════════════════════════════════════════════════════════════════════
+
+SAMPLE_PLAN = {
+    "jd_context": {
+        "company_type": "consultancy",
+        "business_model": "B2B",
+        "vertical": "data",
+        "location": "Paris, FR",
+        "seniority_read": "mid",
+        "key_tools": ["sql", "python"],
+        "team_signals": "embedded",
+        "location_language_hints": ["French"],
+    },
+    "score_summary": {
+        "total": 72,
+        "breakdown": {"domain_fit": 20, "seniority_fit": 15},
+        "dimension_guidance": {
+            "domain_fit": {"score": 20, "level": "high", "instruction": "Lead with domain proof."},
+            "seniority_fit": {"score": 15, "level": "high", "instruction": "Maintain seniority."},
+        },
+    },
+    "strengths": [{"claim": "Strong data background.", "evidence": "Snowplow, Kafka."}],
+    "gaps": [{"gap": "Seniority mismatch.", "severity": "medium", "mitigation": "Emphasise scope."}],
+    "bullet_allocation": {
+        "Acme Corp": {"budget": 3, "relevance": "high", "because": "data platform"},
+    },
+    "source_facts": {
+        "title": "Senior Product Manager",
+        "years_experience": "10+",
+        "languages": ["Spanish (native)", "English (advanced)"],
+        "core_skills_themes": ["Data Platforms", "Product Strategy"],
+    },
+}
+
+
+def test_build_cv_prompts_with_plan_user_contains_plan_json(monkeypatch, mock_references_dir):
+    """User prompt with plan must contain the plan as JSON (key sections present)."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
+
+    assert "jd_context" in user
+    assert "bullet_allocation" in user
+    assert "source_facts" in user
+
+
+def test_build_cv_prompts_with_plan_user_contains_jd_text(monkeypatch, mock_references_dir):
+    """User prompt with plan must still contain the JD text."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
+
+    assert "data platform team" in user  # from parsed.description
+
+
+def test_build_cv_prompts_with_plan_system_contains_bullet_allocation_instruction(
+    monkeypatch, mock_references_dir
+):
+    """System prompt with plan must mention following the bullet allocation."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
+
+    assert "bullet allocation" in system.lower(), (
+        "System prompt must instruct LLM to follow the bullet allocation plan"
+    )
+
+
+def test_build_cv_prompts_with_plan_system_contains_source_fidelity_rules(
+    monkeypatch, mock_references_dir
+):
+    """System prompt with plan must include source fidelity rules (never downgrade)."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
+    system_lower = system.lower()
+
+    assert "source of truth" in system_lower or "never downgrade" in system_lower, (
+        "System prompt must include source fidelity rules"
+    )
+
+
+def test_build_cv_prompts_with_plan_system_contains_chain_of_thought_instruction(
+    monkeypatch, mock_references_dir
+):
+    """System prompt with plan must instruct LLM to output an <analysis> block first."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
+
+    assert "<analysis>" in system, (
+        "System prompt must instruct LLM to output chain-of-thought <analysis> block"
+    )
+
+
+def test_build_cv_prompts_with_plan_system_contains_consultancy_instruction(
+    monkeypatch, mock_references_dir
+):
+    """System prompt with plan must mention consulting adaptability requirement."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
+    system_lower = system.lower()
+
+    assert "consultancy" in system_lower or "consulting" in system_lower or "client environment" in system_lower, (
+        "System prompt must include consultancy-specific tailoring instruction"
+    )
+
+
+def test_build_cv_prompts_with_plan_user_no_separate_strengths_section(
+    monkeypatch, mock_references_dir
+):
+    """User prompt with plan must NOT re-list strengths/gaps separately (they're in the plan)."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
+
+    assert "## Candidate Strengths" not in user, (
+        "With a plan, strengths are inside the plan JSON — not a separate section"
+    )
+    assert "## Gaps to address" not in user, (
+        "With a plan, gaps are inside the plan JSON — not a separate section"
+    )
+
+
+def test_build_cv_prompts_with_plan_user_no_separate_score_breakdown(
+    monkeypatch, mock_references_dir
+):
+    """User prompt with plan must NOT re-list the score breakdown separately."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
+
+    assert "## Score Breakdown" not in user, (
+        "With a plan, score breakdown is inside the plan JSON — not a separate section"
+    )
+
+
+def test_build_cv_prompts_with_plan_user_cv_still_included(monkeypatch, mock_references_dir):
+    """User's cv.md content is still appended even when a plan is provided."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "My personal CV context.", SAMPLE_PLAN)
+
+    assert "My personal CV context." in user
+
+
+def test_build_cv_prompts_backward_compat_no_plan_arg(monkeypatch, mock_references_dir):
+    """build_cv_prompts without cv_plan arg still builds a valid prompt tuple."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    system, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
+
+    assert len(system) > 100
+    assert "Senior Product Manager" in user
+
+
+def test_build_cv_prompts_backward_compat_none_plan(monkeypatch, mock_references_dir):
+    """build_cv_prompts with cv_plan=None still builds a valid prompt tuple."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    system, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", None)
+
+    assert len(system) > 100
+    assert "Senior Product Manager" in user
+
+
+def test_build_cv_prompts_backward_compat_empty_plan(monkeypatch, mock_references_dir):
+    """build_cv_prompts with cv_plan={} still builds a valid prompt tuple (graceful)."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+    importlib.reload(prompt_module)
+
+    system, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", {})
+
+    assert len(system) > 100
+    assert "Senior Product Manager" in user

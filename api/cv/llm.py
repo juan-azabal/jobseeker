@@ -7,11 +7,30 @@ Provider-agnostic interface configured via environment variables:
   OPENAI_API_KEY    — required when provider=openai
 """
 import os
+import re
 
 _DEFAULTS = {
     "anthropic": "claude-sonnet-4-5-20250929",
     "openai": "gpt-4o",
 }
+
+
+def strip_analysis(text: str) -> str:
+    """Strip the <analysis>...</analysis> chain-of-thought block from LLM output.
+
+    The plan-aware system prompt instructs the LLM to output an <analysis> block
+    with reasoning before the CV markdown.  This function removes that block so
+    the caller always receives clean CV markdown ready for docx_builder.
+
+    Args:
+        text: Raw LLM output, possibly starting with <analysis>...</analysis>.
+
+    Returns:
+        CV markdown string with the analysis block removed.  If no analysis block
+        is present the input is returned unchanged (safe to call unconditionally).
+    """
+    cleaned = re.sub(r"<analysis>.*?</analysis>\s*", "", text, flags=re.DOTALL)
+    return cleaned.strip()
 
 
 def generate_cv(system_prompt: str, user_prompt: str) -> str:
@@ -32,13 +51,14 @@ def generate_cv(system_prompt: str, user_prompt: str) -> str:
     model_override = os.environ.get("CV_LLM_MODEL", "").strip()
 
     if provider == "anthropic":
-        return _call_anthropic(system_prompt, user_prompt, model_override)
+        raw = _call_anthropic(system_prompt, user_prompt, model_override)
     elif provider == "openai":
-        return _call_openai(system_prompt, user_prompt, model_override)
+        raw = _call_openai(system_prompt, user_prompt, model_override)
     else:
         raise ValueError(
             f"Unknown CV_LLM_PROVIDER: '{provider}'. Must be 'anthropic' or 'openai'."
         )
+    return strip_analysis(raw)
 
 
 def _call_anthropic(system_prompt: str, user_prompt: str, model_override: str) -> str:

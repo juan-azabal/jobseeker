@@ -2,6 +2,14 @@
 
 Loads reference files and job data to build the (system_prompt, user_prompt)
 tuple consumed by api.cv.llm.generate_cv().
+
+When a cv_plan dict is provided (from api.cv.plan.build_cv_plan), the prompts
+use plan-aware generation: the LLM receives structured context and must output
+an <analysis> chain-of-thought block before the CV markdown.  The analysis
+block is automatically stripped by api.cv.llm.generate_cv().
+
+When cv_plan is None or empty, the function falls back to the legacy prompt
+format for backward compatibility.
 """
 import json
 import os
@@ -156,6 +164,77 @@ Spanish (native) | English (advanced)
    product work, include a sentence about adaptability to different environments.
 """
 
+# Plan-aware rules — appended to the system prompt when a cv_plan is provided.
+# These supplement (not replace) _OUTPUT_CONTRACT.
+_PLAN_AWARE_RULES = """
+---
+
+## Plan-aware generation rules
+
+These rules are REQUIRED when a CV Generation Plan is provided in the user message.
+They supplement the output contract above.
+
+### Source fidelity
+
+The reference files are the **source of truth** for factual claims about this candidate.
+Rules:
+- Never downgrade job titles: if source_facts.title says "Senior Product Manager",
+  write "Senior Product Manager" — never "Product Manager".
+- Never downgrade years of experience: if source_facts.years_experience says "10+",
+  never write "7+", "8+", or any lower number.
+- Include ALL languages listed in source_facts.languages in the Languages section.
+- Core Skills must cover every theme in source_facts.core_skills_themes that is
+  relevant to the target role. Do not collapse or merge themes without good reason.
+
+### Relevance-weighted bullet allocation
+
+Follow the bullet_allocation plan provided. It specifies a bullet budget per company
+and explains why each company is relevant. Rules:
+- Respect the budget per role. If budget is 3, write 3 bullets (not 2, not 4).
+- Within each role, lead with the bullet that most directly maps to a JD requirement.
+- Always include the most differentiating bullet — the one competitors are least
+  likely to have.
+- Each bullet: max 2 lines. Mechanism + result. No narrative arcs, no "I", no preamble
+  verbs. Past tense for completed work; present tense for current role.
+
+### JD-aware tailoring
+
+The CV plan contains jd_context analysis. Use it to shape the Summary and bullet
+selection:
+- If jd_context.company_type is "consultancy": the Summary MUST include a sentence
+  about adaptability to different client environments (e.g., embedded work, multiple
+  client contexts, rapid context-switching).
+- If jd_context.location_language_hints lists a language (e.g., "French"): verify
+  that language appears in the Languages section. If not present in source_facts,
+  add a note only if the candidate has evidence of it.
+- Surface tools from jd_context.key_tools explicitly if they appear in the reference
+  material.
+
+### Anti-slop (extended)
+
+The Summary MUST NOT contain any of the following phrases or close paraphrases:
+"strong track record", "drive measurable business impact", "proven ability",
+"passionate about", "results-driven", "data-driven leader", "leveraging",
+"utilizing", "thought leader", "collaborative approach", "dynamic environment".
+
+Never start a bullet with a gerund. Wrong: "- Leading the...". Right: "- Led the..."
+
+### Chain-of-thought
+
+Before writing the CV, output an <analysis> block with:
+1. The Summary angle given the JD context (company type, location, consulting signals).
+2. For each of the top 3–5 must_have_skills in the plan, which specific bullet from
+   the master CV best proves it.
+3. What differentiates this candidate from typical applicants for this role.
+4. Any gaps from the plan to acknowledge through framing (not invention).
+
+The <analysis> block will be stripped before document generation. It is for your
+reasoning only — not visible to the reader.
+
+After </analysis>, output ONLY the CV markdown starting with # [Full Name].
+Do not include any text between </analysis> and the first # heading.
+"""
+
 
 def _get_references_dir() -> Path:
     """Return the references directory path from env var or default."""
@@ -207,12 +286,25 @@ def _extract_jd_text(parsed: dict) -> str:
     )
 
 
-def build_cv_prompts(job: dict, user_cv_markdown: str) -> tuple[str, str]:
+def build_cv_prompts(
+    job: dict,
+    user_cv_markdown: str,
+    cv_plan: dict | None = None,
+) -> tuple[str, str]:
     """Build the (system_prompt, user_prompt) tuple for CV generation.
+
+    When cv_plan is provided (from api.cv.plan.build_cv_plan), the prompts use
+    plan-aware generation: the system prompt gains source-fidelity, bullet
+    allocation, and chain-of-thought rules; the user prompt is simplified to
+    plan JSON + JD + metadata.
+
+    When cv_plan is None or empty, falls back to the legacy format (backward
+    compatible with all existing callers that don't yet pass a plan).
 
     Args:
         job: Full job dict from SQLite (includes parsed and scored JSON strings).
         user_cv_markdown: Content of the user's cv.md file (empty string if unavailable).
+        cv_plan: Optional plan dict from build_cv_plan(). None → legacy behavior.
 
     Returns:
         Tuple of (system_prompt, user_prompt) ready for api.cv.llm.generate_cv().
@@ -224,23 +316,36 @@ def build_cv_prompts(job: dict, user_cv_markdown: str) -> tuple[str, str]:
     refs_dir = _get_references_dir()
     reference_content = _load_reference_files(refs_dir)
 
-    system_prompt = reference_content + "\n\n" + _OUTPUT_CONTRACT
-
     # Parse JSON blobs from job
-    parsed = {}
-    scored = {}
+    parsed: dict = {}
+    scored: dict = {}
     if job.get("parsed"):
         try:
-            parsed = json.loads(job["parsed"])
+            raw = job["parsed"]
+            parsed = raw if isinstance(raw, dict) else json.loads(raw)
         except (json.JSONDecodeError, TypeError):
             parsed = {}
     if job.get("scored"):
         try:
-            scored = json.loads(job["scored"])
+            raw = job["scored"]
+            scored = raw if isinstance(raw, dict) else json.loads(raw)
         except (json.JSONDecodeError, TypeError):
             scored = {}
 
     jd_text = _extract_jd_text(parsed)
+
+    # ── Plan-aware path ───────────────────────────────────────────────────
+    if cv_plan:
+        system_prompt = (
+            reference_content
+            + "\n\n" + _OUTPUT_CONTRACT
+            + "\n\n" + _PLAN_AWARE_RULES
+        )
+        user_prompt = _build_plan_aware_user_prompt(job, jd_text, cv_plan, user_cv_markdown)
+        return system_prompt, user_prompt
+
+    # ── Legacy path (no plan) ─────────────────────────────────────────────
+    system_prompt = reference_content + "\n\n" + _OUTPUT_CONTRACT
 
     # Extract scoring details
     rag = scored.get("rag_score", scored)
@@ -248,45 +353,32 @@ def build_cv_prompts(job: dict, user_cv_markdown: str) -> tuple[str, str]:
     strengths = rag.get("strengths", [])
     gaps = rag.get("gaps", [])
 
-    # Build user prompt
     user_parts = [
-        f"## Job to tailor the CV for",
-        f"",
+        "## Job to tailor the CV for",
+        "",
         f"**Title:** {job.get('title', 'N/A')}",
         f"**Company:** {job.get('company', 'N/A')}",
         f"**Location:** {job.get('location', 'N/A')}",
         f"**URL:** {job.get('url', 'N/A')}",
         f"**Score:** {job.get('score', 'N/A')} (Tier {job.get('tier', 'N/A')})",
-        f"",
-        f"## Job Description",
-        f"",
+        "",
+        "## Job Description",
+        "",
         jd_text,
     ]
 
     if breakdown:
-        user_parts += [
-            f"",
-            f"## Score Breakdown",
-            f"",
-        ]
+        user_parts += ["", "## Score Breakdown", ""]
         for dim, score in breakdown.items():
             user_parts.append(f"- {dim}: {score}")
 
     if strengths:
-        user_parts += [
-            f"",
-            f"## Candidate Strengths (from scoring)",
-            f"",
-        ]
+        user_parts += ["", "## Candidate Strengths (from scoring)", ""]
         for s in strengths:
             user_parts.append(f"- {s}")
 
     if gaps:
-        user_parts += [
-            f"",
-            f"## Gaps to address or mitigate",
-            f"",
-        ]
+        user_parts += ["", "## Gaps to address or mitigate", ""]
         for g in gaps:
             if isinstance(g, dict):
                 severity = g.get("severity", "")
@@ -297,11 +389,70 @@ def build_cv_prompts(job: dict, user_cv_markdown: str) -> tuple[str, str]:
 
     if user_cv_markdown and user_cv_markdown.strip():
         user_parts += [
-            f"",
-            f"## Candidate's CV (for additional context)",
-            f"",
+            "",
+            "## Candidate's CV (for additional context)",
+            "",
             user_cv_markdown.strip(),
         ]
 
     user_prompt = "\n".join(user_parts)
     return system_prompt, user_prompt
+
+
+def _build_plan_aware_user_prompt(
+    job: dict,
+    jd_text: str,
+    cv_plan: dict,
+    user_cv_markdown: str,
+) -> str:
+    """Build the simplified user prompt for plan-aware generation.
+
+    Structure:
+        ## CV Generation Plan
+        {plan JSON}
+
+        ## Job Description
+        {JD text}
+
+        ## Job Metadata
+        Title / Company / Location / Score
+
+        ---
+        Generate the CV following the plan. Start with <analysis>...
+    """
+    plan_json = json.dumps(cv_plan, indent=2, ensure_ascii=False)
+
+    parts = [
+        "## CV Generation Plan",
+        "",
+        plan_json,
+        "",
+        "## Job Description",
+        "",
+        jd_text,
+        "",
+        "## Job Metadata",
+        "",
+        f"Title:    {job.get('title', 'N/A')}",
+        f"Company:  {job.get('company', 'N/A')}",
+        f"Location: {job.get('location', 'N/A')}",
+        f"Score:    {job.get('score', 'N/A')} (Tier {job.get('tier', 'N/A')})",
+    ]
+
+    if user_cv_markdown and user_cv_markdown.strip():
+        parts += [
+            "",
+            "## Candidate's CV (for additional context)",
+            "",
+            user_cv_markdown.strip(),
+        ]
+
+    parts += [
+        "",
+        "---",
+        "",
+        "Generate the CV following the plan above.",
+        "Start with <analysis>, then output the CV markdown starting with # [Full Name].",
+    ]
+
+    return "\n".join(parts)
