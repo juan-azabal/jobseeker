@@ -3,11 +3,12 @@ import os
 from datetime import date, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.db.queries import get_jobs, get_job_by_id
+from api.middleware.auth import get_current_user
 
-router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+router = APIRouter(prefix="/api/jobs", tags=["jobs"], dependencies=[Depends(get_current_user)])
 
 PERIOD_DAYS = {"today": 0, "week": 7, "month": 30}
 

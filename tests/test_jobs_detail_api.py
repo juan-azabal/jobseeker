@@ -2,7 +2,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 from api.db.init import init_db
-from api.db.queries import upsert_job
+from api.db.queries import upsert_job, upsert_user, create_session
 from api.main import app
 
 JOB = {
@@ -31,41 +31,45 @@ JOB = {
 }
 
 
-@pytest.fixture(autouse=True)
-def seed_db(tmp_path, monkeypatch):
+@pytest.fixture
+def authed_client(tmp_path, monkeypatch):
     db_path = str(tmp_path / "test.db")
     init_db(db_path)
     upsert_job(db_path, JOB)
     monkeypatch.setenv("DB_PATH", db_path)
-    yield db_path
+    user = upsert_user(db_path, {
+        "google_id": "g_t", "email": "t@t.com",
+        "name": "T", "avatar_url": None, "profile_id": None,
+    })
+    create_session(db_path, "tok", user["id"], "2099-01-01T00:00:00")
+    c = TestClient(app)
+    c.cookies.set("session", "tok")
+    return c
 
 
-client = TestClient(app)
-
-
-def test_get_job_detail_200():
-    resp = client.get("/api/jobs/a1")
+def test_get_job_detail_200(authed_client):
+    resp = authed_client.get("/api/jobs/a1")
     assert resp.status_code == 200
     data = resp.json()
     assert data["job_id"] == "a1"
     assert data["title"] == "Senior PM"
 
 
-def test_get_job_detail_has_parsed():
-    resp = client.get("/api/jobs/a1")
+def test_get_job_detail_has_parsed(authed_client):
+    resp = authed_client.get("/api/jobs/a1")
     data = resp.json()
     assert "parsed" in data
     assert data["parsed"]["domain"] == "data"
 
 
-def test_get_job_detail_has_scored():
-    resp = client.get("/api/jobs/a1")
+def test_get_job_detail_has_scored(authed_client):
+    resp = authed_client.get("/api/jobs/a1")
     data = resp.json()
     assert "scored" in data
     assert data["scored"]["score"] == 72
     assert "score_breakdown" in data["scored"]
 
 
-def test_get_job_detail_404():
-    resp = client.get("/api/jobs/nonexistent")
+def test_get_job_detail_404(authed_client):
+    resp = authed_client.get("/api/jobs/nonexistent")
     assert resp.status_code == 404
