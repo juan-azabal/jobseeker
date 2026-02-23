@@ -189,5 +189,5 @@ stories:
 # Paths to config files (per-user where available, shared otherwise)
 preferences: "config/preferences.yaml"
 searches: "config/profiles/juan-searches.yaml"
-watchlist: "config/watchlist.yaml"
+watchlist: "config/profiles/juan-watchlist.yaml"
 seen_ids: "config/seen_ids/juan.txt"

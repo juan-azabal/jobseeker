@@ -507,7 +507,7 @@ def main():
     # Step 1b: Poll ATS watchlist
     existing_ids = {j["id"] for j in jobs}
     try:
-        ats_jobs = run_watchlist_scraper()
+        ats_jobs = run_watchlist_scraper(config_path=watchlist_path)
         for j in ats_jobs:
             if j["id"] not in existing_ids:
                 jobs.append(j)
