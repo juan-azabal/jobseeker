@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "dev": "concurrently --names api,web --prefix-colors cyan,magenta \"venv/bin/uvicorn api.main:app --reload --port 8000\" \"npm run dev --prefix web\""
+    "dev": "bash dev.sh"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
