@@ -1,10 +1,12 @@
 import os
 import sys
 import tempfile
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from typing import Any
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from pydantic import BaseModel
 
 from api.middleware.auth import get_current_user
+from api.db.queries import update_user_profile_id
 
 MAX_CV_BYTES = 5 * 1024 * 1024  # 5 MB
 
@@ -41,6 +43,64 @@ class GenerateProfileRequest(BaseModel):
 async def generate_profile(body: GenerateProfileRequest):
     profile = _extract_profile_from_cv(body.cv_markdown)
     return profile
+
+
+def _build_profile_yaml(profile: dict, profile_id: str, salary_min: int, location_preference: str) -> str:
+    from onboard import _build_profile_yaml as _bpy  # noqa: PLC0415
+    return _bpy(
+        extracted=profile,
+        profile_id=profile_id,
+        email=profile.get("email") or "",
+        salary_min=salary_min,
+        location_choice=location_preference,
+        home_locations=profile.get("home_locations", []),
+    )
+
+
+def _generate_profile_id(name: str) -> str:
+    from onboard import _generate_profile_id as _gpi  # noqa: PLC0415
+    return _gpi(name)
+
+
+def _write_profile_files(jobagent_dir: str, profile_id: str, cv_markdown: str, profile_yaml: str) -> None:
+    profiles_dir = os.path.join(jobagent_dir, "config", "profiles")
+    os.makedirs(profiles_dir, exist_ok=True)
+    with open(os.path.join(profiles_dir, f"{profile_id}.yaml"), "w") as f:
+        f.write(profile_yaml)
+
+    knowledge_dir = os.path.join(jobagent_dir, "knowledge", profile_id)
+    os.makedirs(knowledge_dir, exist_ok=True)
+    with open(os.path.join(knowledge_dir, "cv.md"), "w") as f:
+        f.write(cv_markdown)
+
+    seen_ids_dir = os.path.join(jobagent_dir, "config", "seen_ids")
+    os.makedirs(seen_ids_dir, exist_ok=True)
+    seen_ids_path = os.path.join(seen_ids_dir, f"{profile_id}.txt")
+    if not os.path.exists(seen_ids_path):
+        open(seen_ids_path, "w").close()
+
+
+class SaveProfileRequest(BaseModel):
+    cv_markdown: str
+    profile: dict[str, Any]
+    salary_min: int = 60000
+    location_preference: str = "b"
+
+
+@router.post("/save-profile")
+async def save_profile(body: SaveProfileRequest, request: Request, user: dict = Depends(get_current_user)):
+    profile_id = _generate_profile_id(body.profile.get("name", "user"))
+    profile_yaml = _build_profile_yaml(
+        body.profile, profile_id, body.salary_min, body.location_preference
+    )
+
+    jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "../jobagent"))
+    _write_profile_files(jobagent_dir, profile_id, body.cv_markdown, profile_yaml)
+
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    update_user_profile_id(db_path, user["id"], profile_id)
+
+    return {"profile_id": profile_id}
 
 
 @router.post("/upload-cv", dependencies=[Depends(get_current_user)])

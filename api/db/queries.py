@@ -137,3 +137,10 @@ def delete_session(db_path: str, token: str) -> None:
     con.execute("DELETE FROM sessions WHERE token = ?", (token,))
     con.commit()
     con.close()
+
+
+def update_user_profile_id(db_path: str, user_id: int, profile_id: str) -> None:
+    con = _connect(db_path)
+    con.execute("UPDATE users SET profile_id = ? WHERE id = ?", (profile_id, user_id))
+    con.commit()
+    con.close()
