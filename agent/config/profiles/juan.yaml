@@ -37,7 +37,7 @@ target:
   geography: "EU or remote"
   salary_display_threshold: 130000  # jobs above this get [+++] indicator in terminal
 
-  salary_min: 60000
+  salary_min: 70000
 skills:
   # Data infrastructure (core)
 - data platform

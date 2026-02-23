@@ -49,14 +49,21 @@ TEMPLATE_DIR = Path(__file__).parent / "templates"
 TEMPLATE_NAME = "email_digest.html.j2"
 
 
-def _is_reloc(job, home_locations=None) -> bool:
-    """Return True if role requires relocating (not remote, not in user's home locations)."""
+def _is_reloc(job, home_locations=None, home_regions=None) -> bool:
+    """Return True if role requires relocating.
+
+    Remote jobs: checks restriction/title/location for country pinning.
+    Non-remote: checks if job location matches user's home locations.
+    """
+    from main import _is_remote_requiring_reloc
+
     parsed = job.get("parsed") or {}
     loc_type = parsed.get("location_type", "unknown")
     job_loc = (job.get("location") or "").lower()
-    if loc_type == "remote":
-        return False
     _home = [loc.lower() for loc in (home_locations or [])]
+    _regions = [r.lower() for r in (home_regions or [])]
+    if loc_type == "remote":
+        return _is_remote_requiring_reloc(job, home_locations=_home, home_regions=_regions)
     if any(c in job_loc for c in _home):
         return False
     return True
@@ -69,7 +76,7 @@ def _salary_display(salary_eur: float) -> str:
     return ""
 
 
-def _flatten_job(job, home_locations=None) -> dict:
+def _flatten_job(job, home_locations=None, home_regions=None) -> dict:
     """Convert a raw pipeline job dict into the flat schema the template expects."""
     parsed = job.get("parsed") or {}
     rag = job.get("rag_score") or {}
@@ -96,7 +103,7 @@ def _flatten_job(job, home_locations=None) -> dict:
         "company":        job.get("company", ""),
         "location":       job.get("location") or "",
         "location_type":  parsed.get("location_type") or "unknown",
-        "requires_reloc": _is_reloc(job, home_locations),
+        "requires_reloc": _is_reloc(job, home_locations, home_regions),
         "salary_display": _salary_display(salary_eur),
         "score":          job.get("_display_score", 0),
         "strength":       strength,
@@ -135,8 +142,11 @@ def _build_context(jobs, rejected_stats, run_meta, profile=None):
     from main import _extract_max_salary_eur, _heuristic_score
 
     home_locations = None
+    home_regions = None
     if profile:
+        from geo import derive_home_regions
         home_locations = profile.get("user", {}).get("home_locations")
+        home_regions = derive_home_regions([loc.lower() for loc in (home_locations or [])])
 
     parsed_jobs = [j for j in jobs if j.get("parsed")]
 
@@ -151,15 +161,15 @@ def _build_context(jobs, rejected_stats, run_meta, profile=None):
 
     # Split tiers and flatten
     tier_a_raw = sorted([j for j in parsed_jobs if j["_display_score"] >= 50],
-                        key=lambda j: (1 if _is_reloc(j, home_locations) else 0, -j["_display_score"], -j.get("_salary_eur", 0)))
+                        key=lambda j: (1 if _is_reloc(j, home_locations, home_regions) else 0, -j["_display_score"], -j.get("_salary_eur", 0)))
     tier_b_raw = sorted([j for j in parsed_jobs if 30 <= j["_display_score"] < 50],
-                        key=lambda j: (1 if _is_reloc(j, home_locations) else 0, -j["_display_score"], -j.get("_salary_eur", 0)))
+                        key=lambda j: (1 if _is_reloc(j, home_locations, home_regions) else 0, -j["_display_score"], -j.get("_salary_eur", 0)))
     tier_c_raw = sorted([j for j in parsed_jobs if j["_display_score"] < 30],
                         key=lambda j: -j["_display_score"])
 
-    tier_a = [_flatten_job(j, home_locations) for j in tier_a_raw]
-    tier_b = [_flatten_job(j, home_locations) for j in tier_b_raw]
-    tier_c = [_flatten_job(j, home_locations) for j in tier_c_raw]
+    tier_a = [_flatten_job(j, home_locations, home_regions) for j in tier_a_raw]
+    tier_b = [_flatten_job(j, home_locations, home_regions) for j in tier_b_raw]
+    tier_c = [_flatten_job(j, home_locations, home_regions) for j in tier_c_raw]
 
     headline = _build_headline(tier_a)
     n_prefiltered = rejected_stats.get("total", 0) - rejected_stats.get("passed", 0)

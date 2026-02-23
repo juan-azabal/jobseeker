@@ -84,17 +84,22 @@ _DOMAIN_SCORES = None
 _SENIORITY_SCORES = None
 _SALARY_THRESHOLD = 130000
 _HOME_LOCATIONS = []
+_HOME_REGIONS = []           # auto-derived from home_locations via country-converter
+_HOME_REGION_RE = None       # compiled regex for word-boundary region matching
 
 
 def _load_heuristic_config(profile: dict):
     """Populate module-level heuristic constants from user profile."""
+    from geo import derive_home_regions, build_region_pattern
     global _PROFILE_SKILLS, _DOMAIN_SCORES, _SENIORITY_SCORES
-    global _SALARY_THRESHOLD, _HOME_LOCATIONS
+    global _SALARY_THRESHOLD, _HOME_LOCATIONS, _HOME_REGIONS, _HOME_REGION_RE
     _PROFILE_SKILLS   = [s.lower() for s in (profile.get("skills") or [])]
     _DOMAIN_SCORES    = {k.lower(): v for k, v in (profile.get("target", {}).get("domains") or {}).items()}
     _SENIORITY_SCORES = {k.lower(): v for k, v in (profile.get("target", {}).get("seniority") or {}).items()}
     _SALARY_THRESHOLD = profile.get("target", {}).get("salary_display_threshold", 130000)
     _HOME_LOCATIONS   = [loc.lower() for loc in (profile.get("user", {}).get("home_locations") or [])]
+    _HOME_REGIONS     = derive_home_regions(_HOME_LOCATIONS)
+    _HOME_REGION_RE   = build_region_pattern(_HOME_REGIONS)
 
 
 # Domain override: if parser says "other" but keywords match, reclassify
@@ -151,10 +156,10 @@ def _heuristic_score(job):
     score += _SENIORITY_SCORES.get(p.get("seniority", "unknown"), 0)
 
     # Location (0-10)
-    # Geo-restricted remote (US only, North America, etc.) gets no bonus — treated as reloc
+    # Country-pinned remote gets no bonus — treated as reloc
     loc_type = p.get("location_type", "unknown")
     job_loc = (job.get("location") or "").lower()
-    if loc_type == "remote" and not _is_geo_restricted_remote(p):
+    if loc_type == "remote" and not _is_remote_requiring_reloc(job):
         score += 10
     elif loc_type == "hybrid" and any(c in job_loc for c in _HOME_LOCATIONS):
         score += 8
@@ -238,38 +243,82 @@ def _extract_max_salary_eur(job):
 
 # --- Display ---
 
-# Keywords that indicate the remote restriction is outside Europe/Spain
-_NON_EU_RESTRICTIONS = [
-    "us only", "usa only", "united states only", "us-only",
-    "north america", "canada", "latam", "latin america",
-    "apac", "asia", "australia", "new zealand", "mena",
-    "americas",
-]
+def _is_remote_requiring_reloc(job, home_locations=None, home_regions=None, region_pattern=None):
+    """Return True if a remote job pins the worker to a place outside home.
 
-# If any of these appear in the restriction string, Europe IS included — not a non-EU restriction
-_EU_INCLUSIVE_TERMS = ["emea", "europe", " eu,", ",eu,", "eu only", "european"]
+    Checks three signals (title, location, restriction) against the user's
+    home_locations and home_regions (auto-derived via country-converter).
+    A remote job is reloc-free only if:
+      1. The user's home location explicitly appears in the combined text, OR
+      2. The user's home region appears (word-boundary safe via regex), OR
+      3. A universal term appears (worldwide, global, anywhere), OR
+      4. There is NO country/city pinning at all (truly global remote).
+    Everything else counts as relocation.
+    """
+    from geo import matches_region, UNIVERSAL_TERMS, build_region_pattern
 
+    home_locs = home_locations if home_locations is not None else _HOME_LOCATIONS
+    re_pattern = region_pattern if region_pattern is not None else _HOME_REGION_RE
+    # Build pattern on the fly if caller passed regions list but no compiled pattern
+    if re_pattern is None and home_regions:
+        re_pattern = build_region_pattern(home_regions)
 
-def _is_geo_restricted_remote(parsed: dict) -> bool:
-    """Return True if the job is remote but restricted to a non-European geography."""
-    restriction = (parsed.get("remote_restriction") or "").lower()
-    if not restriction:
+    p = job.get("parsed") or {}
+    title_lower = (job.get("title") or "").lower()
+    job_loc = (job.get("location") or "").lower()
+    restriction = (p.get("remote_restriction") or "").lower()
+    if restriction in ("null", "none"):
+        restriction = ""
+
+    combined = f"{title_lower} {job_loc} {restriction}"
+
+    # 1. User's home is mentioned → accessible, not reloc
+    if home_locs and any(home in combined for home in home_locs):
         return False
-    # If EU/EMEA is explicitly included, the candidate can work from Spain — not restricted
-    if any(term in restriction for term in _EU_INCLUSIVE_TERMS):
+
+    # 2. User's home region is mentioned (word-boundary regex) → not reloc
+    if matches_region(combined, re_pattern):
         return False
-    return any(kw in restriction for kw in _NON_EU_RESTRICTIONS)
+
+    # 3. Universally inclusive → not reloc
+    if any(term in combined for term in UNIVERSAL_TERMS):
+        return False
+
+    # 4. "Remote from X" pattern in title → country-pinned → reloc
+    if re.search(r"remote from \w", title_lower):
+        return True
+
+    # 5. Location is "SomePlace (remote)" → country-pinned → reloc
+    if "(remote)" in job_loc and job_loc.replace("(remote)", "").strip():
+        return True
+
+    # 6. Restriction names a specific place (not just a timezone)
+    if restriction:
+        tz_words = ["timezone", "time zone", "hours", "cet", "gmt", "utc",
+                    "est", "pst", "eet", "wet"]
+        is_pure_tz = all(
+            any(tw in tok for tw in tz_words)
+            for tok in restriction.split(",")
+            for _ in [tok.strip()] if tok.strip()
+        )
+        if not is_pure_tz:
+            return True
+
+    # 7. No signals → truly global remote → not reloc
+    return False
 
 
 def _is_reloc(job):
-    """Return True if role requires relocating (not remote and not a home location),
-    or if it is remote but geo-restricted to a non-European region."""
+    """Return True if role requires relocating.
+
+    Remote jobs: checks restriction/title/location for country pinning.
+    Non-remote: checks if the job location matches user's home locations.
+    """
     p = job.get("parsed") or {}
     loc_type = p.get("location_type", "unknown")
     job_loc = (job.get("location") or "").lower()
     if loc_type == "remote":
-        # Geo-restricted remote (e.g. US only) counts as reloc for EU-based candidates
-        return _is_geo_restricted_remote(p)
+        return _is_remote_requiring_reloc(job)
     if any(c in job_loc for c in _HOME_LOCATIONS):
         return False
     return True

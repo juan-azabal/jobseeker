@@ -34,74 +34,117 @@ def _period_to_date_from(period: str | None) -> str | None:
     return (date.today() - timedelta(days=days)).isoformat()
 
 
-def _load_home_locations(profile_id: str | None) -> list[str]:
-    """Return home_locations from the user's jobagent profile YAML, or [] if unavailable."""
+def _load_user_geo(profile_id: str | None) -> tuple[list[str], list[str]]:
+    """Return (home_locations, home_regions) from the user's profile YAML.
+
+    home_regions are auto-derived from home_locations via country-converter.
+    """
     if not profile_id:
-        return []
+        return [], []
     jobagent_dir = os.environ.get("JOBAGENT_DIR", "agent")
+
+    # Add agent dir to sys.path so we can import geo module
+    import sys
+    agent_dir = str(Path(jobagent_dir).resolve())
+    if agent_dir not in sys.path:
+        sys.path.insert(0, agent_dir)
+
+    from geo import derive_home_regions
+
     profile_path = Path(jobagent_dir) / "config" / "profiles" / f"{profile_id}.yaml"
     try:
         data = yaml.safe_load(profile_path.read_text())
-        return [loc.lower() for loc in data.get("user", {}).get("home_locations", [])]
+        home_locs = [loc.lower() for loc in data.get("user", {}).get("home_locations", [])]
+        home_regions = derive_home_regions(home_locs)
+        return home_locs, home_regions
     except Exception:
-        return []
+        return [], []
 
 
-_NON_EU_RESTRICTIONS = [
-    "us only", "usa only", "united states only", "us-only",
-    "north america", "canada", "latam", "latin america",
-    "apac", "asia", "australia", "new zealand", "mena",
-    "americas",
-]
+def _is_remote_requiring_reloc(job: dict, home_locations: list[str], home_regions: list[str]) -> bool:
+    """Return True if a remote job pins the worker to a place outside home.
 
-# If any of these appear in the restriction, Europe IS included — not non-EU restricted
-_EU_INCLUSIVE_TERMS = ["emea", "europe", " eu,", ",eu,", "eu only", "european"]
-
-
-def _is_geo_restricted_remote(job: dict) -> bool:
-    """Return True if job is remote but restricted to a non-European geography.
-
-    Checks the top-level `remote_restriction` field (extracted by get_jobs() via
-    json_extract) first, then falls back to parsing the full `parsed` blob for
-    compatibility with job dicts from get_job_by_id().
+    Checks title, location, and remote_restriction against the user's
+    home_locations and auto-derived home_regions.  A remote job is reloc-free if:
+      1. The user's home location appears in the combined text, OR
+      2. The user's home region appears (word-boundary safe via regex), OR
+      3. A universal term appears (worldwide, global, anywhere), OR
+      4. There is no country/city pinning at all (truly global remote).
     """
-    # Fast path: get_jobs() extracts this directly via json_extract
+    from geo import UNIVERSAL_TERMS, build_region_pattern, matches_region
+
+    title_lower = (job.get("title") or "").lower()
+    job_loc = (job.get("location") or "").lower()
+
+    # Get restriction — API jobs may have it at top level or inside parsed blob
     restriction = (job.get("remote_restriction") or "").lower()
     if not restriction:
-        # Fallback: full parsed blob (used in detail view / job_by_id)
         parsed = job.get("parsed")
         if isinstance(parsed, str):
             try:
                 parsed = json.loads(parsed)
             except Exception:
-                return False
+                parsed = {}
         if isinstance(parsed, dict):
             restriction = (parsed.get("remote_restriction") or "").lower()
-    if not restriction:
+    if restriction in ("null", "none"):
+        restriction = ""
+
+    combined = f"{title_lower} {job_loc} {restriction}"
+
+    # 1. User's home is mentioned → accessible
+    if home_locations and any(home in combined for home in home_locations):
         return False
-    # If EU/EMEA is explicitly included, the candidate can work from Spain — not restricted
-    if any(term in restriction for term in _EU_INCLUSIVE_TERMS):
+
+    # 2. User's home region is mentioned (word-boundary regex) → accessible
+    region_re = build_region_pattern(home_regions)
+    if matches_region(combined, region_re):
         return False
-    return any(kw in restriction for kw in _NON_EU_RESTRICTIONS)
+
+    # 3. Universal terms → accessible to everyone
+    if any(term in combined for term in UNIVERSAL_TERMS):
+        return False
+
+    # 4. "Remote from X" in title → country-pinned
+    if re.search(r"remote from \w", title_lower):
+        return True
+
+    # 5. Location is "SomePlace (remote)" → country-pinned
+    if "(remote)" in job_loc and job_loc.replace("(remote)", "").strip():
+        return True
+
+    # 6. Restriction names a specific place (not just a timezone)
+    if restriction:
+        tz_words = ["timezone", "time zone", "hours", "cet", "gmt", "utc",
+                    "est", "pst", "eet", "wet"]
+        is_pure_tz = all(
+            any(tw in tok for tw in tz_words)
+            for tok in restriction.split(",")
+            for _ in [tok.strip()] if tok.strip()
+        )
+        if not is_pure_tz:
+            return True
+
+    return False
 
 
-def _compute_reloc(job: dict, home_locations: list[str]) -> bool:
+def _compute_reloc(job: dict, home_locations: list[str], home_regions: list[str]) -> bool:
     """Return True if this job requires relocation for the given user."""
     loc_type = job.get("location_type") or ""
     job_loc = (job.get("location") or "").lower()
     if loc_type == "remote":
-        return _is_geo_restricted_remote(job)
+        return _is_remote_requiring_reloc(job, home_locations, home_regions)
     return not any(h in job_loc for h in home_locations)
 
 
-def _apply_reloc_penalty(jobs: list[dict], home_locations: list[str]) -> list[dict]:
+def _apply_reloc_penalty(jobs: list[dict], home_locations: list[str], home_regions: list[str]) -> list[dict]:
     """Subtract 15 pts from jobs that require relocation:
     - Not remote AND not in a home city, OR
     - Remote but geo-restricted away from the user's region.
     Also stamps geo_restricted=True/False on each job for frontend badge coloring.
     """
     for job in jobs:
-        is_reloc = _compute_reloc(job, home_locations) if home_locations else False
+        is_reloc = _compute_reloc(job, home_locations, home_regions) if home_locations else False
         job["geo_restricted"] = is_reloc
         if is_reloc and job["score"] > 0:
             job["score"] = max(0, job["score"] - 15)
@@ -139,8 +182,8 @@ def list_jobs(
         hide_applied=hide_applied,
         limit=limit,
     )
-    home_locations = _load_home_locations(user.get("profile_id"))
-    jobs = _apply_reloc_penalty(jobs, home_locations)
+    home_locations, home_regions = _load_user_geo(user.get("profile_id"))
+    jobs = _apply_reloc_penalty(jobs, home_locations, home_regions)
     return {
         "jobs": jobs,
         "filters": {"tier": tier, "period": period or "all"},
@@ -159,9 +202,9 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
     status = get_job_status_by_title(_db_path(), user["id"], row["company"], row["title"])
     row["applied_at"] = status.get("applied_at") if status else None
     row["dismissed_at"] = status.get("dismissed_at") if status else None
-    # Compute geo_restricted using user's home_locations (same logic as list endpoint)
-    home_locations = _load_home_locations(user.get("profile_id"))
-    row["geo_restricted"] = _compute_reloc(row, home_locations) if home_locations else False
+    # Compute geo_restricted using user's geo data (same logic as list endpoint)
+    home_locations, home_regions = _load_user_geo(user.get("profile_id"))
+    row["geo_restricted"] = _compute_reloc(row, home_locations, home_regions) if home_locations else False
     return row
 
 
