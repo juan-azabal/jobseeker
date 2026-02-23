@@ -34,6 +34,7 @@ export default function JobsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [dismissing, setDismissing] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -77,6 +78,20 @@ export default function JobsPage() {
     setApplying(false);
     setSelected(new Set());
     // Refresh list — if hiding applied, they'll disappear; otherwise badge appears
+    const qs = filtersToQuery(filters);
+    const data: JobsResponse = await fetch(`/api/jobs${qs ? '?' + qs : ''}`).then((r) => r.json());
+    setJobs(data.jobs);
+  };
+
+  const handleBulkDismiss = async () => {
+    setDismissing(true);
+    await Promise.all(
+      [...selected].map((id) =>
+        fetch(`/api/jobs/${id}/dismiss`, { method: 'POST' }),
+      ),
+    );
+    setDismissing(false);
+    setSelected(new Set());
     const qs = filtersToQuery(filters);
     const data: JobsResponse = await fetch(`/api/jobs${qs ? '?' + qs : ''}`).then((r) => r.json());
     setJobs(data.jobs);
@@ -177,6 +192,13 @@ export default function JobsPage() {
               className="flex items-center gap-2 rounded-lg bg-emerald-700 px-3.5 py-1.5 text-sm font-semibold text-white transition-all hover:bg-emerald-600 disabled:opacity-50"
             >
               {applying ? 'Applying…' : 'Mark applied'}
+            </button>
+            <button
+              onClick={handleBulkDismiss}
+              disabled={dismissing}
+              className="flex items-center gap-2 rounded-lg bg-zinc-700 px-3.5 py-1.5 text-sm font-semibold text-zinc-300 transition-all hover:bg-zinc-600 disabled:opacity-50"
+            >
+              {dismissing ? 'Skipping…' : 'Skip'}
             </button>
             <button
               onClick={() => setSelected(new Set())}

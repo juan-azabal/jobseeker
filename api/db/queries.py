@@ -75,11 +75,12 @@ def get_jobs(
             FROM jobs j
             WHERE 1=1 {where_fragment}
         ),
-        applied_groups AS (
+        status_groups AS (
             SELECT
                 j.company,
-                LOWER(TRIM(j.title)) AS title_key,
-                MAX(s.applied_at)    AS applied_at
+                LOWER(TRIM(j.title))  AS title_key,
+                MAX(s.applied_at)     AS applied_at,
+                MAX(s.dismissed_at)   AS dismissed_at
             FROM jobs j
             JOIN user_job_status s ON s.job_id = j.job_id AND s.user_id = ?
             GROUP BY j.company, LOWER(TRIM(j.title))
@@ -87,11 +88,13 @@ def get_jobs(
         SELECT
             r.job_id, r.title, r.company, r.location, r.location_type, r.domain,
             r.score, r.tier, r.first_seen, r.url,
-            ag.applied_at
+            ag.applied_at,
+            ag.dismissed_at
         FROM ranked r
-        LEFT JOIN applied_groups ag
+        LEFT JOIN status_groups ag
             ON ag.company = r.company AND ag.title_key = LOWER(TRIM(r.title))
         WHERE r.rn = 1
+          AND ag.dismissed_at IS NULL
           {hide_fragment}
         ORDER BY r.score DESC
         LIMIT ?
@@ -100,6 +103,22 @@ def get_jobs(
     rows = con.execute(sql, params).fetchall()
     con.close()
     return [dict(r) for r in rows]
+
+
+def set_job_dismissed(db_path: str, user_id: int, job_id: str) -> None:
+    """Mark a job as dismissed (negative example). Dismissed jobs are hidden from all lists."""
+    from datetime import datetime, timezone
+    con = _connect(db_path)
+    con.execute(
+        """
+        INSERT INTO user_job_status (user_id, job_id, dismissed_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id, job_id) DO UPDATE SET dismissed_at = excluded.dismissed_at
+        """,
+        (user_id, job_id, datetime.now(timezone.utc).isoformat()),
+    )
+    con.commit()
+    con.close()
 
 
 def set_job_applied(db_path: str, user_id: int, job_id: str, applied: bool) -> None:

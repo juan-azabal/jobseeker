@@ -11,7 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from api.db.queries import get_jobs, get_job_by_id, set_job_applied
+from api.db.queries import get_jobs, get_job_by_id, set_job_applied, set_job_dismissed
 from api.middleware.auth import get_current_user
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -121,6 +121,15 @@ def apply_job(job_id: str, payload: ApplyPayload, user: dict = Depends(get_curre
         raise HTTPException(status_code=404, detail="Job not found")
     set_job_applied(_db_path(), user["id"], job_id, payload.applied)
     return {"job_id": job_id, "applied": payload.applied}
+
+
+@router.post("/{job_id}/dismiss")
+def dismiss_job(job_id: str, user: dict = Depends(get_current_user)):
+    row = get_job_by_id(_db_path(), job_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    set_job_dismissed(_db_path(), user["id"], job_id)
+    return {"job_id": job_id, "dismissed": True}
 
 
 @router.post("/{job_id}/generate-cv")
