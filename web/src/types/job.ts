@@ -10,6 +10,7 @@ export interface JobSummary {
   first_seen: string;
   url: string;
   applied_at: string | null;
+  geo_restricted: boolean;  // true = remote restriction excludes user's home region
 }
 
 export interface ScoreBreakdown {
@@ -26,9 +27,10 @@ export interface Strength {
 }
 
 export interface Gap {
-  skill: string;
-  severity: string;
-  mitigation: string;
+  gap: string;
+  severity: 'high' | 'medium' | 'low';
+  category?: string;
+  mitigation?: string;
 }
 
 export interface ScoredResult {
@@ -36,15 +38,38 @@ export interface ScoredResult {
   score_breakdown: ScoreBreakdown;
   strengths: Strength[];
   gaps: Gap[];
+  deal_breakers?: string[];
   talking_points?: string[];
   stories_to_prepare?: string[];
+  one_line_verdict?: string;
+}
+
+export interface ParsedJob {
+  seniority?: string;
+  years_experience_min?: number | null;
+  years_experience_max?: number | null;
+  location_type?: string;
+  locations_mentioned?: string[];
+  must_have_skills?: string[];
+  nice_to_have_skills?: string[];
+  technical_stack?: string[];
+  experience_requirements?: string[];
+  domain?: string;
+  responsibilities_summary?: string;
+  team_size_hints?: string | null;
+  salary_mentioned?: string | null;
+  remote_restriction?: string | null;
+  red_flags?: string[];
+  key_phrases?: string[];
 }
 
 export interface JobDetail extends JobSummary {
-  parsed: Record<string, unknown> | null;
+  parsed: ParsedJob | null;
   scored: ScoredResult | null;
   last_seen: string;
   ingested_at: string;
+  applied_at: string | null;
+  dismissed_at: string | null;
 }
 
 export interface JobsResponse {

@@ -14,6 +14,8 @@ interface Profile {
   domains: Record<string, number>;
   skills: string[];
   exclude_companies: string[];
+  salary_min?: number;
+  location_preference?: string;
 }
 
 type Step = 'loading' | 'view' | 'upload' | 'generating' | 'review';
@@ -111,7 +113,7 @@ export default function ProfilePage() {
         </button>
         <h1 className="text-xl font-bold text-white">Review new profile</h1>
         <p className="mt-1 mb-8 text-sm text-zinc-500">Confirm the extracted data before saving.</p>
-        <ProfileEditor profile={newProfile} cvMarkdown={pendingMarkdown} onSaved={handleSaved} />
+        <ProfileEditor profile={newProfile} cvMarkdown={pendingMarkdown} onSaved={handleSaved} isNew />
       </div>
     );
   }

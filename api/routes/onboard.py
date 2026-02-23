@@ -145,6 +145,9 @@ async def get_profile(user: dict = Depends(get_current_user)):
         "domains": target_block.get("domains", {}),
         "skills": raw.get("skills", []),
         "exclude_companies": user_block.get("exclude_companies", []),
+        # UI preferences (may not exist in manually-created YAMLs — use sensible defaults)
+        "salary_min": target_block.get("salary_min", 60000),
+        "location_preference": user_block.get("location_preference", "b"),
     }
 
     cv_markdown = ""
@@ -153,6 +156,62 @@ async def get_profile(user: dict = Depends(get_current_user)):
             cv_markdown = f.read()
 
     return {"profile": profile_data, "cv_markdown": cv_markdown}
+
+
+class UpdateProfileRequest(BaseModel):
+    name: str
+    home_locations: list[str]
+    domains: dict[str, int]
+    skills: list[str]
+    salary_min: int = 60000
+    location_preference: str = "b"
+
+
+@router.patch("/profile")
+async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_current_user)):
+    """Surgically update the safe/UI-editable fields in the profile YAML.
+    Uses ruamel.yaml to preserve comments, story banks, seniority weights, etc."""
+    profile_id = user.get("profile_id")
+    if not profile_id:
+        raise HTTPException(status_code=404, detail="No profile found")
+
+    jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "../jobagent"))
+    yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}.yaml")
+
+    if not os.path.exists(yaml_path):
+        raise HTTPException(status_code=404, detail="Profile file not found")
+
+    from ruamel.yaml import YAML  # noqa: PLC0415
+    from ruamel.yaml.comments import CommentedMap, CommentedSeq  # noqa: PLC0415
+    import io  # noqa: PLC0415
+
+    ry = YAML()
+    ry.preserve_quotes = True
+    with open(yaml_path) as f:
+        raw = ry.load(f)
+
+    # Patch only safe, UI-managed fields
+    raw.setdefault("user", CommentedMap())
+    raw.setdefault("target", CommentedMap())
+
+    raw["user"]["name"] = body.name
+    raw["user"]["home_locations"] = body.home_locations
+    raw["user"]["location_preference"] = body.location_preference
+    raw["target"]["salary_min"] = body.salary_min
+
+    # Replace domains preserving any inline comments already on the node
+    domains_node = CommentedMap(body.domains)
+    raw["target"]["domains"] = domains_node
+
+    # Replace skills as a plain list
+    raw["skills"] = CommentedSeq(body.skills)
+
+    buf = io.StringIO()
+    ry.dump(raw, buf)
+    with open(yaml_path, "w") as f:
+        f.write(buf.getvalue())
+
+    return {"ok": True}
 
 
 @router.post("/upload-cv", dependencies=[Depends(get_current_user)])

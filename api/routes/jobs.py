@@ -11,7 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from api.db.queries import get_jobs, get_job_by_id, set_job_applied, set_job_dismissed
+from api.db.queries import get_jobs, get_job_by_id, get_job_status_by_title, set_job_applied, set_job_dismissed
 from api.middleware.auth import get_current_user
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -47,14 +47,62 @@ def _load_home_locations(profile_id: str | None) -> list[str]:
         return []
 
 
+_NON_EU_RESTRICTIONS = [
+    "us only", "usa only", "united states only", "us-only",
+    "north america", "canada", "latam", "latin america",
+    "apac", "asia", "australia", "new zealand", "mena",
+    "americas",
+]
+
+# If any of these appear in the restriction, Europe IS included — not non-EU restricted
+_EU_INCLUSIVE_TERMS = ["emea", "europe", " eu,", ",eu,", "eu only", "european"]
+
+
+def _is_geo_restricted_remote(job: dict) -> bool:
+    """Return True if job is remote but restricted to a non-European geography.
+
+    Checks the top-level `remote_restriction` field (extracted by get_jobs() via
+    json_extract) first, then falls back to parsing the full `parsed` blob for
+    compatibility with job dicts from get_job_by_id().
+    """
+    # Fast path: get_jobs() extracts this directly via json_extract
+    restriction = (job.get("remote_restriction") or "").lower()
+    if not restriction:
+        # Fallback: full parsed blob (used in detail view / job_by_id)
+        parsed = job.get("parsed")
+        if isinstance(parsed, str):
+            try:
+                parsed = json.loads(parsed)
+            except Exception:
+                return False
+        if isinstance(parsed, dict):
+            restriction = (parsed.get("remote_restriction") or "").lower()
+    if not restriction:
+        return False
+    # If EU/EMEA is explicitly included, the candidate can work from Spain — not restricted
+    if any(term in restriction for term in _EU_INCLUSIVE_TERMS):
+        return False
+    return any(kw in restriction for kw in _NON_EU_RESTRICTIONS)
+
+
+def _compute_reloc(job: dict, home_locations: list[str]) -> bool:
+    """Return True if this job requires relocation for the given user."""
+    loc_type = job.get("location_type") or ""
+    job_loc = (job.get("location") or "").lower()
+    if loc_type == "remote":
+        return _is_geo_restricted_remote(job)
+    return not any(h in job_loc for h in home_locations)
+
+
 def _apply_reloc_penalty(jobs: list[dict], home_locations: list[str]) -> list[dict]:
-    """Subtract 15 pts from jobs that require relocation (not remote, not in home cities)."""
-    if not home_locations:
-        return jobs
+    """Subtract 15 pts from jobs that require relocation:
+    - Not remote AND not in a home city, OR
+    - Remote but geo-restricted away from the user's region.
+    Also stamps geo_restricted=True/False on each job for frontend badge coloring.
+    """
     for job in jobs:
-        loc_type = job.get("location_type") or ""
-        job_loc = (job.get("location") or "").lower()
-        is_reloc = loc_type != "remote" and not any(h in job_loc for h in home_locations)
+        is_reloc = _compute_reloc(job, home_locations) if home_locations else False
+        job["geo_restricted"] = is_reloc
         if is_reloc and job["score"] > 0:
             job["score"] = max(0, job["score"] - 15)
     jobs.sort(key=lambda j: j["score"], reverse=True)
@@ -107,6 +155,13 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Job not found")
     row["parsed"] = json.loads(row["parsed"]) if row.get("parsed") else None
     row["scored"] = json.loads(row["scored"]) if row.get("scored") else None
+    # Aggregate applied/dismissed across all duplicates of this (company, title)
+    status = get_job_status_by_title(_db_path(), user["id"], row["company"], row["title"])
+    row["applied_at"] = status.get("applied_at") if status else None
+    row["dismissed_at"] = status.get("dismissed_at") if status else None
+    # Compute geo_restricted using user's home_locations (same logic as list endpoint)
+    home_locations = _load_home_locations(user.get("profile_id"))
+    row["geo_restricted"] = _compute_reloc(row, home_locations) if home_locations else False
     return row
 
 

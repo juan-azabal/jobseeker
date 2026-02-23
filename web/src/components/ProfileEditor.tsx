@@ -11,39 +11,65 @@ interface Profile {
   domains: Record<string, number>;
   skills: string[];
   exclude_companies: string[];
+  salary_min?: number;
+  location_preference?: string;
 }
 
 interface Props {
   profile: Profile;
   cvMarkdown: string;
   onSaved: () => void;
+  /** If true, we're reviewing a freshly extracted profile (first-time / CV replace).
+   *  The save button calls POST /save-profile instead of PATCH /profile. */
+  isNew?: boolean;
 }
 
-export default function ProfileEditor({ profile, cvMarkdown, onSaved }: Props) {
+export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = false }: Props) {
   const [name, setName] = useState(profile.name);
   const [skills, setSkills] = useState<string[]>(profile.skills);
   const [locations, setLocations] = useState<string[]>(profile.home_locations);
   const [domains, setDomains] = useState<Record<string, number>>(profile.domains);
-  const [salaryMin, setSalaryMin] = useState(60000);
-  const [locationPref, setLocationPref] = useState('b');
+  const [salaryMin, setSalaryMin] = useState(profile.salary_min ?? 60000);
+  const [locationPref, setLocationPref] = useState(profile.location_preference ?? 'b');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newDomain, setNewDomain] = useState('');
   const [newSkill, setNewSkill] = useState('');
+  const [newLocation, setNewLocation] = useState('');
 
-  const handleActivate = async () => {
+  const handleSave = async () => {
     setError(null);
     setSaving(true);
-    const resp = await fetch('/api/onboard/save-profile', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        cv_markdown: cvMarkdown,
-        profile: { ...profile, name, skills, home_locations: locations, domains },
-        salary_min: salaryMin,
-        location_preference: locationPref,
-      }),
-    });
+
+    let resp: Response;
+    if (isNew) {
+      // First-time onboarding: POST to save-profile (creates YAML + links profile)
+      resp = await fetch('/api/onboard/save-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cv_markdown: cvMarkdown,
+          profile: { ...profile, name, skills, home_locations: locations, domains },
+          salary_min: salaryMin,
+          location_preference: locationPref,
+        }),
+      });
+    } else {
+      // Existing user: PATCH — surgically update editable fields, preserve stories/seniority
+      resp = await fetch('/api/onboard/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          home_locations: locations,
+          domains,
+          skills,
+          salary_min: salaryMin,
+          location_preference: locationPref,
+        }),
+      });
+    }
+
     setSaving(false);
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
@@ -70,14 +96,22 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved }: Props) {
   };
 
   const addSkill = () => {
-    const s = newSkill.trim();
+    const s = newSkill.trim().toLowerCase();
     if (!s || skills.includes(s)) return;
     setSkills([...skills, s]);
     setNewSkill('');
   };
 
+  const addLocation = () => {
+    const l = newLocation.trim().toLowerCase();
+    if (!l || locations.includes(l)) return;
+    setLocations([...locations, l]);
+    setNewLocation('');
+  };
+
   return (
     <div className="space-y-6">
+      {/* Name */}
       <div>
         <label className="block text-zinc-300 text-sm font-medium mb-1">Name</label>
         <input
@@ -87,6 +121,7 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved }: Props) {
         />
       </div>
 
+      {/* Domain weights */}
       <div>
         <label className="block text-zinc-300 text-sm font-medium mb-2">Domain weights</label>
         {Object.entries(domains).map(([domain, weight]) => (
@@ -94,13 +129,15 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved }: Props) {
             <span className="text-zinc-400 text-sm w-24 truncate">{domain}</span>
             <input
               type="range"
-              min={0}
+              min={-20}
               max={20}
               value={weight}
               className="flex-1"
               onChange={(e) => setDomains({ ...domains, [domain]: Number(e.target.value) })}
             />
-            <span className="text-zinc-400 text-sm w-6">{weight}</span>
+            <span className={`text-sm w-7 text-right ${weight < 0 ? 'text-red-400' : weight > 0 ? 'text-emerald-400' : 'text-zinc-500'}`}>
+              {weight}
+            </span>
             <button
               onClick={() => removeDomain(domain)}
               className="text-zinc-600 hover:text-red-400 transition-colors text-sm leading-none"
@@ -125,6 +162,7 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved }: Props) {
         </div>
       </div>
 
+      {/* Skills */}
       <div>
         <label className="block text-zinc-300 text-sm font-medium mb-2">Skills</label>
         <div className="flex flex-wrap gap-2">
@@ -155,6 +193,7 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved }: Props) {
         </div>
       </div>
 
+      {/* Home locations */}
       <div>
         <label className="block text-zinc-300 text-sm font-medium mb-2">Home locations</label>
         <div className="flex flex-wrap gap-2">
@@ -168,8 +207,24 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved }: Props) {
             </span>
           ))}
         </div>
+        <div className="mt-3 flex gap-2">
+          <input
+            className="flex-1 rounded bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+            placeholder="Add location…"
+            value={newLocation}
+            onChange={(e) => setNewLocation(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addLocation()}
+          />
+          <button
+            onClick={addLocation}
+            className="rounded bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-600 hover:text-white"
+          >
+            Add
+          </button>
+        </div>
       </div>
 
+      {/* Minimum salary */}
       <div>
         <label className="block text-zinc-300 text-sm font-medium mb-1">
           Minimum salary: {salaryMin.toLocaleString()} EUR
@@ -185,6 +240,7 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved }: Props) {
         />
       </div>
 
+      {/* Location preference */}
       <div>
         <label className="block text-zinc-300 text-sm font-medium mb-2">Location preference</label>
         <select
@@ -203,10 +259,10 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved }: Props) {
 
       <button
         className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium px-6 py-2 rounded-lg"
-        onClick={handleActivate}
+        onClick={handleSave}
         disabled={saving}
       >
-        {saving ? 'Saving…' : 'Activate'}
+        {saving ? 'Saving…' : isNew ? 'Activate' : 'Save changes'}
       </button>
     </div>
   );

@@ -68,6 +68,7 @@ def get_jobs(
             SELECT
                 j.job_id, j.title, j.company, j.location, j.location_type, j.domain,
                 j.score, j.tier, j.first_seen, j.url,
+                json_extract(j.parsed, '$.remote_restriction') AS remote_restriction,
                 ROW_NUMBER() OVER (
                     PARTITION BY j.company, LOWER(TRIM(j.title))
                     ORDER BY j.score DESC
@@ -88,6 +89,7 @@ def get_jobs(
         SELECT
             r.job_id, r.title, r.company, r.location, r.location_type, r.domain,
             r.score, r.tier, r.first_seen, r.url,
+            r.remote_restriction,
             ag.applied_at,
             ag.dismissed_at
         FROM ranked r
@@ -145,6 +147,22 @@ def set_job_applied(db_path: str, user_id: int, job_id: str, applied: bool) -> N
 def get_job_by_id(db_path: str, job_id: str) -> dict | None:
     con = _connect(db_path)
     row = con.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+    con.close()
+    return dict(row) if row else None
+
+
+def get_job_status_by_title(db_path: str, user_id: int, company: str, title: str) -> dict | None:
+    """Return aggregated applied_at / dismissed_at across all duplicates of a (company, title) pair."""
+    con = _connect(db_path)
+    row = con.execute(
+        """
+        SELECT MAX(s.applied_at) AS applied_at, MAX(s.dismissed_at) AS dismissed_at
+        FROM jobs j
+        JOIN user_job_status s ON s.job_id = j.job_id AND s.user_id = ?
+        WHERE j.company = ? AND LOWER(TRIM(j.title)) = LOWER(TRIM(?))
+        """,
+        (user_id, company, title),
+    ).fetchone()
     con.close()
     return dict(row) if row else None
 
