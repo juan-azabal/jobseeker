@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from pydantic import BaseModel
 
 from api.middleware.auth import get_current_user
 
@@ -24,6 +25,22 @@ _load_jobagent()
 def docx_to_markdown(path: str) -> str:
     from onboard import docx_to_markdown as _dtm  # noqa: PLC0415
     return _dtm(path)
+
+
+def _extract_profile_from_cv(cv_text: str) -> dict:
+    from onboard import _extract_profile  # noqa: PLC0415
+    from openai import OpenAI  # noqa: PLC0415
+    return _extract_profile(cv_text, OpenAI())
+
+
+class GenerateProfileRequest(BaseModel):
+    cv_markdown: str
+
+
+@router.post("/generate-profile", dependencies=[Depends(get_current_user)])
+async def generate_profile(body: GenerateProfileRequest):
+    profile = _extract_profile_from_cv(body.cv_markdown)
+    return profile
 
 
 @router.post("/upload-cv", dependencies=[Depends(get_current_user)])
