@@ -4,11 +4,11 @@ This is the **living specification** for CV output quality (Phase 6).
 
 Every formatting requirement is verified end-to-end:
   - Full pipeline passes ATS audit (no violations, no warnings)
-  - Name: 18pt bold #1F4E79
-  - Section headers: 11pt bold #1F4E79
+  - Name: 20pt bold #1F4E79
+  - Section headers: 12pt bold #1F4E79
   - Bullets: List Bullet style only (no unicode characters)
   - Context lines: italic 10pt #555555
-  - Company+date lines: tab stop in XML, run1 bold black, run2 #555555
+  - Company+date lines: tab stop in XML, company run bold, role run normal, date run #555555
   - All-bold paragraphs < 15
   - Zero tables
   - Only 3 non-black colors: #1F4E79, #444444, #555555
@@ -162,15 +162,15 @@ def test_pipeline_stats_formatting_counters(tmp_path):
 
 # ── Formatting spec tests ─────────────────────────────────────────────────────
 
-def test_name_18pt_bold_accent_color(tmp_path):
-    """Name: 18pt, bold, #1F4E79."""
+def test_name_20pt_bold_accent_color(tmp_path):
+    """Name: 20pt, bold, #1F4E79."""
     path, doc = _build(tmp_path)
     name_para = next(
         (p for p in doc.paragraphs
-         if p.runs and p.runs[0].font.size and abs(p.runs[0].font.size.pt - 18.0) < 0.5),
+         if p.runs and p.runs[0].font.size and abs(p.runs[0].font.size.pt - 20.0) < 0.5),
         None,
     )
-    assert name_para is not None, "No 18pt paragraph found (expected: name)"
+    assert name_para is not None, "No 20pt paragraph found (expected: name)"
     assert "Ana Garcia" in name_para.text
     run = name_para.runs[0]
     assert run.font.bold is True, "Name run must be bold"
@@ -181,7 +181,7 @@ def test_name_18pt_bold_accent_color(tmp_path):
 
 
 def test_all_required_section_headers_present(tmp_path):
-    """All 6 required section headers: 11pt bold #1F4E79."""
+    """All 6 required section headers: 12pt bold #1F4E79."""
     REQUIRED = {
         "Summary",
         "Selected Impact",
@@ -198,8 +198,8 @@ def test_all_required_section_headers_present(tmp_path):
         assert para.runs, f"Header '{name}' has no runs"
         run = para.runs[0]
         assert run.font.bold is True, f"Header '{name}' must be bold"
-        assert run.font.size and abs(run.font.size.pt - 11.0) < 0.5, (
-            f"Header '{name}' must be 11pt"
+        assert run.font.size and abs(run.font.size.pt - 12.0) < 0.5, (
+            f"Header '{name}' must be 12pt"
         )
         assert run.font.color.type is not None
         assert run.font.color.rgb == _COLOR_ACCENT, (
@@ -243,8 +243,12 @@ def test_context_lines_italic_10pt_muted(tmp_path):
         )
 
 
-def test_company_date_lines_tab_stop_and_two_runs(tmp_path):
-    """Company+date lines: <w:tabs> in XML, run1 bold black, run2 muted #555555."""
+def test_company_date_lines_tab_stop_bold_company_muted_date(tmp_path):
+    """Company+date lines: <w:tabs> in XML, company run bold, role normal, date muted.
+
+    Structure: run1=company(bold) + run2=" - Role"(normal) + runN=\\tdate(muted #555555).
+    The date is always the last run.
+    """
     path, doc = _build(tmp_path)
     tab_paras = [p for p in doc.paragraphs if "\t" in p.text]
     assert len(tab_paras) >= 2, (
@@ -258,16 +262,18 @@ def test_company_date_lines_tab_stop_and_two_runs(tmp_path):
         assert len(para.runs) >= 2, (
             f"Expected ≥2 runs in company/date line: '{para.text[:60]}'"
         )
-        run1, run2 = para.runs[0], para.runs[1]
-        assert run1.font.bold is True, (
-            f"Company name run1 must be bold: '{para.text[:60]}'"
+        # First run: company name — bold
+        assert para.runs[0].font.bold is True, (
+            f"Company run1 must be bold: '{para.text[:60]}'"
         )
-        assert run2.font.bold is not True, (
-            f"Date run2 must not be bold: '{para.text[:60]}'"
+        # Last run: \tdate — not bold, muted color
+        date_run = para.runs[-1]
+        assert date_run.font.bold is not True, (
+            f"Date run must not be bold: '{para.text[:60]}'"
         )
-        assert run2.font.color.type is not None
-        assert run2.font.color.rgb == _COLOR_MUTED, (
-            f"Date run2 must be #555555: '{para.text[:60]}'"
+        assert date_run.font.color.type is not None
+        assert date_run.font.color.rgb == _COLOR_MUTED, (
+            f"Date run must be #555555: '{para.text[:60]}'"
         )
 
 

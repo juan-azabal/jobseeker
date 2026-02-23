@@ -5,16 +5,18 @@ Document that passes ATS parsers (Workday, Greenhouse, Lever) while
 matching the visual quality of career-helper skill output.
 
 Formatting spec:
-  Name (#)            18pt bold  #1F4E79  after:60
-  Title (line 2)      11pt       #444444  after:80
-  Contact (line 3)     9pt       #555555  after:200
-  Section (##)        11pt bold  #1F4E79  before:240 after:80
-  Bullets (-)         10pt black          after:40   List Bullet style
+  Name (#)            20pt bold  #1F4E79  after:60
+  Title (line 2)      13pt       #444444  after:80
+  Contact (line 3)    10pt       #555555  after:200
+  Section (##)        12pt bold  #1F4E79  before:240 after:80
+  Bullets (-)         11pt black          after:40   List Bullet style
   Context (_..._)     10pt italic #555555 after:60
-  Company+Role+Date   10pt bold/muted     before:160 after:40  tab@9026
-  Core Skills theme   10pt bold run + normal run
-  Project name+URL    10pt bold + 9pt #555555
-  Prose / education   10pt black          after:60/40
+  Company (bold)      11pt bold  black    before:160 after:40  tab@9026
+  Role (normal)       11pt       black    (same line, after company)
+  Date                10pt       #555555  (tab-separated, right-aligned)
+  Core Skills theme   11pt bold run + normal run
+  Project name+URL    11pt bold + 10pt #555555
+  Prose / education   11pt black          after:60/40
 
 ATS constraints:
   - Zero tables anywhere in the document XML
@@ -107,42 +109,42 @@ def _set_spacing(para, before_twips: int = 0, after_twips: int = 0) -> None:
 # ── Element builders ─────────────────────────────────────────────────────────
 
 def _add_name(doc: Document, text: str) -> None:
-    """Name: 18pt bold #1F4E79, after:60."""
+    """Name: 20pt bold #1F4E79, after:60."""
     para = doc.add_paragraph()
     run = para.add_run(_clean_text(text))
-    _set_run(run, 18, bold=True, color=COLOR_ACCENT)
+    _set_run(run, 20, bold=True, color=COLOR_ACCENT)
     _set_spacing(para, after_twips=60)
 
 
 def _add_title_line(doc: Document, text: str) -> None:
-    """Professional title: 11pt #444444, after:80."""
+    """Professional title: 13pt #444444, after:80."""
     para = doc.add_paragraph()
     run = para.add_run(_clean_text(text))
-    _set_run(run, 11, color=COLOR_TITLE)
+    _set_run(run, 13, color=COLOR_TITLE)
     _set_spacing(para, after_twips=80)
 
 
 def _add_contact_line(doc: Document, text: str) -> None:
-    """Contact info: 9pt #555555, after:200."""
+    """Contact info: 10pt #555555, after:200."""
     para = doc.add_paragraph()
     run = para.add_run(_clean_text(text))
-    _set_run(run, 9, color=COLOR_MUTED)
+    _set_run(run, 10, color=COLOR_MUTED)
     _set_spacing(para, after_twips=200)
 
 
 def _add_section_header(doc: Document, text: str) -> None:
-    """Section header (##): 11pt bold #1F4E79, before:240, after:80."""
+    """Section header (##): 12pt bold #1F4E79, before:240, after:80."""
     para = doc.add_paragraph()
     run = para.add_run(_clean_text(text))
-    _set_run(run, 11, bold=True, color=COLOR_ACCENT)
+    _set_run(run, 12, bold=True, color=COLOR_ACCENT)
     _set_spacing(para, before_twips=240, after_twips=80)
 
 
 def _add_bullet(doc: Document, text: str) -> None:
-    """Bullet (- ): 10pt black, List Bullet style, after:40."""
+    """Bullet (- ): 11pt black, List Bullet style, after:40."""
     para = doc.add_paragraph(style="List Bullet")
     run = para.add_run(_clean_text(text))
-    _set_run(run, 10)
+    _set_run(run, 11)
     _set_spacing(para, after_twips=40)
 
 
@@ -155,63 +157,76 @@ def _add_italic_context(doc: Document, text: str) -> None:
 
 
 def _add_company_date_line(doc: Document, company_role: str, date: str) -> None:
-    """Company+Role (bold black) + tab + Date (#555555). Tab stop at 9026 twips.
+    """Company (bold) + Role (normal) + tab + Date (#555555). Tab stop at 9026 twips.
 
-    Two runs: run1 = company/role (10pt bold black), run2 = \\tdate (10pt #555555).
+    Splits "Company - Role" at the first " - ":
+      run1 = company name   (11pt bold black)
+      run2 = " - role title" (11pt normal black)  — only if " - " present
+      run3 = \\tdate         (10pt #555555)
     before:160, after:40.
     """
     para = doc.add_paragraph()
     para.paragraph_format.tab_stops.add_tab_stop(_DATE_TAB_POS, WD_TAB_ALIGNMENT.RIGHT)
     _set_spacing(para, before_twips=160, after_twips=40)
-    run1 = para.add_run(_clean_text(company_role))
-    _set_run(run1, 10, bold=True)
-    run2 = para.add_run("\t" + _clean_text(date))
-    _set_run(run2, 10, color=COLOR_MUTED)
+
+    if " - " in company_role:
+        company_part, role_part = company_role.split(" - ", 1)
+        run_company = para.add_run(_clean_text(company_part.strip()))
+        _set_run(run_company, 11, bold=True)
+        run_role = para.add_run(" - " + _clean_text(role_part.strip()))
+        _set_run(run_role, 11)
+    else:
+        run_company = para.add_run(_clean_text(company_role))
+        _set_run(run_company, 11, bold=True)
+
+    if date:
+        run_date = para.add_run("\t" + _clean_text(date))
+        _set_run(run_date, 10, color=COLOR_MUTED)
 
 
 def _add_core_skills_line(doc: Document, theme: str, prose: str) -> None:
-    """Core Skills: bold theme run + normal prose run. 10pt black, after:80."""
+    """Core Skills: bold theme run + normal prose run. 11pt black, after:80."""
     para = doc.add_paragraph()
     run_theme = para.add_run(_clean_text(theme) + ": ")
-    _set_run(run_theme, 10, bold=True)
+    _set_run(run_theme, 11, bold=True)
     if prose:
         run_prose = para.add_run(_clean_text(prose))
-        _set_run(run_prose, 10)
+        _set_run(run_prose, 11)
     _set_spacing(para, after_twips=80)
 
 
 def _add_project_line(doc: Document, name: str, url: str = "") -> None:
-    """Project: name (10pt bold black) + optional URL (9pt #555555). after:40."""
+    """Project: name (11pt bold black) + optional URL (10pt #555555). after:40."""
     para = doc.add_paragraph()
     run_name = para.add_run(_clean_text(name))
-    _set_run(run_name, 10, bold=True)
+    _set_run(run_name, 11, bold=True)
     if url:
         run_url = para.add_run("  " + url.strip())
-        _set_run(run_url, 9, color=COLOR_MUTED)
+        _set_run(run_url, 10, color=COLOR_MUTED)
     _set_spacing(para, after_twips=40)
 
 
 def _add_project_description(doc: Document, text: str) -> None:
-    """Project description: 10pt black, after:100."""
+    """Project description: 11pt black, after:100."""
     para = doc.add_paragraph()
     run = para.add_run(_clean_text(text))
-    _set_run(run, 10)
+    _set_run(run, 11)
     _set_spacing(para, after_twips=100)
 
 
 def _add_prose(doc: Document, text: str) -> None:
-    """General prose paragraph: 10pt black, after:60."""
+    """General prose paragraph: 11pt black, after:60."""
     para = doc.add_paragraph()
     run = para.add_run(_clean_text(text))
-    _set_run(run, 10)
+    _set_run(run, 11)
     _set_spacing(para, after_twips=60)
 
 
 def _add_education_line(doc: Document, text: str) -> None:
-    """Education / language line: 10pt black, after:40."""
+    """Education / language line: 11pt black, after:40."""
     para = doc.add_paragraph()
     run = para.add_run(_clean_text(text))
-    _set_run(run, 10)
+    _set_run(run, 11)
     _set_spacing(para, after_twips=40)
 
 

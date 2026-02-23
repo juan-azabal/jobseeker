@@ -306,13 +306,13 @@ def test_malformed_markdown_no_heading_raises_value_error():
 
 # ── Phase 6 formatting spec tests ───────────────────────────────────────────
 
-def test_name_paragraph_18pt_bold_accent_color():
-    """Name: 18pt, bold, color #1F4E79."""
+def test_name_paragraph_20pt_bold_accent_color():
+    """Name: 20pt, bold, color #1F4E79."""
     path = _build(SAMPLE_MARKDOWN)
     try:
         doc = Document(str(path))
-        name_para = _find_para_by_size(doc, 18.0)
-        assert name_para is not None, "No 18pt paragraph found (name)"
+        name_para = _find_para_by_size(doc, 20.0)
+        assert name_para is not None, "No 20pt paragraph found (name)"
         assert "Juan Azabal" in name_para.text
         run = name_para.runs[0]
         assert run.font.bold is True, "Name run should be bold"
@@ -324,8 +324,8 @@ def test_name_paragraph_18pt_bold_accent_color():
         path.unlink(missing_ok=True)
 
 
-def test_section_headers_11pt_bold_accent_color():
-    """Section headers (##): 11pt, bold, color #1F4E79."""
+def test_section_headers_12pt_bold_accent_color():
+    """Section headers (##): 12pt, bold, color #1F4E79."""
     SECTION_NAMES = {
         "Summary", "Selected Impact", "Core Skills", "Projects",
         "Work Experience", "Education and Certifications", "Languages",
@@ -339,8 +339,8 @@ def test_section_headers_11pt_bold_accent_color():
             assert para.runs, f"Header '{para.text}' has no runs"
             run = para.runs[0]
             assert run.font.bold is True, f"Header '{para.text}' not bold"
-            assert run.font.size and abs(run.font.size.pt - 11.0) < 0.5, (
-                f"Header '{para.text}' not 11pt (got {run.font.size})"
+            assert run.font.size and abs(run.font.size.pt - 12.0) < 0.5, (
+                f"Header '{para.text}' not 12pt (got {run.font.size})"
             )
             assert run.font.color.type is not None
             assert run.font.color.rgb == _COLOR_ACCENT, (
@@ -350,8 +350,8 @@ def test_section_headers_11pt_bold_accent_color():
         path.unlink(missing_ok=True)
 
 
-def test_title_line_11pt_dark_gray():
-    """Title line: 11pt, color #444444, not bold."""
+def test_title_line_13pt_dark_gray():
+    """Title line: 13pt, color #444444, not bold."""
     path = _build(SAMPLE_MARKDOWN)
     try:
         doc = Document(str(path))
@@ -361,7 +361,7 @@ def test_title_line_11pt_dark_gray():
         title_para = non_empty[1]  # second paragraph
         assert "Senior Product Manager" in title_para.text
         run = title_para.runs[0]
-        assert run.font.size and abs(run.font.size.pt - 11.0) < 0.5, "Title not 11pt"
+        assert run.font.size and abs(run.font.size.pt - 13.0) < 0.5, "Title not 13pt"
         assert run.font.bold is not True, "Title should not be bold"
         assert run.font.color.type is not None
         assert run.font.color.rgb == _COLOR_TITLE, "Title color should be #444444"
@@ -369,8 +369,8 @@ def test_title_line_11pt_dark_gray():
         path.unlink(missing_ok=True)
 
 
-def test_contact_line_9pt_muted_gray():
-    """Contact line: 9pt, color #555555."""
+def test_contact_line_10pt_muted_gray():
+    """Contact line: 10pt, color #555555."""
     path = _build(SAMPLE_MARKDOWN)
     try:
         doc = Document(str(path))
@@ -381,7 +381,7 @@ def test_contact_line_9pt_muted_gray():
         )
         assert contact_para is not None, "Contact paragraph not found"
         run = contact_para.runs[0]
-        assert run.font.size and abs(run.font.size.pt - 9.0) < 0.5, "Contact not 9pt"
+        assert run.font.size and abs(run.font.size.pt - 10.0) < 0.5, "Contact not 10pt"
         assert run.font.color.type is not None
         assert run.font.color.rgb == _COLOR_MUTED, "Contact color should be #555555"
     finally:
@@ -413,8 +413,12 @@ def test_italic_context_lines_present():
         path.unlink(missing_ok=True)
 
 
-def test_company_date_line_tab_stop_and_two_runs():
-    """Company lines: two runs (bold name + muted date), tab stop present in XML."""
+def test_company_date_line_tab_stop_bold_company_muted_date():
+    """Company lines: tab stop in XML, run1 company bold, last run date muted #555555.
+
+    Structure: run1=company(bold) [+ run2=" - Role"(normal)] + runN=\tdate(muted).
+    The date is always the last run; role (if present) is not bold.
+    """
     from docx.oxml.ns import qn
     path = _build(SAMPLE_MARKDOWN)
     try:
@@ -425,24 +429,25 @@ def test_company_date_line_tab_stop_and_two_runs():
             f"Expected at least 2 company/date lines, found {len(tab_paras)}"
         )
         for para in tab_paras:
-            # Has tab stop in XML (w:tabs / w:tab element)
+            # Has tab stop in XML
             pPr = para._p.pPr
-            has_tab_xml = (
-                pPr is not None
-                and pPr.find(qn("w:tabs")) is not None
+            assert pPr is not None and pPr.find(qn("w:tabs")) is not None, (
+                f"No <w:tabs> XML in: {para.text[:60]}"
             )
-            assert has_tab_xml, f"No <w:tabs> XML in: {para.text[:60]}"
-            # Has at least 2 runs
             assert len(para.runs) >= 2, (
                 f"Expected ≥2 runs in company line, found {len(para.runs)}: {para.text[:60]}"
             )
-            run1 = para.runs[0]
-            assert run1.font.bold is True, f"Company run1 not bold: {para.text[:60]}"
-            # run2 contains tab+date
-            run2 = para.runs[1]
-            assert run2.font.bold is not True, f"Date run2 should not be bold: {para.text[:60]}"
-            assert run2.font.color.type is not None
-            assert run2.font.color.rgb == _COLOR_MUTED, (
+            # First run: company name — bold
+            assert para.runs[0].font.bold is True, (
+                f"Company run1 not bold: {para.text[:60]}"
+            )
+            # Last run: \tdate — not bold, muted color
+            date_run = para.runs[-1]
+            assert date_run.font.bold is not True, (
+                f"Date run should not be bold: {para.text[:60]}"
+            )
+            assert date_run.font.color.type is not None
+            assert date_run.font.color.rgb == _COLOR_MUTED, (
                 f"Date color should be #555555: {para.text[:60]}"
             )
     finally:
@@ -450,7 +455,7 @@ def test_company_date_line_tab_stop_and_two_runs():
 
 
 def test_core_skills_theme_first_run_bold():
-    """Core Skills lines: first run (theme name) bold, second run (prose) not bold."""
+    """Core Skills lines: first run (theme name) bold 11pt, second run (prose) not bold 11pt."""
     path = _build(SAMPLE_MARKDOWN)
     try:
         doc = Document(str(path))
@@ -466,18 +471,18 @@ def test_core_skills_theme_first_run_bold():
             f"Expected at least 2 Core Skills theme lines, found {len(theme_paras)}"
         )
         for para in theme_paras:
-            # Both runs should be 10pt
+            # Both runs should be 11pt
             for run in para.runs[:2]:
                 if run.font.size:
-                    assert abs(run.font.size.pt - 10.0) < 0.5, (
-                        f"Core Skills run not 10pt: {para.text[:50]}"
+                    assert abs(run.font.size.pt - 11.0) < 0.5, (
+                        f"Core Skills run not 11pt: {para.text[:50]}"
                     )
     finally:
         path.unlink(missing_ok=True)
 
 
-def test_project_url_run_9pt_muted():
-    """Project line URL run: 9pt, color #555555."""
+def test_project_url_run_10pt_muted():
+    """Project line URL run: 10pt, color #555555."""
     path = _build(SAMPLE_MARKDOWN)
     try:
         doc = Document(str(path))
@@ -491,8 +496,8 @@ def test_project_url_run_9pt_muted():
                         url_run = run2
                         break
         assert url_run is not None, "No project URL run found"
-        assert url_run.font.size and abs(url_run.font.size.pt - 9.0) < 0.5, (
-            f"Project URL run not 9pt: {url_run.text}"
+        assert url_run.font.size and abs(url_run.font.size.pt - 10.0) < 0.5, (
+            f"Project URL run not 10pt: {url_run.text}"
         )
         assert url_run.font.color.type is not None
         assert url_run.font.color.rgb == _COLOR_MUTED, "Project URL color should be #555555"
