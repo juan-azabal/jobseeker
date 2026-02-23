@@ -1,12 +1,17 @@
 import { useState } from 'react';
 import FileUpload from '../components/FileUpload';
+import ProfileEditor from '../components/ProfileEditor';
 
 interface Props {
-  onComplete: (markdown: string) => void;
+  onComplete: () => void;
 }
 
+type Step = 'upload' | 'generating' | 'review';
+
 export default function OnboardPage({ onComplete }: Props) {
+  const [step, setStep] = useState<Step>('upload');
   const [markdown, setMarkdown] = useState<string | null>(null);
+  const [profile, setProfile] = useState<Parameters<typeof ProfileEditor>[0]['profile'] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -34,20 +39,63 @@ export default function OnboardPage({ onComplete }: Props) {
     setMarkdown(data.markdown);
   };
 
+  const handleContinue = async () => {
+    if (!markdown) return;
+    setStep('generating');
+    setError(null);
+
+    const resp = await fetch('/api/onboard/generate-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cv_markdown: markdown }),
+    });
+
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      setError(data.detail || 'Profile generation failed. Please try again.');
+      setStep('upload');
+      return;
+    }
+
+    const profileData = await resp.json();
+    setProfile(profileData);
+    setStep('review');
+  };
+
+  if (step === 'review' && profile && markdown) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-12">
+        <h1 className="text-2xl font-bold text-white mb-2">Review your profile</h1>
+        <p className="text-zinc-400 mb-8">
+          Adjust your preferences before activating your account.
+        </p>
+        <ProfileEditor
+          profile={profile}
+          cvMarkdown={markdown}
+          onSaved={onComplete}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-12">
       <h1 className="text-2xl font-bold text-white mb-2">Set up your profile</h1>
       <p className="text-zinc-400 mb-8">Upload your CV to generate a personalised job-matching profile.</p>
 
-      {!markdown && <FileUpload onFile={handleFile} />}
+      {!markdown && step !== 'generating' && <FileUpload onFile={handleFile} />}
 
       {loading && <p className="text-zinc-400 mt-4 text-center">Extracting CV…</p>}
+
+      {step === 'generating' && (
+        <p className="text-zinc-400 mt-4 text-center">Generating your profile…</p>
+      )}
 
       {error && (
         <p className="mt-4 text-red-400 text-sm">{error}</p>
       )}
 
-      {markdown && (
+      {markdown && step === 'upload' && (
         <div className="mt-6">
           <h2 className="text-white font-semibold mb-2">CV Preview</h2>
           <pre className="bg-zinc-800 rounded-lg p-4 text-zinc-300 text-sm overflow-auto max-h-80 whitespace-pre-wrap">
@@ -55,7 +103,7 @@ export default function OnboardPage({ onComplete }: Props) {
           </pre>
           <button
             className="mt-4 bg-blue-600 hover:bg-blue-500 text-white font-medium px-6 py-2 rounded-lg"
-            onClick={() => onComplete(markdown)}
+            onClick={handleContinue}
           >
             Continue
           </button>

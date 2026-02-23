@@ -1,0 +1,156 @@
+import { useState } from 'react';
+
+interface Profile {
+  name: string;
+  email: string | null;
+  languages: string[];
+  home_locations: string[];
+  current_level: string;
+  track: string;
+  target_level: string;
+  domains: Record<string, number>;
+  skills: string[];
+  exclude_companies: string[];
+}
+
+interface Props {
+  profile: Profile;
+  cvMarkdown: string;
+  onSaved: () => void;
+}
+
+export default function ProfileEditor({ profile, cvMarkdown, onSaved }: Props) {
+  const [name, setName] = useState(profile.name);
+  const [skills, setSkills] = useState<string[]>(profile.skills);
+  const [locations, setLocations] = useState<string[]>(profile.home_locations);
+  const [domains, setDomains] = useState<Record<string, number>>(profile.domains);
+  const [salaryMin, setSalaryMin] = useState(60000);
+  const [locationPref, setLocationPref] = useState('b');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleActivate = async () => {
+    setError(null);
+    setSaving(true);
+    const resp = await fetch('/api/onboard/save-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cv_markdown: cvMarkdown,
+        profile: { ...profile, name, skills, home_locations: locations, domains },
+        salary_min: salaryMin,
+        location_preference: locationPref,
+      }),
+    });
+    setSaving(false);
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      setError(data.detail || 'Save failed. Please try again.');
+      return;
+    }
+    onSaved();
+  };
+
+  const removeSkill = (s: string) => setSkills(skills.filter((x) => x !== s));
+  const removeLocation = (l: string) => setLocations(locations.filter((x) => x !== l));
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <label className="block text-zinc-300 text-sm font-medium mb-1">Name</label>
+        <input
+          className="w-full bg-zinc-800 text-white rounded px-3 py-2 text-sm"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+
+      <div>
+        <label className="block text-zinc-300 text-sm font-medium mb-2">Domain weights</label>
+        {Object.entries(domains).map(([domain, weight]) => (
+          <div key={domain} className="flex items-center gap-3 mb-2">
+            <span className="text-zinc-400 text-sm w-24">{domain}</span>
+            <input
+              type="range"
+              min={0}
+              max={20}
+              value={weight}
+              className="flex-1"
+              onChange={(e) => setDomains({ ...domains, [domain]: Number(e.target.value) })}
+            />
+            <span className="text-zinc-400 text-sm w-6">{weight}</span>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <label className="block text-zinc-300 text-sm font-medium mb-2">Skills</label>
+        <div className="flex flex-wrap gap-2">
+          {skills.map((s) => (
+            <span
+              key={s}
+              className="bg-zinc-700 text-zinc-200 text-xs px-2 py-1 rounded flex items-center gap-1"
+            >
+              {s}
+              <button className="text-zinc-400 hover:text-white" onClick={() => removeSkill(s)}>×</button>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-zinc-300 text-sm font-medium mb-2">Home locations</label>
+        <div className="flex flex-wrap gap-2">
+          {locations.map((l) => (
+            <span
+              key={l}
+              className="bg-zinc-700 text-zinc-200 text-xs px-2 py-1 rounded flex items-center gap-1"
+            >
+              {l}
+              <button className="text-zinc-400 hover:text-white" onClick={() => removeLocation(l)}>×</button>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-zinc-300 text-sm font-medium mb-1">
+          Minimum salary: {salaryMin.toLocaleString()} EUR
+        </label>
+        <input
+          type="range"
+          min={30000}
+          max={300000}
+          step={5000}
+          value={salaryMin}
+          className="w-full"
+          onChange={(e) => setSalaryMin(Number(e.target.value))}
+        />
+      </div>
+
+      <div>
+        <label className="block text-zinc-300 text-sm font-medium mb-2">Location preference</label>
+        <select
+          className="bg-zinc-800 text-white rounded px-3 py-2 text-sm"
+          value={locationPref}
+          onChange={(e) => setLocationPref(e.target.value)}
+        >
+          <option value="a">Remote only</option>
+          <option value="b">Remote + home city</option>
+          <option value="c">Anywhere in country</option>
+          <option value="d">Anywhere in Europe</option>
+        </select>
+      </div>
+
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+
+      <button
+        className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium px-6 py-2 rounded-lg"
+        onClick={handleActivate}
+        disabled={saving}
+      >
+        {saving ? 'Saving…' : 'Activate'}
+      </button>
+    </div>
+  );
+}
