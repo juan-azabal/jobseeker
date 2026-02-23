@@ -8,12 +8,12 @@ Every formatting requirement is verified end-to-end:
   - Section headers: 12pt bold #1F4E79
   - Bullets: List Bullet style only (no unicode characters)
   - Context lines: italic 10pt #555555
-  - Company+date lines: tab stop in XML, company run bold, role run normal, date run #555555
-  - All-bold paragraphs < 15
+  - Company+date lines: tab stop in XML, company run #1F4E79 (not bold), role run normal, date run #555555
+  - All-bold paragraphs < 15 (only name + section headers)
   - Zero tables
   - Only 3 non-black colors: #1F4E79, #444444, #555555
   - No **bold** markers leaking as text
-  - Core Skills: bold theme run + normal prose run
+  - Core Skills: #1F4E79 theme run (not bold) + normal prose run
 """
 import pytest
 from pathlib import Path
@@ -243,10 +243,10 @@ def test_context_lines_italic_10pt_muted(tmp_path):
         )
 
 
-def test_company_date_lines_tab_stop_bold_company_muted_date(tmp_path):
-    """Company+date lines: <w:tabs> in XML, company run bold, role normal, date muted.
+def test_company_date_lines_tab_stop_accent_company_muted_date(tmp_path):
+    """Company+date lines: <w:tabs> in XML, company run #1F4E79 (not bold), role normal, date muted.
 
-    Structure: run1=company(bold) + run2=" - Role"(normal) + runN=\\tdate(muted #555555).
+    Structure: run1=company(#1F4E79, not bold) + run2=" - Role"(normal) + runN=\\tdate(muted #555555).
     The date is always the last run.
     """
     path, doc = _build(tmp_path)
@@ -262,9 +262,16 @@ def test_company_date_lines_tab_stop_bold_company_muted_date(tmp_path):
         assert len(para.runs) >= 2, (
             f"Expected ≥2 runs in company/date line: '{para.text[:60]}'"
         )
-        # First run: company name — bold
-        assert para.runs[0].font.bold is True, (
-            f"Company run1 must be bold: '{para.text[:60]}'"
+        # First run: company name — accent color, NOT bold
+        run_company = para.runs[0]
+        assert run_company.font.bold is not True, (
+            f"Company run1 must not be bold: '{para.text[:60]}'"
+        )
+        assert run_company.font.color.type is not None, (
+            f"Company run1 must have explicit color: '{para.text[:60]}'"
+        )
+        assert run_company.font.color.rgb == _COLOR_ACCENT, (
+            f"Company run1 must be #1F4E79: '{para.text[:60]}'"
         )
         # Last run: \tdate — not bold, muted color
         date_run = para.runs[-1]
@@ -326,18 +333,22 @@ def test_no_bold_markers_leaked_as_text(tmp_path):
     )
 
 
-def test_core_skills_bold_theme_plus_normal_prose(tmp_path):
-    """Core Skills: each line has bold theme run + non-bold prose run, ≥2 lines."""
+def test_core_skills_accent_theme_plus_normal_prose(tmp_path):
+    """Core Skills: each line has #1F4E79 theme run (not bold) + non-bold prose run, ≥2 lines."""
     path, doc = _build(tmp_path)
     skill_paras = [
         p for p in doc.paragraphs
         if len(p.runs) >= 2
-        and p.runs[0].font.bold is True
+        and p.runs[0].font.bold is not True
+        and (
+            p.runs[0].font.color.type is not None
+            and p.runs[0].font.color.rgb == _COLOR_ACCENT
+        )
         and p.runs[1].font.bold is not True
         and ":" in p.runs[0].text
     ]
     assert len(skill_paras) >= 2, (
-        f"Expected ≥2 Core Skills theme lines (bold theme + normal prose), "
+        f"Expected ≥2 Core Skills theme lines (#1F4E79 theme + normal prose), "
         f"got {len(skill_paras)}"
     )
 

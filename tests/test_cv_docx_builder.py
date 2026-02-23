@@ -413,10 +413,10 @@ def test_italic_context_lines_present():
         path.unlink(missing_ok=True)
 
 
-def test_company_date_line_tab_stop_bold_company_muted_date():
-    """Company lines: tab stop in XML, run1 company bold, last run date muted #555555.
+def test_company_date_line_tab_stop_accent_company_muted_date():
+    """Company lines: tab stop in XML, run1 company #1F4E79 (not bold), last run date muted #555555.
 
-    Structure: run1=company(bold) [+ run2=" - Role"(normal)] + runN=\tdate(muted).
+    Structure: run1=company(#1F4E79, not bold) [+ run2=" - Role"(normal)] + runN=\tdate(muted).
     The date is always the last run; role (if present) is not bold.
     """
     from docx.oxml.ns import qn
@@ -437,9 +437,16 @@ def test_company_date_line_tab_stop_bold_company_muted_date():
             assert len(para.runs) >= 2, (
                 f"Expected ≥2 runs in company line, found {len(para.runs)}: {para.text[:60]}"
             )
-            # First run: company name — bold
-            assert para.runs[0].font.bold is True, (
-                f"Company run1 not bold: {para.text[:60]}"
+            # First run: company name — accent color, NOT bold
+            run_company = para.runs[0]
+            assert run_company.font.bold is not True, (
+                f"Company run1 must not be bold: {para.text[:60]}"
+            )
+            assert run_company.font.color.type is not None, (
+                f"Company run1 must have explicit color: {para.text[:60]}"
+            )
+            assert run_company.font.color.rgb == _COLOR_ACCENT, (
+                f"Company run1 color must be #1F4E79: {para.text[:60]}"
             )
             # Last run: \tdate — not bold, muted color
             date_run = para.runs[-1]
@@ -454,21 +461,26 @@ def test_company_date_line_tab_stop_bold_company_muted_date():
         path.unlink(missing_ok=True)
 
 
-def test_core_skills_theme_first_run_bold():
-    """Core Skills lines: first run (theme name) bold 11pt, second run (prose) not bold 11pt."""
+def test_core_skills_theme_first_run_accent_color():
+    """Core Skills lines: first run (theme name) #1F4E79 not bold 11pt, second run (prose) not bold 11pt."""
     path = _build(SAMPLE_MARKDOWN)
     try:
         doc = Document(str(path))
-        # Core Skills themes have bold first run + non-bold second run
+        # Core Skills themes: first run accent color (not bold) + second run normal
         theme_paras = [
             p for p in doc.paragraphs
             if len(p.runs) >= 2
-            and p.runs[0].font.bold is True
+            and p.runs[0].font.bold is not True
+            and (
+                p.runs[0].font.color.type is not None
+                and p.runs[0].font.color.rgb == _COLOR_ACCENT
+            )
             and p.runs[1].font.bold is not True
             and ":" in p.runs[0].text
         ]
         assert len(theme_paras) >= 2, (
-            f"Expected at least 2 Core Skills theme lines, found {len(theme_paras)}"
+            f"Expected at least 2 Core Skills theme lines (accent color + normal prose), "
+            f"found {len(theme_paras)}"
         )
         for para in theme_paras:
             # Both runs should be 11pt
@@ -482,19 +494,27 @@ def test_core_skills_theme_first_run_bold():
 
 
 def test_project_url_run_10pt_muted():
-    """Project line URL run: 10pt, color #555555."""
+    """Project line URL run: 10pt, color #555555. Name run: #1F4E79, not bold."""
     path = _build(SAMPLE_MARKDOWN)
     try:
         doc = Document(str(path))
-        # Find project paragraph: run2 contains github URL
+        # Find project paragraph: run1 has accent color (not bold), run2 contains URL
         url_run = None
         for para in doc.paragraphs:
             if len(para.runs) >= 2:
+                run1 = para.runs[0]
                 run2 = para.runs[1]
                 if "github" in run2.text.lower() or ".com" in run2.text.lower():
-                    if para.runs[0].font.bold is True:
-                        url_run = run2
-                        break
+                    try:
+                        if (
+                            run1.font.bold is not True
+                            and run1.font.color.type is not None
+                            and run1.font.color.rgb == _COLOR_ACCENT
+                        ):
+                            url_run = run2
+                            break
+                    except Exception:
+                        pass
         assert url_run is not None, "No project URL run found"
         assert url_run.font.size and abs(url_run.font.size.pt - 10.0) < 0.5, (
             f"Project URL run not 10pt: {url_run.text}"

@@ -11,11 +11,11 @@ Formatting spec:
   Section (##)        12pt bold  #1F4E79  before:240 after:80
   Bullets (-)         11pt black          after:40   List Bullet style
   Context (_..._)     10pt italic #555555 after:60
-  Company (bold)      11pt bold  black    before:160 after:40  tab@9026
+  Company             11pt #1F4E79        before:160 after:40  tab@9026
   Role (normal)       11pt       black    (same line, after company)
   Date                10pt       #555555  (tab-separated, right-aligned)
-  Core Skills theme   11pt bold run + normal run
-  Project name+URL    11pt bold + 10pt #555555
+  Core Skills theme   11pt #1F4E79 run + 11pt normal run
+  Project name+URL    11pt #1F4E79 + 10pt #555555
   Prose / education   11pt black          after:60/40
 
 ATS constraints:
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 COLOR_ACCENT = RGBColor(0x1F, 0x4E, 0x79)  # dark blue: name, section headers
 COLOR_TITLE  = RGBColor(0x44, 0x44, 0x44)  # dark gray: professional title
 COLOR_MUTED  = RGBColor(0x55, 0x55, 0x55)  # medium gray: contact, dates, URLs, context
-# Black = default (no color attribute): body text, bullets, company names
+# Black = default (no color attribute): body text, bullets
 
 # Tab stop for right-aligned date: A4 content width at 1" margins
 # A4 = 8.27", content = 8.27" - 2×1" = 6.27" ≈ 9026 twips
@@ -157,10 +157,10 @@ def _add_italic_context(doc: Document, text: str) -> None:
 
 
 def _add_company_date_line(doc: Document, company_role: str, date: str) -> None:
-    """Company (bold) + Role (normal) + tab + Date (#555555). Tab stop at 9026 twips.
+    """Company (#1F4E79) + Role (normal) + tab + Date (#555555). Tab stop at 9026 twips.
 
     Splits "Company - Role" at the first " - ":
-      run1 = company name   (11pt bold black)
+      run1 = company name   (11pt #1F4E79, not bold)
       run2 = " - role title" (11pt normal black)  — only if " - " present
       run3 = \\tdate         (10pt #555555)
     before:160, after:40.
@@ -172,12 +172,12 @@ def _add_company_date_line(doc: Document, company_role: str, date: str) -> None:
     if " - " in company_role:
         company_part, role_part = company_role.split(" - ", 1)
         run_company = para.add_run(_clean_text(company_part.strip()))
-        _set_run(run_company, 11, bold=True)
+        _set_run(run_company, 11, color=COLOR_ACCENT)
         run_role = para.add_run(" - " + _clean_text(role_part.strip()))
         _set_run(run_role, 11)
     else:
         run_company = para.add_run(_clean_text(company_role))
-        _set_run(run_company, 11, bold=True)
+        _set_run(run_company, 11, color=COLOR_ACCENT)
 
     if date:
         run_date = para.add_run("\t" + _clean_text(date))
@@ -185,10 +185,10 @@ def _add_company_date_line(doc: Document, company_role: str, date: str) -> None:
 
 
 def _add_core_skills_line(doc: Document, theme: str, prose: str) -> None:
-    """Core Skills: bold theme run + normal prose run. 11pt black, after:80."""
+    """Core Skills: theme run (#1F4E79, not bold) + normal prose run. 11pt, after:80."""
     para = doc.add_paragraph()
     run_theme = para.add_run(_clean_text(theme) + ": ")
-    _set_run(run_theme, 11, bold=True)
+    _set_run(run_theme, 11, color=COLOR_ACCENT)
     if prose:
         run_prose = para.add_run(_clean_text(prose))
         _set_run(run_prose, 11)
@@ -196,10 +196,10 @@ def _add_core_skills_line(doc: Document, theme: str, prose: str) -> None:
 
 
 def _add_project_line(doc: Document, name: str, url: str = "") -> None:
-    """Project: name (11pt bold black) + optional URL (10pt #555555). after:40."""
+    """Project: name (11pt #1F4E79, not bold) + optional URL (10pt #555555). after:40."""
     para = doc.add_paragraph()
     run_name = para.add_run(_clean_text(name))
-    _set_run(run_name, 11, bold=True)
+    _set_run(run_name, 11, color=COLOR_ACCENT)
     if url:
         run_url = para.add_run("  " + url.strip())
         _set_run(run_url, 10, color=COLOR_MUTED)
