@@ -90,12 +90,23 @@ class SaveProfileRequest(BaseModel):
 
 @router.post("/save-profile")
 async def save_profile(body: SaveProfileRequest, request: Request, user: dict = Depends(get_current_user)):
+    jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "../jobagent"))
+    existing_profile_id = user.get("profile_id")
+
+    if existing_profile_id:
+        # User already has a profile — only update cv.md, never overwrite the YAML
+        # (the YAML may contain rich data built manually: story banks, seniority weights, etc.)
+        knowledge_dir = os.path.join(jobagent_dir, "knowledge", existing_profile_id)
+        os.makedirs(knowledge_dir, exist_ok=True)
+        with open(os.path.join(knowledge_dir, "cv.md"), "w") as f:
+            f.write(body.cv_markdown)
+        return {"profile_id": existing_profile_id}
+
+    # First-time setup: generate full YAML from CV data
     profile_id = _generate_profile_id(body.profile.get("name", "user"))
     profile_yaml = _build_profile_yaml(
         body.profile, profile_id, body.salary_min, body.location_preference
     )
-
-    jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "../jobagent"))
     _write_profile_files(jobagent_dir, profile_id, body.cv_markdown, profile_yaml)
 
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
