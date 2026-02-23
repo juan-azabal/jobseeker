@@ -42,19 +42,21 @@ Job search CRM web product. Browse, filter, and manage scored job matches. Daily
 
 ### Completed
 - Phase 0 — Scaffold
+- Phase 1 — MVP: Ingest + browse jobs with period/tier filters
 
 ### Current
-Phase 1 — MVP: Ingest + browse jobs with period/tier filters
+Phase 2 — Auth: Google OAuth
 
 ### Pending
-- Phase 2 — Auth: Google OAuth
 - Phase 3 — Onboarding: Web CV upload + profile creation
 - Phase 4 — Email integration: Dual links (web + original) in digest
 - Phase 5 — Harden: Errors, mobile, security, multi-user isolation
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
-{none yet}
+- react-router v7 uses `react-router` package (not `react-router-dom`)
+- `vitest/config` required in vite.config.ts to fix TypeScript `test` key error
+- Test files excluded from tsconfig.app.json to avoid TS errors on `global`
 
 ### Blockers
 {none}
