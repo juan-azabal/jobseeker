@@ -26,6 +26,11 @@ const TIER_LABEL: Record<string, string> = {
   C: 'Skip',
 };
 
+const CV_ERROR_MESSAGES: Record<string, string> = {
+  no_jd: 'No job description available for this role',
+  llm_error: 'CV generation failed, try again',
+};
+
 function relativeDate(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
   if (diff === 0) return 'today';
@@ -34,25 +39,6 @@ function relativeDate(iso: string): string {
   if (diff < 14) return '1 week ago';
   if (diff < 30) return `${Math.floor(diff / 7)} weeks ago`;
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function buildCVPrompt(job: JobDetail): string {
-  const parsed = job.parsed as Record<string, string> | null;
-  const jd =
-    parsed?.description ||
-    parsed?.full_text ||
-    parsed?.body ||
-    'No job description available';
-  return `Generate CV for this role:
-
-**Title:** ${job.title}
-**Company:** ${job.company}
-**Location:** ${job.location}
-**Score:** ${job.score}
-**URL:** ${job.url}
-
-**Job Description:**
-${jd}`;
 }
 
 interface Props {
@@ -64,7 +50,9 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
   const [job, setJob] = useState<JobDetail | null>(null);
   const [isApplied, setIsApplied] = useState(false);
   const [applyLoading, setApplyLoading] = useState(false);
-  const [cvCopied, setCvCopied] = useState(false);
+  const [cvLoading, setCvLoading] = useState(false);
+  const [cvSuccess, setCvSuccess] = useState(false);
+  const [cvError, setCvError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/jobs/${jobId}`)
@@ -91,12 +79,49 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
     setApplyLoading(false);
   };
 
-  const handleGenerateCV = () => {
-    const prompt = buildCVPrompt(job);
-    navigator.clipboard.writeText(prompt).then(() => {
-      setCvCopied(true);
-      setTimeout(() => setCvCopied(false), 2500);
-    });
+  const handleGenerateCV = async () => {
+    setCvLoading(true);
+    setCvError(null);
+    setCvSuccess(false);
+
+    try {
+      const resp = await fetch(`/api/jobs/${jobId}/generate-cv`, { method: 'POST' });
+
+      if (!resp.ok) {
+        let errorCode = 'generic';
+        try {
+          const body = await resp.json();
+          errorCode = body.error || 'generic';
+        } catch {
+          // ignore JSON parse error
+        }
+        const message = CV_ERROR_MESSAGES[errorCode] ?? 'Something went wrong';
+        setCvError(message);
+        return;
+      }
+
+      // Trigger download via blob URL
+      const blob = await resp.blob();
+      const contentDisp = resp.headers.get('content-disposition') ?? '';
+      const filenameMatch = contentDisp.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      const filename = filenameMatch ? filenameMatch[1].replace(/['"]/g, '') : 'cv.docx';
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setCvSuccess(true);
+      setTimeout(() => setCvSuccess(false), 3000);
+    } catch {
+      setCvError('Something went wrong');
+    } finally {
+      setCvLoading(false);
+    }
   };
 
   return (
@@ -209,55 +234,92 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
           )}
 
           {/* Actions */}
-          <div className="flex flex-wrap items-center gap-3 pt-2">
-            {/* Generate CV */}
-            <button
-              onClick={handleGenerateCV}
-              className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-150 hover:bg-violet-500 hover:shadow-lg hover:shadow-violet-900/40"
-            >
-              {cvCopied ? (
-                <>
-                  <span className="text-violet-200">✓</span>
-                  Prompt copied!
-                </>
-              ) : (
-                <>
-                  <span className="text-sm">📄</span>
-                  Generate CV
-                </>
-              )}
-            </button>
+          <div className="pt-2">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Generate CV */}
+              <button
+                onClick={handleGenerateCV}
+                disabled={cvLoading}
+                className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-150 hover:bg-violet-500 hover:shadow-lg hover:shadow-violet-900/40 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {cvLoading ? (
+                  <>
+                    <svg
+                      className="h-4 w-4 animate-spin text-violet-200"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      />
+                    </svg>
+                    Generating CV...
+                  </>
+                ) : cvSuccess ? (
+                  <>
+                    <span className="text-violet-200">✓</span>
+                    CV downloaded
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm">📄</span>
+                    Generate CV
+                  </>
+                )}
+              </button>
 
-            {/* View posting */}
-            <a
-              href={job.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-5 py-2.5 text-sm font-semibold text-zinc-300 transition-all duration-150 hover:border-zinc-500 hover:text-white"
-            >
-              View posting
-              <span className="text-xs text-zinc-500">↗</span>
-            </a>
+              {/* View posting */}
+              <a
+                href={job.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-5 py-2.5 text-sm font-semibold text-zinc-300 transition-all duration-150 hover:border-zinc-500 hover:text-white"
+              >
+                View posting
+                <span className="text-xs text-zinc-500">↗</span>
+              </a>
 
-            {/* Mark as applied */}
-            <button
-              onClick={handleApplyToggle}
-              disabled={applyLoading}
-              className={`inline-flex items-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-semibold transition-all duration-150
-                ${isApplied
-                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
-                  : 'border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'
-                }`}
-            >
-              {isApplied ? (
-                <>
-                  <span>✓</span>
-                  Applied
-                </>
-              ) : (
-                'Mark as applied'
-              )}
-            </button>
+              {/* Mark as applied */}
+              <button
+                onClick={handleApplyToggle}
+                disabled={applyLoading}
+                className={`inline-flex items-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-semibold transition-all duration-150
+                  ${isApplied
+                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                    : 'border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'
+                  }`}
+              >
+                {isApplied ? (
+                  <>
+                    <span>✓</span>
+                    Applied
+                  </>
+                ) : (
+                  'Mark as applied'
+                )}
+              </button>
+            </div>
+
+            {/* Loading time estimate */}
+            {cvLoading && (
+              <p className="mt-2 text-xs text-zinc-500">This usually takes 15-20 seconds</p>
+            )}
+
+            {/* Error message */}
+            {cvError && !cvLoading && (
+              <p className="mt-2 text-xs text-red-400">{cvError}</p>
+            )}
           </div>
         </div>
       </div>

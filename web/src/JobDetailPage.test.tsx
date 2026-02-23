@@ -68,9 +68,9 @@ test('renders strengths and gaps', async () => {
   expect(screen.getByText(/Rust/)).toBeInTheDocument();
 });
 
-test('renders view original posting link', async () => {
+test('renders view posting link', async () => {
   render(<JobDetailPage jobId="a1" />);
   await waitFor(() => screen.getByText('Senior PM'));
-  const link = screen.getByRole('link', { name: /view original posting/i });
+  const link = screen.getByRole('link', { name: /view posting/i });
   expect(link).toHaveAttribute('href', 'https://ex.com/1');
 });
