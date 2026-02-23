@@ -62,9 +62,28 @@ Job search CRM web product. Browse, filter, and manage scored job matches. Daily
   - LLM output follows strict structured markdown contract, docx_builder parses deterministically
   - Post-processing auto-fixes em dashes, Oxford commas, unicode bullets as last line of defense
   - "Generate CV" button replaces clipboard-copy: POSTs to /api/jobs/{id}/generate-cv, triggers browser download
+- Phase 6 — CV Output Quality
+  - docx_builder rewritten for skill-quality formatting: correct font sizes (18/11/10/9pt), colors
+    (#1F4E79 blue for name+headers, #444444 title, #555555 dates/context), real bullet numPr XML,
+    tab-stop right-aligned dates, italic context lines — matches skill-generated CV spec exactly
+  - Plan-driven architecture: deterministic build_cv_plan() (api/cv/plan.py) extracts jd_context
+    (company_type, location_language_hints, key_tools), score_summary with per-dimension guidance,
+    bullet_allocation (relevance-weighted budget per company, capped at 12), source_facts (title,
+    years_experience, languages, core_skills_themes) from scored data + reference files
+  - Plan-aware prompts: build_cv_prompts(job, cv_md, plan) adds source fidelity rules (never downgrade
+    title/years), bullet allocation instruction, JD-aware tailoring (consultancy sentence, language hints),
+    extended anti-slop blacklist, and chain-of-thought <analysis> block requirement to system prompt
+  - Analysis stripping: generate_cv() auto-strips <analysis>...</analysis> so callers always get clean markdown
+  - Programmatic CV validator: validate_cv(markdown, plan) checks title_downgraded, years_downgraded,
+    slop_detected (errors) and missing_language, missing_theme, bullet_budget_violation,
+    no_consulting_mention, gerund_start (warnings); build_fix_prompt() for one-shot targeted fix call
+  - Full pipeline in endpoint: plan → plan-aware prompts → LLM → validate → fix (if errors) → re-validate
+    → docx → ATS audit. New response headers: X-CV-Validation, X-CV-Fix-Applied, X-ATS-Audit
+  - Content volume controls: 3-page hard cap, 2-page soft cap, max 12 WE bullets total with recency budget
+  - Company names / Core Skills themes / project names use COLOR_ACCENT (#1F4E79) instead of bold
 
 ### Current
-Phase F — Ship
+Phase 6 — Completed
 
 ### Pending
 - Phase F — Ship: Dockerfile, README, deploy
@@ -82,7 +101,10 @@ Phase F — Ship
 - PyYAML available in venv via jobagent dependency — not in requirements.txt but importable as `import yaml`
 - YAML profile (jobagent format) is nested: `user.{name,email,home_locations}`, `target.{domains,seniority}`, top-level `skills`. ProfileEditor expects flat format — normalize in `GET /api/onboard/profile`
 - Dev session: insert token `dev-jsk-juan` in sessions table; inject cookie via `document.cookie = "jsk=dev-jsk-juan; path=/"`
-- CV generation: POST /api/jobs/{id}/generate-cv → LLM (anthropic/openai) → python-docx .docx → FileResponse. ATS audit in X-ATS-Audit header.
+- CV generation: POST /api/jobs/{id}/generate-cv → plan (deterministic) → LLM (anthropic/openai) → validate → fix (if errors) → python-docx .docx → FileResponse. Headers: X-ATS-Audit, X-CV-Validation, X-CV-Fix-Applied.
+- Plan builder (api/cv/plan.py): company_type heuristic from consultancy/in_house keyword signals; location→language map (Paris→French, Berlin→German etc); known-tools filter for key_tools; dimension score ≥16 "high", ≥10 "medium", <10 "low"; earliest PM-role year → years_experience bucket; bullet budget capped at 12 total.
+- Validator slop blacklist: "strong track record", "proven ability", "passionate about", "results-driven", "data-driven leader", "leveraging", "utilizing" + more. Gerund-start bullet detection with regex.
+- strip_analysis() in llm.py: auto-strips <analysis>...</analysis> from LLM output so prompt.py and endpoint never see chain-of-thought content.
 - `save_profile` guard: if `user.profile_id` exists → only write `cv.md`, never regenerate YAML. First-time onboarding (no profile_id) still does full YAML generation.
 - `juan.yaml` was accidentally overwritten by onboarding flow; restored via `git checkout be89638 -- config/profiles/juan.yaml` from jobagent repo
 - Hamburger menu (`HamburgerMenu` component in `App.tsx`) replaces inline nav links; dropdown closes on outside click via `mousedown` listener + `useRef`
