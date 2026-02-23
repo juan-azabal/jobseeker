@@ -4,6 +4,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from api.db.init import init_db
 from api.routes.jobs import router as jobs_router
 from api.routes.auth import router as auth_router
+from api.routes.onboard import router as onboard_router
 
 app = FastAPI(title="JobSeeker")
 
@@ -21,6 +22,7 @@ def on_startup():
 
 app.include_router(auth_router)
 app.include_router(jobs_router)
+app.include_router(onboard_router)
 
 
 @app.get("/api/health")
