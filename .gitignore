@@ -40,3 +40,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# CV reference files (contain personal data — never commit)
+api/cv/references/*.md
+!api/cv/references/README.md
