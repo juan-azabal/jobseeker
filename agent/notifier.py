@@ -56,7 +56,7 @@ def _is_reloc(job, home_locations=None) -> bool:
     job_loc = (job.get("location") or "").lower()
     if loc_type == "remote":
         return False
-    _home = [loc.lower() for loc in (home_locations or ["barcelona", "madrid", "spain", "españa"])]
+    _home = [loc.lower() for loc in (home_locations or [])]
     if any(c in job_loc for c in _home):
         return False
     return True

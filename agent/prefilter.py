@@ -160,8 +160,8 @@ def prefilter_jobs(jobs, config_path="config/preferences.yaml", applied_path="co
     accept_locations = [loc.lower() for loc in pf.get("location", {}).get("accept_onsite_cities", [])]
 
     # home_locations: user's base locations — used to rescue jobs that appear US-only
-    # but actually include the user's home city/country. Falls back to a sane default.
-    _home_locs = [loc.lower() for loc in (home_locations or ["spain", "europe", "eu", "emea"])]
+    # but actually include the user's home city/country.
+    _home_locs = [loc.lower() for loc in (home_locations or [])]
 
     passed = []
     rejected = []

@@ -83,7 +83,7 @@ _PROFILE_SKILLS = None   # populated by _load_heuristic_config()
 _DOMAIN_SCORES = None
 _SENIORITY_SCORES = None
 _SALARY_THRESHOLD = 130000
-_HOME_LOCATIONS = ["barcelona", "madrid", "spain", "españa"]
+_HOME_LOCATIONS = []
 
 
 def _load_heuristic_config(profile: dict):
