@@ -40,16 +40,25 @@ jobs:
             echo "=== Running JobAgent for profile: $TARGET_PROFILE ==="
             python main.py --notify --profile "$TARGET_PROFILE"
           else
+            # Sub-configs (e.g. juanAza-preferences.yaml) contain a hyphen — skip them.
+            overall_exit=0
             for profile_file in config/profiles/*.yaml; do
               profile_id=$(basename "$profile_file" .yaml)
+              case "$profile_id" in *-*) continue ;; esac  # skip sub-configs
               active=$(python scripts/check_active.py "$profile_file")
               if [ "$active" = "false" ]; then
                 echo "=== Skipping inactive profile: $profile_id ==="
                 continue
               fi
               echo "=== Running JobAgent for profile: $profile_id ==="
-              python main.py --notify --profile "$profile_id"
+              if python main.py --notify --profile "$profile_id"; then
+                echo "=== Done: $profile_id ==="
+              else
+                echo "=== FAILED: $profile_id (exit $?) — continuing with remaining profiles ===" >&2
+                overall_exit=1
+              fi
             done
+            exit $overall_exit
           fi
 
       - name: Sync results to Railway

@@ -171,19 +171,22 @@ _HOME_TO_COUNTRY: dict[str, str] = {
 
 # Seniority level → experience-year phrases to exclude from job titles.
 # Levels below the target are treated as junior relative to the user's target.
+# Note: "APM" is intentionally excluded — it matches "APM (Application Performance Monitoring)"
+# in tech job descriptions, causing false positives. "associate product manager" already covers
+# the intended exclusion in titles.
 _SENIORITY_DEALBREAKERS: dict[str, list[str]] = {
     "junior":    [],
     "mid":       ["intern", "internship"],
     "senior":    ["junior", "intern", "internship", "entry level", "entry-level",
-                  "associate product manager", "APM", "0-2 years", "1-3 years"],
+                  "associate product manager", "0-2 years", "1-3 years"],
     "staff":     ["junior", "intern", "internship", "entry level", "entry-level",
-                  "associate product manager", "APM", "0-2 years", "1-3 years", "2-4 years"],
+                  "associate product manager", "0-2 years", "1-3 years", "2-4 years"],
     "principal": ["junior", "intern", "internship", "entry level", "entry-level",
-                  "associate product manager", "APM", "0-2 years", "1-3 years", "2-4 years"],
+                  "associate product manager", "0-2 years", "1-3 years", "2-4 years"],
     "director":  ["junior", "intern", "internship", "entry level", "entry-level",
-                  "associate product manager", "APM", "0-2 years", "1-3 years", "2-4 years"],
+                  "associate product manager", "0-2 years", "1-3 years", "2-4 years"],
     "vp":        ["junior", "intern", "internship", "entry level", "entry-level",
-                  "associate product manager", "APM", "0-2 years", "1-3 years", "2-4 years"],
+                  "associate product manager", "0-2 years", "1-3 years", "2-4 years"],
 }
 
 # IC track title keywords (no director/VP — those are management-track roles)
@@ -376,9 +379,11 @@ def _generate_preferences_yaml(profile: dict) -> str:
             "deal_breakers": deal_breakers,
             "title_must_contain_one_of": title_keywords,
             "title_exclude": [
+                # Note: "growth" intentionally excluded — "Product Manager, Growth" is a
+                # legitimate PM role. Non-PM growth roles fail title_must_contain_one_of.
                 "business development", "crm manager", "marketing manager",
                 "project manager", "program manager", "sales", "account manager",
-                "customer success", "deposit product", "lending", "insurance", "growth",
+                "customer success", "deposit product", "lending", "insurance",
             ],
             "exclude_companies": [
                 "Gartner", "Capterra", "GetApp", "Software Advice", "G2",
@@ -483,6 +488,7 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
     try:
         profile_data = yaml.safe_load(profile_yaml)
         profile_data["searches"] = searches_rel_path
+        profile_data["preferences"] = f"config/profiles/{profile_id}-preferences.yaml"
         # Store user-defined seniority_weights (prefer what the user set in ProfileEditor)
         sw = body.profile.get("seniority_weights") or _derive_seniority_weights(body.profile)
         if sw:
@@ -492,7 +498,7 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
         logger.info("Generated per-user searches for %s (%d searches)",
                     profile_id, len(yaml.safe_load(searches_yaml).get("searches", [])))
     except Exception:
-        logger.exception("Failed to patch searches path for %s — using global default", profile_id)
+        logger.exception("Failed to patch searches+preferences paths for %s — using global defaults", profile_id)
         searches_yaml = ""
         preferences_yaml = ""
 

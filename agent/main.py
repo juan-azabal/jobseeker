@@ -21,7 +21,7 @@ from wttj_scraper import run_wttj_scraper
 from prefilter import prefilter_jobs
 from parser import parse_all
 from jobcache import load_cache, save_cache, split_by_cache, update_cache, cache_stats
-from user_config import load_profile, list_profiles, is_profile_active
+from user_config import load_profile, list_profiles, is_profile_active, resolve_profile_paths
 
 
 SEEN_IDS_PATH = "config/seen_ids/juan.txt"  # fallback only; main() always passes profile-derived path
@@ -558,16 +558,13 @@ def main():
 
     _load_heuristic_config(profile)
 
-    # Resolve profile-specific paths
-    seen_ids_path    = profile.get("seen_ids", f"config/seen_ids/{profile_id}.txt")
-    _per_user_prefs = f"config/profiles/{profile_id}-preferences.yaml"
-    preferences_path = profile.get(
-        "preferences",
-        _per_user_prefs if os.path.exists(_per_user_prefs) else "config/preferences.yaml",
-    )
-    searches_path    = profile.get("searches", "config/searches.yaml")
-    watchlist_path   = profile.get("watchlist", "config/watchlist.yaml")
-    applied_path     = profile.get("applied", f"config/profiles/{profile_id}-applied.yaml")
+    # Resolve profile-specific paths — single source of truth in resolve_profile_paths()
+    paths = resolve_profile_paths(profile_id, profile)
+    seen_ids_path    = paths["seen_ids"]
+    preferences_path = paths["preferences"]
+    searches_path    = paths["searches"]
+    watchlist_path   = paths["watchlist"]
+    applied_path     = paths["applied"]
 
     start_time = time.time()
 
