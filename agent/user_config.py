@@ -2,11 +2,16 @@
 Profile loader for multi-user support.
 
 Each user has a profile YAML at config/profiles/<id>.yaml.
+Sub-configs (searches, preferences, applied) live alongside as
+config/profiles/<id>-<type>.yaml — they are NOT treated as profiles.
+
 Use load_profile(id) to get the profile dict. Results are cached.
+Use resolve_profile_paths(id, raw) to get all derived file paths in one place.
 
 Usage:
-    from user_config import load_profile, list_profiles
-    profile = load_profile("juan")
+    from user_config import load_profile, list_profiles, resolve_profile_paths
+    profile = load_profile("juanAza")
+    paths = resolve_profile_paths("juanAza", profile)
 """
 
 import os
@@ -30,17 +35,42 @@ def load_profile(profile_id: str, profiles_dir: str = PROFILES_DIR) -> dict:
 def list_profiles(profiles_dir: str = PROFILES_DIR, active_only: bool = False) -> list:
     """Return sorted list of profile IDs (yaml filenames without extension).
 
+    Only returns main profile files — sub-configs like '<id>-preferences.yaml',
+    '<id>-searches.yaml', '<id>-applied.yaml' are excluded (they contain a hyphen).
+
     active_only=True skips profiles where user.active is explicitly set to false.
     """
     if not os.path.isdir(profiles_dir):
         return []
     ids = sorted(
         f[:-5] for f in os.listdir(profiles_dir)
-        if f.endswith(".yaml") and not f.startswith("_")
+        if f.endswith(".yaml") and not f.startswith("_") and "-" not in f[:-5]
     )
     if not active_only:
         return ids
     return [pid for pid in ids if _is_active(pid, profiles_dir)]
+
+
+def resolve_profile_paths(profile_id: str, raw: dict) -> dict:
+    """Resolve all per-profile resource paths from the loaded YAML.
+
+    Explicit keys in the YAML always take precedence; sensible per-user
+    defaults are used otherwise. This is the single source of truth for
+    path derivation — callers should not build paths themselves.
+
+    Returns:
+        dict with keys: preferences, searches, watchlist, applied, seen_ids
+    """
+    per_user_prefs = f"config/profiles/{profile_id}-preferences.yaml"
+    return {
+        "preferences": raw.get("preferences") or (
+            per_user_prefs if os.path.exists(per_user_prefs) else "config/preferences.yaml"
+        ),
+        "searches":  raw.get("searches")  or "config/searches.yaml",
+        "watchlist": raw.get("watchlist") or "config/watchlist.yaml",
+        "applied":   raw.get("applied")   or f"config/profiles/{profile_id}-applied.yaml",
+        "seen_ids":  raw.get("seen_ids")  or f"config/seen_ids/{profile_id}.txt",
+    }
 
 
 def _is_active(profile_id: str, profiles_dir: str = PROFILES_DIR) -> bool:

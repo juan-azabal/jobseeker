@@ -10,12 +10,14 @@ import yaml
 APPLIED_COMPANY_STALE_DAYS = 90  # warn after ~3 months
 
 
-def load_preferences(path="config/preferences.yaml"):
+def load_preferences(path: str):
+    """Load prefilter preferences from the given path. Path is required — use
+    resolve_profile_paths() in user_config.py to get the correct per-user path."""
     with open(path, "r") as f:
         return yaml.safe_load(f)
 
 
-def load_applied(path="config/applied.yaml"):
+def load_applied(path: str):
     """Load applied/not-interested config. Returns empty defaults if file missing.
 
     applied.companies entries: {name: str, date: YYYY-MM-DD}
