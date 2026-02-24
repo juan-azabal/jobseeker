@@ -5,10 +5,13 @@ without RAG scores — no LLM calls, instant, free.
 """
 
 import json
+import logging
 import os
 from pathlib import Path
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 # Domain override keywords (mirrors agent/main.py _DOMAIN_KEYWORDS)
 _DOMAIN_KEYWORDS = {
@@ -54,7 +57,17 @@ def load_profile_data(profile_id: str | None) -> dict | None:
 
     try:
         raw = yaml.safe_load(profile_path.read_text())
-    except Exception:
+    except FileNotFoundError:
+        logger.warning(
+            "Profile YAML not found for profile_id=%r at %s — heuristic scoring disabled for this user",
+            profile_id, profile_path,
+        )
+        return None
+    except Exception as exc:
+        logger.error(
+            "Failed to load profile YAML for profile_id=%r at %s: %s",
+            profile_id, profile_path, exc,
+        )
         return None
 
     user_block = raw.get("user", {})
@@ -69,7 +82,8 @@ def load_profile_data(profile_id: str | None) -> dict | None:
     try:
         from geo import derive_home_regions
         home_regions = derive_home_regions(home_locations)
-    except Exception:
+    except Exception as exc:
+        logger.warning("derive_home_regions failed for profile_id=%r: %s", profile_id, exc)
         home_regions = []
 
     return {

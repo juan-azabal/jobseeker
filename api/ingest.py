@@ -1,10 +1,13 @@
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 
 from api.db.queries import upsert_job, get_job_by_id, upsert_user_job_score, get_user_id_by_profile_id, cleanup_old_jobs
 from api.scoring import compute_tier
+
+logger = logging.getLogger(__name__)
 
 
 def _to_date(date_str: str | None) -> str:
@@ -33,11 +36,20 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None 
     user_id = None
     if profile_id:
         user_id = get_user_id_by_profile_id(db_path, profile_id)
+        if user_id is None:
+            logger.warning(
+                "profile_id=%r not found in users table — RAG scores will NOT be stored "
+                "(db=%s). User must log in at least once before scores can be saved.",
+                profile_id, db_path,
+            )
+        else:
+            logger.info("Resolved profile_id=%r → user_id=%d", profile_id, user_id)
 
     for raw in raw_jobs:
         job_id = raw.get("id") or raw.get("job_id")
         if not job_id:
             skipped += 1
+            logger.debug("Skipped job with no id — keys present: %s", list(raw.keys()))
             continue
 
         parsed = raw.get("parsed") or {}
