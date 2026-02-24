@@ -60,10 +60,11 @@ knowledge:
   - cv.md
   collection_name: juan_profile
 stories: {}
-preferences: config/preferences.yaml
+preferences: config/profiles/juan-preferences.yaml
 searches: config/profiles/juan-searches.yaml
-watchlist: config/watchlist.yaml
+watchlist: config/profiles/juan-watchlist.yaml
 seen_ids: config/seen_ids/juan.txt
+applied: config/profiles/juan-applied.yaml
 exclude_companies:
 - Gartner Digital Markets
 - Softonic

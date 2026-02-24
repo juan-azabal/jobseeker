@@ -52,10 +52,11 @@ knowledge:
   - cv.md
   collection_name: noura_profile
 stories: {}
-preferences: config/preferences.yaml
+preferences: config/profiles/noura-preferences.yaml
 searches: config/profiles/noura-searches.yaml
 watchlist: config/watchlist.yaml
 seen_ids: config/seen_ids/noura.txt
+applied: config/profiles/noura-applied.yaml
 exclude_companies:
 - Trioteca
 - Planteka
