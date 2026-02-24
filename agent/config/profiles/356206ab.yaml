@@ -1,0 +1,36 @@
+user:
+  id: 356206ab
+  name: Alice Martin
+  email: alice@example.com
+  active: true
+  languages:
+  - en
+  - fr
+  home_locations:
+  - paris
+  - france
+  location_preference: b
+target:
+  level: principal
+  track: ic
+  domains:
+    data: 15
+    ml: 10
+scoring:
+  rag_threshold: 25
+  salary_min: 80000
+skills:
+- python
+- sql
+knowledge:
+  dir: knowledge/356206ab
+  profile_files:
+  - cv.md
+  collection_name: 356206ab_profile
+stories: {}
+preferences: config/preferences.yaml
+searches: config/profiles/356206ab-searches.yaml
+watchlist: config/watchlist.yaml
+seen_ids: config/seen_ids/356206ab.txt
+exclude_companies:
+- OldCorp
