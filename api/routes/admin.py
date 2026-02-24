@@ -54,11 +54,14 @@ def env_check(admin: dict = Depends(get_current_admin)):
         "SECRET_KEY",
         "GOOGLE_CLIENT_ID",
     ]
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
     return {
         "present": {k: bool(os.environ.get(k, "")) for k in vars_to_check},
         "gh_token_length": len(os.environ.get("GH_ACTIONS_TOKEN", "")),
-        "gh_repo_value": os.environ.get("GH_REPO", "(not set)"),  # safe to expose
-        "gh_ref_value": os.environ.get("GH_REF", "(not set)"),    # safe to expose
+        "gh_repo_value": os.environ.get("GH_REPO", "(not set)"),   # safe to expose
+        "gh_ref_value": os.environ.get("GH_REF", "(not set)"),     # safe to expose
+        "db_path_value": db_path,                                   # safe to expose
+        "db_file_exists": os.path.exists(db_path),
     }
 
 
