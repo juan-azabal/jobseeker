@@ -400,10 +400,13 @@ def heuristic_score(profile: dict, parsed: dict, job: dict, is_reloc: bool) -> i
     # ── Language bonus (0-10) ───────────────────────────────────────────────
     languages = profile.get("languages", [])
     if languages:
+        exp_req = parsed.get("experience_requirements") or ""
+        if isinstance(exp_req, list):
+            exp_req = " ".join(exp_req)
         lang_text = " ".join([
-            parsed.get("experience_requirements", ""),
-            parsed.get("responsibilities_summary", ""),
-            job.get("title", ""),
+            exp_req,
+            parsed.get("responsibilities_summary") or "",
+            job.get("title") or "",
             (job.get("description") or "")[:1000],
         ]).lower()
         lang_bonus = 0
