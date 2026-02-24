@@ -20,12 +20,9 @@ target:
     data: 15
     adtech: 12
     saas: 10
-    martech: 10
-    ia: 10
-    llm: 10
 scoring:
   rag_threshold: 25
-  salary_min: 70000
+  salary_min: 60000
 skills:
 - snowplow
 - kafka
@@ -35,12 +32,11 @@ skills:
 - dbt
 - data-governance
 - gdpr
-- observability
 - stakeholder-management
 - a/b-testing
-- personalization
-- analytics
 - programmatic-advertising
+- data-modeling
+- observability
 knowledge:
   dir: knowledge/juan
   profile_files:
