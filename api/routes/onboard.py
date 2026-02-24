@@ -107,12 +107,13 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
         # User already has a profile — only update cv.md, never overwrite the YAML
         # (the YAML may contain rich data built manually: story banks, seniority weights, etc.)
         db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
-        save_user_cv_md(db_path, user["id"], body.cv_markdown)
-        # Also write to disk for the current process lifetime
-        knowledge_dir = os.path.join(jobagent_dir, "knowledge", existing_profile_id)
-        os.makedirs(knowledge_dir, exist_ok=True)
-        with open(os.path.join(knowledge_dir, "cv.md"), "w") as f:
-            f.write(body.cv_markdown)
+        if body.cv_markdown:  # Guard: never overwrite existing cv_md with empty string
+            save_user_cv_md(db_path, user["id"], body.cv_markdown)
+            # Also write to disk for the current process lifetime
+            knowledge_dir = os.path.join(jobagent_dir, "knowledge", existing_profile_id)
+            os.makedirs(knowledge_dir, exist_ok=True)
+            with open(os.path.join(knowledge_dir, "cv.md"), "w") as f:
+                f.write(body.cv_markdown)
         return {"profile_id": existing_profile_id}
 
     # First-time setup: generate full YAML from CV data
@@ -242,6 +243,9 @@ async def get_profile(user: dict = Depends(get_current_user)):
     if not cv_markdown and os.path.exists(cv_path):
         with open(cv_path) as f:
             cv_markdown = f.read()
+        # Opportunistic: persist to DB now so the next redeploy won't lose it
+        if cv_markdown:
+            save_user_cv_md(db_path, user["id"], cv_markdown)
 
     return {"profile": profile_data, "cv_markdown": cv_markdown}
 
