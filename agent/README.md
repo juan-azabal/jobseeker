@@ -56,6 +56,10 @@ Jobs scoring ≥50 land in **Tier A** (apply), 30–49 in **Tier B** (review), <
 
 A post-parse heuristic gate ([ADR-006](docs/decisions/006-post-parse-heuristic-gate.md)) skips expensive LLM scoring for jobs the heuristic already identifies as poor fits. They still appear in your digest — they're just not scored with the full rubric.
 
+### Relocation detection
+
+Remote jobs pinned to specific countries ("Remote from Portugal", "EU only", "EMEA") are automatically detected. Region membership (EU, EEA, Schengen, EMEA, APAC, Americas) is auto-derived from the user's `home_locations` via [country-converter](https://github.com/konstantinstadler/country_converter) — no manual region config needed. A Spain-based user sees "EU only" as accessible; a US-based user sees it as relocation. Salary normalization uses ECB reference rates via CurrencyConverter ([ADR-007](docs/decisions/007-library-backed-geo-currency-lang.md)).
+
 ## Gap tracking
 
 Every scored job's strengths and gaps are persisted to `data/gap_history/`. Over time this reveals:
@@ -101,6 +105,7 @@ Every significant trade-off is documented as an ADR in [`docs/decisions/`](docs/
 | [004](docs/decisions/004-email-digest-over-webapp.md) | Email digest over web app | 90% of value at 10% of effort. Push beats pull for job search consistency |
 | [005](docs/decisions/005-monochrome-palette.md) | Monochrome zinc + orange accent | Accessibility (deuteranopia-safe), graceful email client degradation |
 | [006](docs/decisions/006-post-parse-heuristic-gate.md) | Post-parse heuristic gate | Cost control: skip LLM scoring for obvious non-fits. Jobs still visible in digest |
+| [007](docs/decisions/007-library-backed-geo-currency-lang.md) | Library-backed geo, currency, and language | Replace hardcoded maps with country-converter, CurrencyConverter (ECB), babel, pytz |
 
 ## Configuration
 
@@ -141,6 +146,7 @@ Requires repo secrets: `OPENAI_API_KEY`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, 
 ├── scorer.py            # LLM scoring (gpt-4o, full CV context)
 ├── gap_tracker.py       # Persists strengths/gaps to JSONL
 ├── notifier.py          # Email digest via Gmail SMTP
+├── geo.py               # Geographic utilities (country-converter, pytz, babel)
 ├── user_config.py       # Profile loading, seniority weight computation
 ├── config/              # YAML configuration (profiles, searches, preferences)
 ├── knowledge/           # Per-user CV/knowledge base for scoring
@@ -158,6 +164,8 @@ Requires repo secrets: `OPENAI_API_KEY`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, 
 - Python 3.12
 - OpenAI API (gpt-4o-mini for parsing, gpt-4o for scoring)
 - python-jobspy + Greenhouse/Lever/Ashby APIs + WTTJ Algolia for job sourcing
+- country-converter + babel + pytz for geographic region detection, language mapping, and timezone classification
+- CurrencyConverter (ECB reference rates) for salary normalization to EUR
 - Gmail SMTP for email delivery
 - Jinja2 for email templates
 - GitHub Actions for daily scheduling
@@ -178,6 +186,7 @@ No database. No web framework. Intentionally simple — see the ADRs for why.
 | Gap persistence | ✅ Complete |
 | DX layer (ADRs, patterns, schemas, prompts) | ✅ Complete |
 | Onboarding from CV (onboard.py) | ✅ Complete |
+| Multi-user scoring + geo/currency/lang libs | ✅ Complete |
 | Gap analysis + recommendations | 🔜 Planned |
 | CV tailoring per application | 📋 Future |
 

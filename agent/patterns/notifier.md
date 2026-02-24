@@ -15,7 +15,7 @@ send_digest(
 
 ## Job Flattening
 
-Raw pipeline job dicts are never passed directly to the template. `_flatten_job(job, home_locations=None) -> dict` at `notifier.py:73` converts them to the flat template schema:
+Raw pipeline job dicts are never passed directly to the template. `_flatten_job(job, home_locations=None, home_regions=None) -> dict` converts them to the flat template schema:
 
 ```python
 {
@@ -23,7 +23,7 @@ Raw pipeline job dicts are never passed directly to the template. `_flatten_job(
     "company":        str,
     "location":       str,       # raw location string, may be empty
     "location_type":  str,       # "remote" | "hybrid" | "onsite" | "unknown"
-    "requires_reloc": bool,      # True if role is not remote and not in home_locations
+    "requires_reloc": bool,      # True if role requires relocation (geo-restricted remote or non-home onsite/hybrid)
     "salary_display": str,       # "~€120K" or "" if unknown
     "score":          int,       # _display_score (RAG if available, else heuristic)
     "strength":       str,       # first RAG strength claim, or first must_have_skill
@@ -33,6 +33,13 @@ Raw pipeline job dicts are never passed directly to the template. `_flatten_job(
 ```
 
 **Template variables only come from `_flatten_job()` output — never from raw pipeline fields.**
+
+## Relocation Detection
+
+`_is_reloc(job, home_locations, home_regions)` determines if a job requires relocation:
+- **Remote jobs**: delegates to `main._is_remote_requiring_reloc()` which checks title/location/restriction against auto-derived region terms (country-converter) using word-boundary regex matching
+- **Non-remote jobs**: substring match against `home_locations`
+- `home_regions` are auto-derived from `home_locations` via `geo.derive_home_regions()` at `_build_context()` time — no manual config needed
 
 ## Tier Split and Sort
 

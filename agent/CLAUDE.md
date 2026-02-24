@@ -8,7 +8,7 @@ Autonomous, multi-user job search agent. Scrapes job boards, filters, parses wit
 
 All phases through onboarding are complete and live:
 - **Scrape → Prefilter → Parse → Heuristic rank → RAG score → Email digest** — end-to-end pipeline working
-- **Scoring**: gpt-4o-mini for parsing, gpt-4o for RAG scoring. Post-parse heuristic gate skips scoring for clear misses.
+- **Scoring**: gpt-4o-mini for parsing, gpt-4o for RAG scoring. Post-parse heuristic gate skips scoring for clear misses. Relocation detection uses auto-derived regions via country-converter (ADR-007).
 - **Email digest**: Gmail SMTP + Jinja2 template. `--notify` flag on main.py.
 - **GitHub Actions**: daily cron at 07:00 CET weekdays. Secrets: `OPENAI_API_KEY`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, `NOTIFY_EMAIL`.
 - **Gap tracking**: gap_tracker.py persists scored job gap/strength data to data/gap_history/ (JSONL, 90-day retention).
@@ -36,6 +36,7 @@ JobSpy + ATS watchlist + WTTJ → Dedup → Prefilter → LLM Parse → Heuristi
 ├── gap_tracker.py       # Persists gap/strength data to data/gap_history/.
 ├── onboard.py           # CV (.docx) → profile YAML + knowledge/cv.md.
 ├── user_config.py       # Profile loading + seniority weight computation.
+├── geo.py               # Geographic region detection, timezone classification, language mapping.
 ├── jobcache.py          # Job caching utilities.
 ├── track.py             # Application tracking helpers.
 ├── test_email.py        # Manual email rendering test.
@@ -69,6 +70,7 @@ JobSpy + ATS watchlist + WTTJ → Dedup → Prefilter → LLM Parse → Heuristi
 - **Tier thresholds**: A ≥ 50, B 30–49, C < 30. Consistent across scorer, notifier, digest.
 - **Heuristic gate**: jobs below `scoring.rag_threshold` or with salary < `scoring.salary_min` skip RAG scoring; appear in digest with heuristic score.
 - **knowledge/ is read-only**: never modify files there. onboard.py writes cv.md once at onboarding.
+- **No hardcoded geo/currency/language maps**: region detection uses country-converter, currency conversion uses CurrencyConverter (ECB rates), language mapping uses babel. All live in `geo.py` and `main.py`. See ADR-007.
 
 ## Known Bugs
 
@@ -98,7 +100,11 @@ No active bugs.
 
 - Scoring parameterized for multi-user: role_type, geography, adjacent domains derived from profile. No hardcoded personal values in scorer.py, main.py, notifier.py, or prefilter.py.
 - Per-profile searches, watchlist, prefilter preferences. Each profile points to its own config files; fallback to shared config if field absent.
-- 72 tests covering regression, parameterization, home locations, per-profile config loading, and end-to-end non-Juan scoring.
+- Relocation detection auto-derives region membership (EU, EEA, Schengen, EMEA, APAC, Americas) from `home_locations` via country-converter. Works for any country without manual config.
+- Salary normalization to EUR via CurrencyConverter (ECB rates, offline). Supports 18 currencies.
+- Language hints for CV generation via babel (location → official languages).
+- Timezone classification via pytz (53 abbreviations) to distinguish geo-restrictions from timezone-only restrictions.
+- 113 tests covering regression, parameterization, home locations, per-profile config loading, end-to-end non-Juan scoring, cross-user relocation detection (Spain vs US), and auto-derived region validation.
 
 ## Future Phases
 

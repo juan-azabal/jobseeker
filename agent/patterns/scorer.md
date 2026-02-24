@@ -55,6 +55,14 @@ The scoring rubric (dimensions, score ranges, JSON output format) lives at `prom
 
 **Do not modify the rubric inline in `scorer.py`. Edit `prompts/scoring-rubric.md` and update the f-string accordingly.**
 
+## Heuristic Score (main.py)
+
+`_heuristic_score(job)` computes a quick 0–100 fit score from parsed data without API calls:
+- Domain (0–15), Seniority (0–15), Location (0–10), Skill overlap (0–30), Red flags (−5 each, max −15)
+- Location bonus: +10 for global remote, +8 for home-city hybrid, +6 for home-city onsite, 0 for geo-restricted remote
+- Country-pinned remote jobs ("Remote from Portugal", restriction="Netherlands only") get 0 location bonus — detected via `_is_remote_requiring_reloc()` using auto-derived regions from country-converter
+- Salary normalization to EUR uses CurrencyConverter (ECB reference rates, offline). Supports 18 currencies.
+
 ## Invariants
 
 - `score_all()` returns the same list passed in (jobs enriched in-place, no new list created)
