@@ -19,6 +19,15 @@ class IngestPayload(BaseModel):
     profile_id: str | None = None
 
 
+@router.get("/status", dependencies=[Depends(_verify_ingest_key)])
+def ingest_status():
+    """Return aggregate pipeline health stats (total jobs, last ingest time, scored counts)."""
+    from api.db.queries import get_ingest_status
+
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    return get_ingest_status(db_path)
+
+
 @router.post("", dependencies=[Depends(_verify_ingest_key)])
 def ingest_jobs(payload: IngestPayload):
     """Receive job data from GitHub Actions and ingest into the database.

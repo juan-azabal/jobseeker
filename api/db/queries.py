@@ -176,6 +176,24 @@ def upsert_user_job_score(
     con.close()
 
 
+def get_ingest_status(db_path: str) -> dict:
+    """Return aggregate stats useful for monitoring pipeline health."""
+    con = _connect(db_path)
+    row = con.execute(
+        "SELECT COUNT(*) AS total_jobs, MAX(ingested_at) AS last_ingested_at FROM jobs"
+    ).fetchone()
+    scores_row = con.execute(
+        "SELECT COUNT(DISTINCT user_id) AS scored_profiles, COUNT(*) AS total_scored FROM user_job_scores"
+    ).fetchone()
+    con.close()
+    return {
+        "total_jobs": row["total_jobs"],
+        "last_ingested_at": row["last_ingested_at"],
+        "scored_profiles": scores_row["scored_profiles"],
+        "total_scored": scores_row["total_scored"],
+    }
+
+
 def get_user_id_by_profile_id(db_path: str, profile_id: str) -> int | None:
     con = _connect(db_path)
     row = con.execute(
