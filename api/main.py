@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 
@@ -16,6 +17,9 @@ from api.routes.onboard import router as onboard_router
 from api.routes.ingest import router as ingest_router
 from api.routes.admin import router as admin_router
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="JobSeeker")
 
 app.add_middleware(
@@ -28,7 +32,24 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    db_exists = Path(db_path).exists()
+    logger.info("=== JobSeeker starting up ===")
+    logger.info("DB_PATH=%s  exists=%s", db_path, db_exists)
+
+    # Warn about any critical env vars that are missing
+    critical_vars = [
+        "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+        "INGEST_API_KEY",
+        "GH_ACTIONS_TOKEN", "GH_REPO",
+    ]
+    missing = [v for v in critical_vars if not os.environ.get(v)]
+    if missing:
+        logger.warning("Missing critical env vars: %s", missing)
+    else:
+        logger.info("All critical env vars present")
+
     init_db(db_path)
+    logger.info("DB ready at %s", db_path)
 
 
 # --- API routes (must be registered before the SPA catch-all) ---

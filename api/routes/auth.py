@@ -1,3 +1,4 @@
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -7,6 +8,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from api.db.queries import create_session, delete_session, get_session, get_user_by_google_id, upsert_user, set_user_admin
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -48,9 +51,10 @@ async def callback(request: Request):
     token = await oauth.google.authorize_access_token(request)
     userinfo = token.get("userinfo") or {}
 
+    email = userinfo.get("email")
     user = upsert_user(_db_path(), {
         "google_id": userinfo.get("sub"),
-        "email": userinfo.get("email"),
+        "email": email,
         "name": userinfo.get("name"),
         "avatar_url": userinfo.get("picture"),
         "profile_id": None,
@@ -61,6 +65,12 @@ async def callback(request: Request):
     if user.get("email") in admin_emails and not user.get("is_admin"):
         set_user_admin(_db_path(), user["id"], True)
         user = {**user, "is_admin": 1}
+        logger.info("Admin promoted on login: user_id=%d email=%s", user["id"], email)
+
+    logger.info(
+        "Login: user_id=%d email=%s profile_id=%r is_admin=%s",
+        user["id"], email, user.get("profile_id"), bool(user.get("is_admin")),
+    )
 
     session_token = secrets.token_urlsafe(32)
     expires_at = (datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS)).isoformat()

@@ -199,7 +199,14 @@ async def _sync_and_trigger_pipeline(profile_id: str, profile_yaml: str, cv_mark
             if sha:
                 body["sha"] = sha
 
-            await client.put(url, json=body, headers=headers)
+            put_resp = await client.put(url, json=body, headers=headers)
+            if put_resp.status_code in (200, 201):
+                logger.info("GitHub sync OK: %s (HTTP %d)", path, put_resp.status_code)
+            else:
+                logger.warning(
+                    "GitHub sync FAILED: %s HTTP %d — %s",
+                    path, put_resp.status_code, put_resp.text[:300],
+                )
 
         # Trigger the pipeline workflow
         dispatch_url = f"https://api.github.com/repos/{gh_repo}/actions/workflows/{gh_workflow}/dispatches"
@@ -211,7 +218,10 @@ async def _sync_and_trigger_pipeline(profile_id: str, profile_yaml: str, cv_mark
         if resp.status_code == 204:
             logger.info("Pipeline triggered for profile %s", profile_id)
         else:
-            logger.warning("Pipeline trigger returned %s for profile %s", resp.status_code, profile_id)
+            logger.warning(
+                "Pipeline trigger returned HTTP %d for profile %s — %s",
+                resp.status_code, profile_id, resp.text[:300],
+            )
 
 
 @router.get("/profile")
