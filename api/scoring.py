@@ -13,6 +13,56 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
+# Maps profile domain names → parser-emitted domain names.
+# Parser enum: adtech|data|ml|fintech|saas|ecommerce|healthcare|other
+_DOMAIN_ALIASES: dict[str, str] = {
+    "ia": "ml",
+    "llm": "ml",
+    "martech": "adtech",
+}
+
+# Seniority levels ordered from most junior to most senior
+_SENIORITY_LEVELS = ["junior", "mid", "senior", "staff", "principal", "director", "vp"]
+_LEVEL_IDX = {lvl: i for i, lvl in enumerate(_SENIORITY_LEVELS)}
+
+
+def _compute_seniority_weights(level: str, track: str) -> dict[str, int]:
+    """Compute seniority match weights from target.level + target.track.
+
+    As per CLAUDE.md convention: seniority weights are computed at load time,
+    never stored in YAML.
+
+    Scoring:
+      - Exact match: 15
+      - 1 level off: 10
+      - 2 levels off: 6
+      - 3+ levels off: 0
+      - director/vp capped at 4 for IC track (different career path)
+    """
+    level = (level or "senior").lower()
+    track = (track or "ic").lower()
+    target_idx = _LEVEL_IDX.get(level, 2)  # default to "senior" if unknown
+
+    weights: dict[str, int] = {}
+    for seniority, idx in _LEVEL_IDX.items():
+        delta = abs(idx - target_idx)
+        if delta == 0:
+            weights[seniority] = 15
+        elif delta == 1:
+            weights[seniority] = 10
+        elif delta == 2:
+            weights[seniority] = 6
+        else:
+            weights[seniority] = 0
+
+    # Management roles score poorly for IC track
+    if track == "ic":
+        weights["director"] = min(weights.get("director", 0), 4)
+        weights["vp"] = min(weights.get("vp", 0), 4)
+
+    return weights
+
+
 # Domain override keywords (mirrors agent/main.py _DOMAIN_KEYWORDS)
 _DOMAIN_KEYWORDS = {
     "data": [
@@ -86,9 +136,22 @@ def load_profile_data(profile_id: str | None) -> dict | None:
         logger.warning("derive_home_regions failed for profile_id=%r: %s", profile_id, exc)
         home_regions = []
 
+    # Normalize domain names to match parser enum values, merging aliases.
+    # e.g. ia→ml, llm→ml, martech→adtech  (takes max weight on collision)
+    raw_domains = {k.lower(): v for k, v in (target_block.get("domains") or {}).items()}
+    normalized_domains: dict[str, int] = {}
+    for domain, weight in raw_domains.items():
+        canonical = _DOMAIN_ALIASES.get(domain, domain)
+        normalized_domains[canonical] = max(normalized_domains.get(canonical, 0), weight)
+
+    # Compute seniority weights from level+track (never stored in YAML per convention)
+    level = target_block.get("level", "")
+    track = target_block.get("track", "ic")
+    seniority_weights = _compute_seniority_weights(level, track)
+
     return {
-        "domains": {k.lower(): v for k, v in (target_block.get("domains") or {}).items()},
-        "seniority": {k.lower(): v for k, v in (target_block.get("seniority") or {}).items()},
+        "domains": normalized_domains,
+        "seniority": seniority_weights,
         "skills": [s.lower() for s in (raw.get("skills") or [])],
         "home_locations": home_locations,
         "home_regions": home_regions,
