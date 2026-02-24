@@ -20,6 +20,11 @@ from api.routes.admin import router as admin_router
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# country_converter logs a WARNING for every city name it can't resolve to a country
+# (e.g. "barcelona", "madrid") — expected behaviour for city strings, not an error.
+# Silence at WARNING level so our own logs stay readable.
+logging.getLogger("country_converter.country_converter").setLevel(logging.ERROR)
+
 app = FastAPI(title="JobSeeker")
 
 app.add_middleware(
