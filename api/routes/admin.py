@@ -53,6 +53,7 @@ def env_check(admin: dict = Depends(get_current_admin)):
         "DB_PATH",
         "SECRET_KEY",
         "GOOGLE_CLIENT_ID",
+        "INGEST_API_KEY",
     ]
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
     return {

@@ -71,11 +71,18 @@ jobs:
             else
               payload="{\"jobs\": $(cat "$f")}"
             fi
-            curl -sf -X POST "$RAILWAY_URL/api/ingest" \
+            # Capture both body and HTTP status code; fail loudly on non-2xx
+            response=$(curl -s -w "\n%{http_code}" -X POST "$RAILWAY_URL/api/ingest" \
               -H "Content-Type: application/json" \
               -H "X-Ingest-Key: $INGEST_API_KEY" \
-              -d "$payload"
-            echo " done"
+              -d "$payload")
+            http_code=$(echo "$response" | tail -1)
+            body=$(echo "$response" | head -1)
+            echo "  HTTP $http_code: $body"
+            if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+              echo "ERROR: Ingest failed with HTTP $http_code"
+              exit 1
+            fi
           done
 
       - name: Persist seen jobs
@@ -97,8 +104,12 @@ jobs:
             exit 0
           fi
           echo "=== Pipeline health ==="
-          curl -sf "$RAILWAY_URL/api/ingest/status" \
-            -H "X-Ingest-Key: $INGEST_API_KEY" | python3 -m json.tool
+          response=$(curl -s -w "\n%{http_code}" "$RAILWAY_URL/api/ingest/status" \
+            -H "X-Ingest-Key: $INGEST_API_KEY")
+          http_code=$(echo "$response" | tail -1)
+          body=$(echo "$response" | head -1)
+          echo "HTTP $http_code"
+          echo "$body" | python3 -m json.tool || echo "$body"
 
       - name: Upload results artifact
         if: always()
