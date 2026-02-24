@@ -567,7 +567,7 @@ def main():
     )
     searches_path    = profile.get("searches", "config/searches.yaml")
     watchlist_path   = profile.get("watchlist", "config/watchlist.yaml")
-    applied_path     = "config/applied.yaml"  # personal, always per-instance
+    applied_path     = profile.get("applied", f"config/profiles/{profile_id}-applied.yaml")
 
     start_time = time.time()
 

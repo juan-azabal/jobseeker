@@ -8,7 +8,9 @@ prefilter:
     - "entry level"
     - "entry-level"
     - "associate product manager"
-    - "APM"
+    # "APM" removed: matches "APM (Application Performance Monitoring)" in tech job descriptions,
+    # causing false positives for observability/data-platform PM roles. "associate product manager"
+    # already covers the intended exclusion in titles.
     - "0-2 years"
     - "1-3 years"
 
@@ -37,7 +39,9 @@ prefilter:
     - "deposit product"
     - "lending"
     - "insurance"
-    - "growth"
+    # "growth" removed: too broad. "Product Manager, Growth" and "Growth PM" are legitimate
+    # PM roles. Non-PM growth roles (Growth Hacker, Growth Marketing) are already caught by
+    # missing the title_must_contain_one_of PM keyword.
 
   exclude_companies:
     - "Gartner"
