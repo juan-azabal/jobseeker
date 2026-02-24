@@ -12,10 +12,10 @@ interface Profile {
   current_level: string;
   track: string;
   target_level: string;
-  seniority_weights: Record<string, number>;
+  seniority_weights?: Record<string, number>;
   domains: Record<string, number>;
-  country_weights: Record<string, number>;
-  company_type_weights: Record<string, number>;
+  country_weights?: Record<string, number>;
+  company_type_weights?: Record<string, number>;
   skills: string[];
   exclude_companies: string[];
   salary_min?: number;
