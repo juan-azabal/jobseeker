@@ -86,6 +86,20 @@ jobs:
           git diff --cached --quiet || git commit -m "update seen jobs [skip ci]"
           git push
 
+      - name: Verify ingest health
+        if: always()
+        env:
+          RAILWAY_URL: ${{ secrets.RAILWAY_URL }}
+          INGEST_API_KEY: ${{ secrets.INGEST_API_KEY }}
+        run: |
+          if [ -z "$RAILWAY_URL" ] || [ -z "$INGEST_API_KEY" ]; then
+            echo "Railway secrets not set — skipping health check"
+            exit 0
+          fi
+          echo "=== Pipeline health ==="
+          curl -sf "$RAILWAY_URL/api/ingest/status" \
+            -H "X-Ingest-Key: $INGEST_API_KEY" | python3 -m json.tool
+
       - name: Upload results artifact
         if: always()
         uses: actions/upload-artifact@v4
