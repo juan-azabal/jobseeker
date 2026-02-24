@@ -5,7 +5,7 @@ user:
   id: juan
   name: Juan Azabal
   email: j.azabal@gmail.com
-  active: true
+  active: false
   languages:
   - es
   - en
