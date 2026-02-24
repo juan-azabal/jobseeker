@@ -1,34 +1,41 @@
 import pytest
 from fastapi.testclient import TestClient
 from api.db.init import init_db
-from api.db.queries import upsert_job, upsert_user, create_session
+from api.db.queries import upsert_job, upsert_user, create_session, upsert_user_job_score
 from api.main import app
 
 JOBS = [
     {
         "job_id": "a1", "title": "Senior PM", "company": "Acme",
         "location": "Paris, FR", "url": "https://ex.com/1",
-        "location_type": "hybrid", "domain": "data", "score": 72, "tier": "A",
-        "parsed": '{}', "scored": '{}',
+        "location_type": "hybrid", "domain": "data",
+        "parsed": '{}',
         "first_seen": "2026-02-23", "last_seen": "2026-02-23",
         "ingested_at": "2026-02-23T10:00:00",
     },
     {
         "job_id": "b1", "title": "ML PM", "company": "Beta",
         "location": "Remote", "url": "https://ex.com/2",
-        "location_type": "remote", "domain": "ml", "score": 35, "tier": "B",
-        "parsed": '{}', "scored": '{}',
+        "location_type": "remote", "domain": "ml",
+        "parsed": '{}',
         "first_seen": "2026-02-20", "last_seen": "2026-02-20",
         "ingested_at": "2026-02-20T10:00:00",
     },
     {
         "job_id": "c1", "title": "Growth PM", "company": "Gamma",
         "location": "Amsterdam", "url": "https://ex.com/3",
-        "location_type": "onsite", "domain": "growth", "score": 20, "tier": "C",
-        "parsed": '{}', "scored": None,
+        "location_type": "onsite", "domain": "growth",
+        "parsed": '{}',
         "first_seen": "2026-02-01", "last_seen": "2026-02-01",
         "ingested_at": "2026-02-01T10:00:00",
     },
+]
+
+# Per-user RAG scores for the test user
+USER_SCORES = [
+    ("a1", 72, "A"),
+    ("b1", 35, "B"),
+    ("c1", 20, "C"),
 ]
 
 
@@ -43,6 +50,9 @@ def authed_client(tmp_path, monkeypatch):
         "google_id": "g_test", "email": "t@t.com",
         "name": "T", "avatar_url": None, "profile_id": None,
     })
+    # Insert per-user scores
+    for job_id, score, tier in USER_SCORES:
+        upsert_user_job_score(db_path, user["id"], job_id, score, tier, '{}')
     create_session(db_path, "test_tok", user["id"], "2099-01-01T00:00:00")
     c = TestClient(app)
     c.cookies.set("jsk", "test_tok")
@@ -90,3 +100,10 @@ def test_get_jobs_response_shape(authed_client):
     job = resp.json()["jobs"][0]
     for field in ("job_id", "title", "company", "location", "score", "tier", "first_seen", "url"):
         assert field in job
+
+
+def test_get_jobs_total_in_db(authed_client):
+    resp = authed_client.get("/api/jobs")
+    data = resp.json()
+    assert "total_in_db" in data
+    assert data["total_in_db"] == 3

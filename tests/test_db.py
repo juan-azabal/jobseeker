@@ -2,7 +2,7 @@ import os
 import tempfile
 import pytest
 from api.db.init import init_db
-from api.db.queries import upsert_job, get_jobs, get_job_by_id
+from api.db.queries import upsert_job, get_jobs, get_job_by_id, upsert_user_job_score, get_user_job_score, get_total_job_count
 
 JOB = {
     "job_id": "abc123",
@@ -12,10 +12,7 @@ JOB = {
     "url": "https://example.com/job/1",
     "location_type": "hybrid",
     "domain": "data",
-    "score": 72,
-    "tier": "A",
     "parsed": '{"domain": "data"}',
-    "scored": '{"score": 72}',
     "first_seen": "2026-02-20",
     "last_seen": "2026-02-20",
     "ingested_at": "2026-02-20T10:00:00",
@@ -67,11 +64,31 @@ def test_get_jobs_returns_list(db_path):
     assert len(jobs) == 1
 
 
-def test_get_jobs_filter_tier(db_path):
+def test_user_job_scores(db_path):
+    """Per-user scores are stored separately from shared job data."""
     upsert_job(db_path, JOB)
-    upsert_job(db_path, {**JOB, "job_id": "xyz", "tier": "C", "score": 20})
-    a_jobs = get_jobs(db_path, tiers=["A"])
-    assert all(j["tier"] == "A" for j in a_jobs)
+    # Create a test user
+    import sqlite3
+    con = sqlite3.connect(db_path)
+    con.execute("INSERT INTO users (id, google_id, email, name) VALUES (1, 'g1', 'a@b.com', 'Test')")
+    con.commit()
+    con.close()
+    # Upsert a score
+    upsert_user_job_score(db_path, 1, "abc123", 72, "A", '{"score": 72}')
+    ujs = get_user_job_score(db_path, 1, "abc123")
+    assert ujs is not None
+    assert ujs["score"] == 72
+    assert ujs["tier"] == "A"
+    # Jobs query with user_id returns the score
+    jobs = get_jobs(db_path, user_id=1)
+    assert len(jobs) == 1
+    assert jobs[0]["ujs_score"] == 72
+
+
+def test_get_total_job_count(db_path):
+    assert get_total_job_count(db_path) == 0
+    upsert_job(db_path, JOB)
+    assert get_total_job_count(db_path) == 1
 
 
 def test_get_jobs_filter_date(db_path):

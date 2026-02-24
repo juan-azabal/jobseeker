@@ -1,10 +1,21 @@
 import os
 from pathlib import Path
 from api.db.init import init_db
-from api.db.queries import get_jobs, get_job_by_id
+from api.db.queries import get_jobs, get_job_by_id, get_user_job_score
 from api.ingest import ingest
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _create_test_user(db_path, user_id=1, profile_id="test-user"):
+    import sqlite3
+    con = sqlite3.connect(db_path)
+    con.execute(
+        "INSERT INTO users (id, google_id, email, name, profile_id) VALUES (?, 'g1', 'a@b.com', 'Test', ?)",
+        (user_id, profile_id),
+    )
+    con.commit()
+    con.close()
 
 
 def test_ingest_two_files_deduped(tmp_path):
@@ -28,22 +39,40 @@ def test_ingest_idempotent(tmp_path):
     assert result2["inserted"] == 0
 
 
-def test_ingest_tier_assignment(tmp_path):
+def test_ingest_per_user_scores(tmp_path):
+    """When profile_id is provided, per-user scores are stored in user_job_scores."""
     db_path = str(tmp_path / "test.db")
     init_db(db_path)
+    _create_test_user(db_path, user_id=1, profile_id="test-user")
+    result = ingest(db_path, str(FIXTURES), profile_id="test-user")
+    # job001 has rag_score 72, job002 has 35 — both stored as per-user scores
+    assert result["scored"] >= 2
+    ujs1 = get_user_job_score(db_path, 1, "job001")
+    ujs2 = get_user_job_score(db_path, 1, "job002")
+    assert ujs1 is not None and ujs1["score"] == 72
+    assert ujs2 is not None and ujs2["score"] == 35
+
+
+def test_ingest_no_profile_no_scores(tmp_path):
+    """Without profile_id, job data is stored but no per-user scores."""
+    db_path = str(tmp_path / "test.db")
+    init_db(db_path)
+    _create_test_user(db_path)
     ingest(db_path, str(FIXTURES))
+    # Jobs exist but no per-user scores
     j1 = get_job_by_id(db_path, "job001")
-    j2 = get_job_by_id(db_path, "job002")
-    j3 = get_job_by_id(db_path, "job003")
-    assert j1["tier"] == "A"   # score 72
-    assert j2["tier"] == "B"   # score 35
-    assert j3["tier"] == "C"   # no rag_score → score 0
+    assert j1 is not None
+    ujs = get_user_job_score(db_path, 1, "job001")
+    assert ujs is None
 
 
 def test_ingest_no_rag_score(tmp_path):
+    """Jobs without rag_score are stored but have no per-user score even with profile_id."""
     db_path = str(tmp_path / "test.db")
     init_db(db_path)
-    ingest(db_path, str(FIXTURES))
+    _create_test_user(db_path)
+    ingest(db_path, str(FIXTURES), profile_id="test-user")
     j3 = get_job_by_id(db_path, "job003")
     assert j3 is not None
-    assert j3["score"] == 0
+    ujs = get_user_job_score(db_path, 1, "job003")
+    assert ujs is None  # job003 has no rag_score

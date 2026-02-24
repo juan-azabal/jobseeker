@@ -30,6 +30,7 @@ function buildCVPrompt(jobs: JobSummary[]): string {
 export default function JobsPage() {
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [totalInDb, setTotalInDb] = useState<number | null>(null);
   const [filters, setFilters] = useState<Filters>({ tiers: ['A', 'B'], period: 'all', hideApplied: false });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
@@ -37,15 +38,20 @@ export default function JobsPage() {
   const [dismissing, setDismissing] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    setLoading(true);
-    const qs = filtersToQuery(filters);
-    fetch(`/api/jobs${qs ? '?' + qs : ''}`)
+  const fetchJobs = (f: Filters) => {
+    const qs = filtersToQuery(f);
+    return fetch(`/api/jobs${qs ? '?' + qs : ''}`)
       .then((r) => r.json())
       .then((data: JobsResponse) => {
         setJobs(data.jobs);
-        setLoading(false);
+        setTotalInDb(data.total_in_db);
+        return data;
       });
+  };
+
+  useEffect(() => {
+    setLoading(true);
+    fetchJobs(filters).then(() => setLoading(false));
 
     const url = new URL(window.location.href);
     if (filters.period !== 'all') url.searchParams.set('period', filters.period);
@@ -54,6 +60,15 @@ export default function JobsPage() {
     filters.tiers.forEach((t) => url.searchParams.append('tier', t));
     window.history.replaceState({}, '', url.toString());
   }, [filters]);
+
+  // Auto-poll when no jobs in DB yet (pipeline hasn't run)
+  useEffect(() => {
+    if (totalInDb !== 0) return;
+    const interval = setInterval(() => {
+      fetchJobs(filters);
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [totalInDb, filters]);
 
   const toggleSelect = (jobId: string, sel: boolean) => {
     setSelected((prev) => {
@@ -77,10 +92,7 @@ export default function JobsPage() {
     );
     setApplying(false);
     setSelected(new Set());
-    // Refresh list — if hiding applied, they'll disappear; otherwise badge appears
-    const qs = filtersToQuery(filters);
-    const data: JobsResponse = await fetch(`/api/jobs${qs ? '?' + qs : ''}`).then((r) => r.json());
-    setJobs(data.jobs);
+    fetchJobs(filters);
   };
 
   const handleBulkDismiss = async () => {
@@ -92,9 +104,7 @@ export default function JobsPage() {
     );
     setDismissing(false);
     setSelected(new Set());
-    const qs = filtersToQuery(filters);
-    const data: JobsResponse = await fetch(`/api/jobs${qs ? '?' + qs : ''}`).then((r) => r.json());
-    setJobs(data.jobs);
+    fetchJobs(filters);
   };
 
   const handleBulkCVCopy = () => {
@@ -120,6 +130,16 @@ export default function JobsPage() {
         {loading ? (
           <div className="mt-16 text-center">
             <p className="text-xs text-zinc-600">Loading…</p>
+          </div>
+        ) : jobs.length === 0 && totalInDb === 0 ? (
+          <div className="mt-16 text-center">
+            <div className="mx-auto mb-4 h-10 w-10 animate-pulse rounded-full bg-violet-500/20" />
+            <h2 className="text-lg font-semibold text-white mb-2">Scanning job boards for you</h2>
+            <p className="text-sm text-zinc-400 max-w-sm mx-auto">
+              Your profile is set up. We're running a personalised job search now
+              — jobs will start appearing within 20-30 minutes.
+            </p>
+            <p className="mt-4 text-xs text-zinc-600">This page refreshes automatically.</p>
           </div>
         ) : jobs.length === 0 ? (
           <div className="mt-16 text-center">

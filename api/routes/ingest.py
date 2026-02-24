@@ -16,13 +16,17 @@ def _verify_ingest_key(x_ingest_key: str = Header(...)):
 
 class IngestPayload(BaseModel):
     jobs: list[dict]
+    profile_id: str | None = None
 
 
 @router.post("", dependencies=[Depends(_verify_ingest_key)])
 def ingest_jobs(payload: IngestPayload):
-    """Receive job data from GitHub Actions and ingest into the database."""
+    """Receive job data from GitHub Actions and ingest into the database.
+
+    When profile_id is provided, per-user scores are stored in user_job_scores.
+    """
     from api.ingest import ingest_from_list
 
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
-    result = ingest_from_list(db_path, payload.jobs)
+    result = ingest_from_list(db_path, payload.jobs, profile_id=payload.profile_id)
     return result

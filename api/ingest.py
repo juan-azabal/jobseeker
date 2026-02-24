@@ -3,15 +3,8 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from api.db.queries import upsert_job, get_job_by_id
-
-
-def _compute_tier(score: int) -> str:
-    if score >= 50:
-        return "A"
-    if score >= 30:
-        return "B"
-    return "C"
+from api.db.queries import upsert_job, get_job_by_id, upsert_user_job_score, get_user_id_by_profile_id
+from api.scoring import compute_tier
 
 
 def _to_date(date_str: str | None) -> str:
@@ -23,24 +16,29 @@ def _to_date(date_str: str | None) -> str:
         return datetime.now(timezone.utc).date().isoformat()
 
 
-def ingest_from_list(db_path: str, raw_jobs: list[dict]) -> dict:
-    """Ingest a list of job dicts into the database. Returns counts."""
+def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None = None) -> dict:
+    """Ingest a list of job dicts into the database.
+
+    Common job data (title, company, parsed, etc.) goes into the shared `jobs` table.
+    When profile_id is provided, per-user scores go into `user_job_scores`.
+    """
     inserted = 0
     updated = 0
     skipped = 0
+    scored = 0
 
     now = datetime.now(timezone.utc).isoformat()
+
+    # Resolve profile_id → user_id for per-user score storage
+    user_id = None
+    if profile_id:
+        user_id = get_user_id_by_profile_id(db_path, profile_id)
 
     for raw in raw_jobs:
         job_id = raw.get("id") or raw.get("job_id")
         if not job_id:
             skipped += 1
             continue
-
-        rag = raw.get("rag_score") or {}
-        # Use RAG score when available; fall back to heuristic fit_score saved by
-        # jobagent's save_results(). Default 0 only when neither is present.
-        score = rag.get("score", 0) if rag else int(raw.get("fit_score") or 0)
 
         parsed = raw.get("parsed") or {}
         # Preserve raw description in parsed blob so CV generation can use it
@@ -50,14 +48,10 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict]) -> dict:
         location_type = parsed.get("location_type") or ("remote" if raw.get("is_remote") else "unknown")
         domain = parsed.get("domain")
 
-        # Raw score stored as-is; relocation penalty is applied per-user at
-        # query time in api/routes/jobs.py using the user's profile home_locations.
-        tier = _compute_tier(score)
-
         date_posted = _to_date(raw.get("date_posted"))
-
         existing = get_job_by_id(db_path, job_id)
 
+        # Upsert common job data (shared across all users)
         record = {
             "job_id": job_id,
             "title": raw.get("title"),
@@ -66,10 +60,7 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict]) -> dict:
             "url": raw.get("job_url"),
             "location_type": location_type,
             "domain": domain,
-            "score": score,
-            "tier": tier,
             "parsed": json.dumps(parsed),
-            "scored": json.dumps(rag) if rag else None,
             "first_seen": existing["first_seen"] if existing else date_posted,
             "last_seen": date_posted,
             "ingested_at": now,
@@ -81,10 +72,20 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict]) -> dict:
         else:
             inserted += 1
 
-    return {"inserted": inserted, "updated": updated, "skipped": skipped}
+        # Store per-user score when profile_id is provided and job has a RAG score
+        if user_id:
+            rag = raw.get("rag_score")
+            if rag and isinstance(rag, dict) and rag.get("score") is not None:
+                score = rag["score"]
+                tier = compute_tier(score)
+                scored_json = json.dumps(rag)
+                upsert_user_job_score(db_path, user_id, job_id, score, tier, scored_json)
+                scored += 1
+
+    return {"inserted": inserted, "updated": updated, "skipped": skipped, "scored": scored}
 
 
-def ingest(db_path: str, jobagent_dir: str) -> dict:
+def ingest(db_path: str, jobagent_dir: str, profile_id: str | None = None) -> dict:
     """File-based ingest: read JSON files from agent/output/ and ingest."""
     output_dir = Path(jobagent_dir) / "output"
     json_files = sorted(output_dir.glob("jobs_*.json"))
@@ -96,7 +97,7 @@ def ingest(db_path: str, jobagent_dir: str) -> dict:
         except (json.JSONDecodeError, OSError):
             pass
 
-    return ingest_from_list(db_path, all_jobs)
+    return ingest_from_list(db_path, all_jobs, profile_id=profile_id)
 
 
 if __name__ == "__main__":

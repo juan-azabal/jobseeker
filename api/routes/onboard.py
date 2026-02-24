@@ -1,10 +1,16 @@
+import base64
+import logging
 import os
 import sys
 import tempfile
 from typing import Any
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from pydantic import BaseModel
 import yaml
+
+logger = logging.getLogger(__name__)
 
 from api.middleware.auth import get_current_user
 from api.db.queries import update_user_profile_id
@@ -112,7 +118,71 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
     update_user_profile_id(db_path, user["id"], profile_id)
 
+    # Sync profile to GitHub repo and trigger the scraping pipeline (fire-and-forget)
+    try:
+        await _sync_and_trigger_pipeline(profile_id, profile_yaml, body.cv_markdown)
+    except Exception:
+        logger.exception("Pipeline sync/trigger failed for %s (non-fatal)", profile_id)
+
     return {"profile_id": profile_id}
+
+
+async def _sync_and_trigger_pipeline(profile_id: str, profile_yaml: str, cv_markdown: str) -> None:
+    """Push profile files to GitHub repo and trigger the agent pipeline.
+
+    Requires env vars: GH_ACTIONS_TOKEN (PAT with contents:write + actions:write),
+    GH_REPO (e.g. "owner/repo"), GH_REF (default "main").
+    """
+    gh_token = os.environ.get("GH_ACTIONS_TOKEN", "")
+    gh_repo = os.environ.get("GH_REPO", "")
+    gh_ref = os.environ.get("GH_REF", "main")
+    gh_workflow = "jobagent_daily.yml"
+
+    if not gh_token or not gh_repo:
+        logger.info("GH_ACTIONS_TOKEN/GH_REPO not set — skipping pipeline trigger")
+        return
+
+    headers = {
+        "Authorization": f"Bearer {gh_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        # Push profile files to the repo
+        files_to_push = [
+            (f"agent/config/profiles/{profile_id}.yaml", profile_yaml),
+            (f"agent/knowledge/{profile_id}/cv.md", cv_markdown),
+            (f"agent/config/seen_ids/{profile_id}.txt", ""),
+        ]
+        for path, content in files_to_push:
+            url = f"https://api.github.com/repos/{gh_repo}/contents/{path}"
+
+            # Check if file exists (need SHA for update)
+            resp = await client.get(url, headers=headers, params={"ref": gh_ref})
+            sha = resp.json().get("sha") if resp.status_code == 200 else None
+
+            body = {
+                "message": f"chore: add profile {profile_id} [skip ci]",
+                "content": base64.b64encode(content.encode()).decode(),
+                "branch": gh_ref,
+            }
+            if sha:
+                body["sha"] = sha
+
+            await client.put(url, json=body, headers=headers)
+
+        # Trigger the pipeline workflow
+        dispatch_url = f"https://api.github.com/repos/{gh_repo}/actions/workflows/{gh_workflow}/dispatches"
+        resp = await client.post(
+            dispatch_url,
+            json={"ref": gh_ref, "inputs": {"profile": profile_id}},
+            headers=headers,
+        )
+        if resp.status_code == 204:
+            logger.info("Pipeline triggered for profile %s", profile_id)
+        else:
+            logger.warning("Pipeline trigger returned %s for profile %s", resp.status_code, profile_id)
 
 
 @router.get("/profile")
