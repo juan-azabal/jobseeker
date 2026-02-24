@@ -431,6 +431,22 @@ def get_all_users(db_path: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_profile_yaml_by_profile_id(db_path: str, profile_id: str) -> str | None:
+    """Return the stored profile YAML for the first user with the given profile_id.
+
+    Used by scoring.py as a DB fallback when the profile YAML file is absent from disk
+    (e.g. after a Railway redeploy that wiped the ephemeral filesystem).
+    Returns None if no matching user or YAML not yet persisted.
+    """
+    con = _connect(db_path)
+    row = con.execute(
+        "SELECT profile_yaml FROM users WHERE profile_id = ? AND profile_yaml IS NOT NULL LIMIT 1",
+        (profile_id,),
+    ).fetchone()
+    con.close()
+    return row["profile_yaml"] if row else None
+
+
 def reset_user_onboarding(db_path: str, user_id: int) -> None:
     """Clear profile_id, cv_md, and profile_yaml so a user goes through onboarding again.
 

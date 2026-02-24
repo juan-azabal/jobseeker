@@ -94,6 +94,36 @@ def compute_tier(score: int) -> str:
     return "C"
 
 
+def _load_profile_yaml_from_db(profile_id: str, profile_path: Path) -> dict | None:
+    """Fetch profile YAML from the DB when the local file is missing.
+
+    Writes the YAML back to disk so subsequent calls within the same process
+    hit the filesystem (avoids repeated DB lookups per request).
+
+    Returns the parsed YAML dict on success, None on any failure.
+    """
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    try:
+        from api.db.queries import get_profile_yaml_by_profile_id  # avoid circular import at module level
+        stored_yaml = get_profile_yaml_by_profile_id(db_path, profile_id)
+        if not stored_yaml:
+            return None
+        # Cache back to disk so the next call is a fast file read.
+        profile_path.parent.mkdir(parents=True, exist_ok=True)
+        profile_path.write_text(stored_yaml)
+        logger.info(
+            "Restored profile YAML from DB for profile_id=%r → %s",
+            profile_id, profile_path,
+        )
+        return yaml.safe_load(stored_yaml)
+    except Exception as exc:
+        logger.error(
+            "Failed to restore profile YAML from DB for profile_id=%r: %s",
+            profile_id, exc,
+        )
+        return None
+
+
 def load_profile_data(profile_id: str | None) -> dict | None:
     """Load profile YAML and return scoring-relevant fields.
 
@@ -109,11 +139,15 @@ def load_profile_data(profile_id: str | None) -> dict | None:
     try:
         raw = yaml.safe_load(profile_path.read_text())
     except FileNotFoundError:
-        logger.warning(
-            "Profile YAML not found for profile_id=%r at %s — heuristic scoring disabled for this user",
-            profile_id, profile_path,
-        )
-        return None
+        # Ephemeral filesystem (e.g. Railway redeploy): try to restore from DB.
+        raw = _load_profile_yaml_from_db(profile_id, profile_path)
+        if raw is None:
+            logger.warning(
+                "Profile YAML not found for profile_id=%r at %s and not in DB — "
+                "heuristic scoring disabled for this user",
+                profile_id, profile_path,
+            )
+            return None
     except Exception as exc:
         logger.error(
             "Failed to load profile YAML for profile_id=%r at %s: %s",
