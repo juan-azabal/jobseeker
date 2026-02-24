@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Routes, Route, Navigate, Link, useNavigate, useParams } from 'react-router';
 import { AuthProvider, useAuth } from './context/AuthContext';
+
 import JobsPage from './pages/JobsPage';
 import JobDetailPage from './pages/JobDetailPage';
 import LoginPage from './pages/LoginPage';
@@ -102,6 +103,35 @@ function HamburgerMenu() {
   );
 }
 
+function ImpersonationBanner() {
+  const { user, stopImpersonating } = useAuth();
+  const navigate = useNavigate();
+
+  if (!user?.is_impersonating) return null;
+
+  const handleStop = async () => {
+    await stopImpersonating();
+    navigate('/admin');
+  };
+
+  return (
+    <div className="flex items-center justify-center gap-3 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2">
+      <span className="text-xs text-amber-400">
+        Viewing as <span className="font-semibold">{user.name}</span>
+        {user.real_user_name && (
+          <span className="text-amber-500/60"> · logged in as {user.real_user_name}</span>
+        )}
+      </span>
+      <button
+        onClick={handleStop}
+        className="rounded bg-amber-500/20 px-2.5 py-0.5 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-500/30"
+      >
+        Stop
+      </button>
+    </div>
+  );
+}
+
 function AppRoutes() {
   const { isAuthenticated, isLoading, user } = useAuth();
 
@@ -117,6 +147,7 @@ function AppRoutes() {
         </Link>
         <HamburgerMenu />
       </header>
+      <ImpersonationBanner />
       <Routes>
         <Route path="/onboard" element={<OnboardPage onComplete={() => window.location.replace('/jobs?welcome=1')} />} />
         <Route path="/" element={<Navigate to={user?.profile_id ? '/jobs' : '/onboard'} replace />} />

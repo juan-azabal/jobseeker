@@ -57,7 +57,7 @@ def test_save_profile_200(authed_client):
 def test_save_profile_writes_files(authed_client):
     client, tmp_path, db_path = authed_client
     jobagent_dir = str(tmp_path / "jobagent")
-    client.post(
+    resp = client.post(
         "/api/onboard/save-profile",
         json={
             "cv_markdown": "# Alice Martin\n\nSenior PM",
@@ -66,7 +66,9 @@ def test_save_profile_writes_files(authed_client):
             "location_preference": "b",
         },
     )
-    profile_id = "alice"
+    # profile_id is now a random 8-char hex — get it from the response
+    profile_id = resp.json()["profile_id"]
+    assert len(profile_id) == 8 and all(c in "0123456789abcdef" for c in profile_id)
     assert os.path.exists(os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}.yaml"))
     assert os.path.exists(os.path.join(jobagent_dir, "knowledge", profile_id, "cv.md"))
     assert os.path.exists(os.path.join(jobagent_dir, "config", "seen_ids", f"{profile_id}.txt"))
@@ -75,7 +77,7 @@ def test_save_profile_writes_files(authed_client):
 def test_save_profile_yaml_loadable(authed_client):
     client, tmp_path, db_path = authed_client
     jobagent_dir = str(tmp_path / "jobagent")
-    client.post(
+    resp = client.post(
         "/api/onboard/save-profile",
         json={
             "cv_markdown": "# Alice Martin\n\nSenior PM",
@@ -84,7 +86,7 @@ def test_save_profile_yaml_loadable(authed_client):
             "location_preference": "b",
         },
     )
-    profile_id = "alice"
+    profile_id = resp.json()["profile_id"]
     yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}.yaml")
     with open(yaml_path) as f:
         loaded = yaml.safe_load(f)
@@ -95,7 +97,7 @@ def test_save_profile_yaml_loadable(authed_client):
 
 def test_save_profile_updates_db(authed_client):
     client, tmp_path, db_path = authed_client
-    client.post(
+    resp = client.post(
         "/api/onboard/save-profile",
         json={
             "cv_markdown": "# Alice Martin\n\nSenior PM",
@@ -104,8 +106,9 @@ def test_save_profile_updates_db(authed_client):
             "location_preference": "b",
         },
     )
+    expected_profile_id = resp.json()["profile_id"]
     user = get_user_by_google_id(db_path, "g_t")
-    assert user["profile_id"] == "alice"
+    assert user["profile_id"] == expected_profile_id
 
 
 def test_save_profile_unauthenticated():

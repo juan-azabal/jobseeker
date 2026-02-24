@@ -7,6 +7,10 @@ interface User {
   avatar_url: string | null;
   profile_id: string | null;
   is_admin?: number;
+  // Impersonation fields (present when an admin is viewing as another user)
+  is_impersonating?: boolean;
+  real_user_id?: number;
+  real_user_name?: string;
 }
 
 interface AuthState {
@@ -14,6 +18,8 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
+  stopImpersonating: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState>({
@@ -21,17 +27,21 @@ const AuthContext = createContext<AuthState>({
   isLoading: true,
   isAuthenticated: false,
   logout: async () => {},
+  refreshUser: async () => {},
+  stopImpersonating: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchUser = () =>
     fetch('/api/auth/me')
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => setUser(data))
-      .finally(() => setIsLoading(false));
+      .then((data) => setUser(data));
+
+  useEffect(() => {
+    fetchUser().finally(() => setIsLoading(false));
   }, []);
 
   const logout = async () => {
@@ -39,8 +49,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const refreshUser = async () => {
+    await fetchUser();
+  };
+
+  const stopImpersonating = async () => {
+    await fetch('/api/admin/impersonate', { method: 'DELETE' });
+    await fetchUser();
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAuthenticated: !!user, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, isAuthenticated: !!user, logout, refreshUser, stopImpersonating }}>
       {children}
     </AuthContext.Provider>
   );

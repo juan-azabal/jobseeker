@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate } from 'react-router';
+import { Navigate, useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 
 interface AdminUser {
@@ -15,14 +15,20 @@ interface AdminUser {
 }
 
 export default function AdminPage() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, refreshUser } = useAuth();
+  const navigate = useNavigate();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState(false);
   const [resetting, setResetting] = useState<number | null>(null);
+  const [impersonating, setImpersonating] = useState<number | null>(null);
   const [profile, setProfile] = useState('');
   const [triggering, setTriggering] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // Inline profile-id edit state
+  const [editingProfileId, setEditingProfileId] = useState<{ userId: number; value: string } | null>(null);
+  const [savingProfileId, setSavingProfileId] = useState(false);
 
   const loadUsers = () => {
     setUsersLoading(true);
@@ -85,6 +91,46 @@ export default function AdminPage() {
     }
   }
 
+  async function handleImpersonate(userId: number) {
+    setImpersonating(userId);
+    try {
+      const r = await fetch(`/api/admin/impersonate/${userId}`, { method: 'POST' });
+      if (r.ok) {
+        await refreshUser();
+        navigate('/jobs');
+      } else {
+        alert('Impersonation failed');
+      }
+    } catch {
+      alert('Network error');
+    } finally {
+      setImpersonating(null);
+    }
+  }
+
+  async function handleSaveProfileId(userId: number) {
+    if (!editingProfileId) return;
+    setSavingProfileId(true);
+    try {
+      const r = await fetch(`/api/admin/users/${userId}/profile-id`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: editingProfileId.value.trim() || null }),
+      });
+      if (r.ok) {
+        setEditingProfileId(null);
+        loadUsers();
+      } else {
+        const data = await r.json();
+        alert(data.detail || 'Failed to update profile ID');
+      }
+    } catch {
+      alert('Network error');
+    } finally {
+      setSavingProfileId(false);
+    }
+  }
+
   if (isLoading) return <div className="min-h-screen bg-zinc-950" />;
 
   return (
@@ -141,7 +187,7 @@ export default function AdminPage() {
                 <tr className="border-b border-zinc-800 text-left text-xs uppercase tracking-wider text-zinc-500">
                   <th className="pb-2 pr-4">Name</th>
                   <th className="pb-2 pr-4">Email</th>
-                  <th className="pb-2 pr-4">Profile</th>
+                  <th className="pb-2 pr-4">Profile ID</th>
                   <th className="pb-2 pr-4">Data</th>
                   <th className="pb-2 pr-4">Role</th>
                   <th className="pb-2 pr-4">Last login</th>
@@ -153,9 +199,47 @@ export default function AdminPage() {
                   <tr key={u.id} className="border-b border-zinc-800/50 last:border-0">
                     <td className="py-2.5 pr-4 text-zinc-200">{u.name}</td>
                     <td className="py-2.5 pr-4 text-zinc-400">{u.email}</td>
-                    <td className="py-2.5 pr-4 font-mono text-xs text-zinc-500">
-                      {u.profile_id ?? '—'}
+
+                    {/* Profile ID — inline editable */}
+                    <td className="py-2.5 pr-4">
+                      {editingProfileId?.userId === u.id ? (
+                        <span className="flex items-center gap-1.5">
+                          <input
+                            autoFocus
+                            value={editingProfileId.value}
+                            onChange={(e) => setEditingProfileId({ userId: u.id, value: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveProfileId(u.id);
+                              if (e.key === 'Escape') setEditingProfileId(null);
+                            }}
+                            className="w-24 rounded border border-zinc-600 bg-zinc-800 px-1.5 py-0.5 font-mono text-xs text-white focus:border-violet-500 focus:outline-none"
+                          />
+                          <button
+                            onClick={() => handleSaveProfileId(u.id)}
+                            disabled={savingProfileId}
+                            className="text-xs text-emerald-400 hover:text-emerald-300 disabled:opacity-40"
+                          >
+                            {savingProfileId ? '…' : '✓'}
+                          </button>
+                          <button
+                            onClick={() => setEditingProfileId(null)}
+                            className="text-xs text-zinc-500 hover:text-zinc-300"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setEditingProfileId({ userId: u.id, value: u.profile_id ?? '' })}
+                          className="group flex items-center gap-1 font-mono text-xs text-zinc-500 hover:text-zinc-300"
+                          title="Click to edit profile ID"
+                        >
+                          {u.profile_id ?? '—'}
+                          <span className="opacity-0 group-hover:opacity-60 text-zinc-500">✎</span>
+                        </button>
+                      )}
                     </td>
+
                     <td className="py-2.5 pr-4">
                       <span className={`mr-1 text-xs ${u.has_cv ? 'text-emerald-400' : 'text-red-500'}`} title="CV">
                         {u.has_cv ? '✓CV' : '✗CV'}
@@ -179,14 +263,27 @@ export default function AdminPage() {
                       {u.last_login ? new Date(u.last_login).toLocaleDateString() : '—'}
                     </td>
                     <td className="py-2.5">
-                      <button
-                        onClick={() => handleResetOnboarding(u.id, u.name)}
-                        disabled={resetting === u.id}
-                        className="rounded px-2 py-0.5 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-amber-400 disabled:opacity-40"
-                        title="Reset onboarding (clears profile + CV, keeps job history)"
-                      >
-                        {resetting === u.id ? '…' : 'Reset'}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {/* View as — don't impersonate self */}
+                        {u.id !== user?.id && (
+                          <button
+                            onClick={() => handleImpersonate(u.id)}
+                            disabled={impersonating === u.id}
+                            className="rounded px-2 py-0.5 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-violet-400 disabled:opacity-40"
+                            title="View the app as this user"
+                          >
+                            {impersonating === u.id ? '…' : 'View as'}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleResetOnboarding(u.id, u.name)}
+                          disabled={resetting === u.id}
+                          className="rounded px-2 py-0.5 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-amber-400 disabled:opacity-40"
+                          title="Reset onboarding (clears profile + CV, keeps job history)"
+                        >
+                          {resetting === u.id ? '…' : 'Reset'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

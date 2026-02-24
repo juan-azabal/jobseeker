@@ -2,11 +2,11 @@ import logging
 import os
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from api.db.queries import get_all_users, reset_user_onboarding
-from api.middleware.auth import get_current_admin
+from api.db.queries import get_all_users, reset_user_onboarding, set_session_impersonation, set_user_profile_id, get_user_by_id
+from api.middleware.auth import get_current_admin, SESSION_COOKIE
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,10 @@ class TriggerRequest(BaseModel):
     profile: str | None = None  # None → run all active profiles
 
 
+class SetProfileIdRequest(BaseModel):
+    profile_id: str | None = None
+
+
 @router.get("/users")
 def list_users(admin: dict = Depends(get_current_admin)):
     """Return all registered users with admin flags."""
@@ -25,6 +29,51 @@ def list_users(admin: dict = Depends(get_current_admin)):
     safe_keys = {"id", "email", "name", "avatar_url", "profile_id", "is_admin",
                  "created_at", "last_login", "has_cv", "has_yaml"}
     return [{k: v for k, v in u.items() if k in safe_keys} for u in users]
+
+
+@router.post("/impersonate/{user_id}")
+def start_impersonation(user_id: int, request: Request, admin: dict = Depends(get_current_admin)):
+    """Start viewing the app as another user (admin only).
+
+    Sets impersonated_user_id on the current session. All subsequent API calls will
+    use the impersonated user's identity until stop_impersonation is called.
+    """
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    target = get_user_by_id(db_path, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        raise HTTPException(status_code=401, detail="No session cookie")
+    set_session_impersonation(db_path, token, user_id)
+    admin_label = admin.get("real_user_name") or admin.get("email", "?")
+    logger.info("Admin %s started impersonating user_id=%d (%s)", admin_label, user_id, target["email"])
+    return {"ok": True, "impersonating": user_id}
+
+
+@router.delete("/impersonate")
+def stop_impersonation(request: Request, admin: dict = Depends(get_current_admin)):
+    """Stop impersonating — return to viewing as the real admin account."""
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        raise HTTPException(status_code=401, detail="No session cookie")
+    set_session_impersonation(db_path, token, None)
+    logger.info("Impersonation stopped (real_user_id=%s)", admin.get("real_user_id") or admin.get("id"))
+    return {"ok": True}
+
+
+@router.patch("/users/{user_id}/profile-id")
+def admin_set_profile_id(user_id: int, body: SetProfileIdRequest, admin: dict = Depends(get_current_admin)):
+    """Override a user's profile_id (admin only). Use to fix misassigned IDs."""
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    target = get_user_by_id(db_path, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    new_id = body.profile_id.strip() if body.profile_id else None
+    set_user_profile_id(db_path, user_id, new_id)
+    logger.info("Admin set profile_id=%r for user_id=%d (%s)", new_id, user_id, target["email"])
+    return {"ok": True, "user_id": user_id, "profile_id": new_id}
 
 
 @router.post("/users/{user_id}/reset-onboarding")

@@ -2,12 +2,14 @@ import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Annotated
 
 from authlib.integrations.starlette_client import OAuth
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from api.db.queries import create_session, delete_session, get_session, get_user_by_google_id, upsert_user, set_user_admin
+from api.middleware.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -99,26 +101,7 @@ def logout(request: Request):
 
 
 @router.get("/me")
-def me(request: Request):
-    token = request.cookies.get(SESSION_COOKIE)
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    session = get_session(_db_path(), token)
-    if not session:
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
-    user = get_user_by_google_id(
-        _db_path(),
-        _get_google_id_by_user_id(_db_path(), session["user_id"]),
-    )
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+def me(user: Annotated[dict, Depends(get_current_user)]):
+    """Return current user. When an admin is impersonating, returns impersonated user
+    with is_impersonating=True, real_user_id and real_user_name fields."""
     return {k: v for k, v in user.items() if k not in ("created_at",)}
-
-
-def _get_google_id_by_user_id(db_path: str, user_id: int) -> str:
-    import sqlite3
-    con = sqlite3.connect(db_path)
-    con.row_factory = sqlite3.Row
-    row = con.execute("SELECT google_id FROM users WHERE id = ?", (user_id,)).fetchone()
-    con.close()
-    return row["google_id"] if row else ""

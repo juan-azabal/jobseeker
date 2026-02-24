@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # Parser enum: adtech|data|ml|fintech|saas|ecommerce|healthcare|other
 _DOMAIN_ALIASES: dict[str, str] = {
     "ia": "ml",
+    "ai": "ml",
     "llm": "ml",
     "martech": "adtech",
 }

@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import tempfile
+import uuid
 from typing import Any
 
 import httpx
@@ -17,6 +18,7 @@ from api.db.queries import (
     update_user_profile_id,
     save_user_cv_md, get_user_cv_md,
     save_user_profile_yaml, get_user_profile_yaml,
+    get_user_id_by_profile_id,
 )
 
 MAX_CV_BYTES = 5 * 1024 * 1024  # 5 MB
@@ -68,9 +70,9 @@ def _build_profile_yaml(profile: dict, profile_id: str, salary_min: int, locatio
     )
 
 
-def _generate_profile_id(name: str) -> str:
-    from onboard import _generate_profile_id as _gpi  # noqa: PLC0415
-    return _gpi(name)
+def _generate_profile_id(name: str) -> str:  # noqa: ARG001 — name ignored, kept for compat
+    """Generate a random 8-char hex profile ID. Not derived from name to avoid collisions."""
+    return uuid.uuid4().hex[:8]
 
 
 def _write_profile_files(jobagent_dir: str, profile_id: str, cv_markdown: str, profile_yaml: str) -> None:
@@ -136,7 +138,22 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
         return {"profile_id": existing_profile_id}
 
     # First-time setup: generate full YAML from CV data
-    profile_id = _generate_profile_id(body.profile.get("name", "user"))
+    base_id = _generate_profile_id(body.profile.get("name", "user"))
+    # Avoid collision: if another user already owns this profile_id, append a suffix
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    profile_id = base_id
+    suffix = 2
+    while True:
+        existing_owner = get_user_id_by_profile_id(db_path, profile_id)
+        if existing_owner is None:
+            break  # profile_id is free
+        profile_id = f"{base_id}{suffix}"
+        suffix += 1
+    if profile_id != base_id:
+        logger.warning(
+            "profile_id collision: %r already taken, assigning %r to user_id=%d",
+            base_id, profile_id, user["id"],
+        )
     profile_yaml = _build_profile_yaml(
         body.profile, profile_id, body.salary_min, body.location_preference
     )

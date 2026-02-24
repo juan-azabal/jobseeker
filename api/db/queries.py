@@ -344,6 +344,33 @@ def delete_session(db_path: str, token: str) -> None:
     con.close()
 
 
+def set_session_impersonation(db_path: str, token: str, impersonated_user_id: int | None) -> None:
+    """Set or clear the impersonated_user_id for an active session."""
+    con = _connect(db_path)
+    con.execute(
+        "UPDATE sessions SET impersonated_user_id = ? WHERE token = ?",
+        (impersonated_user_id, token),
+    )
+    con.commit()
+    con.close()
+
+
+def get_user_by_id(db_path: str, user_id: int) -> dict | None:
+    """Return a user row by primary key."""
+    con = _connect(db_path)
+    row = con.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    con.close()
+    return dict(row) if row else None
+
+
+def set_user_profile_id(db_path: str, user_id: int, profile_id: str | None) -> None:
+    """Directly set a user's profile_id (admin operation)."""
+    con = _connect(db_path)
+    con.execute("UPDATE users SET profile_id = ? WHERE id = ?", (profile_id, user_id))
+    con.commit()
+    con.close()
+
+
 def update_user_profile_id(db_path: str, user_id: int, profile_id: str) -> None:
     con = _connect(db_path)
     con.execute("UPDATE users SET profile_id = ? WHERE id = ?", (profile_id, user_id))
