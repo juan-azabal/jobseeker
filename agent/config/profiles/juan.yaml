@@ -12,6 +12,7 @@ user:
   home_locations:
   - barcelona
   - spain
+  - madrid
   location_preference: b
 target:
   level: principal
@@ -20,6 +21,9 @@ target:
     data: 15
     adtech: 12
     saas: 10
+    ml: 10
+    martech: 10
+    llm: 10
 scoring:
   rag_threshold: 25
   salary_min: 60000
@@ -36,13 +40,10 @@ skills:
 - stakeholder-management
 - a/b-testing
 - programmatic-advertising
-- data-platforms
 - analytics
 - personalization
 - ml
-- cros
-- api
-- sdk
+- data-platform
 knowledge:
   dir: knowledge/juan
   profile_files:
