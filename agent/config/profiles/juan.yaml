@@ -12,6 +12,7 @@ user:
   home_locations:
   - barcelona
   - spain
+  - madrid
   location_preference: b
 target:
   level: principal
@@ -20,9 +21,12 @@ target:
     data: 15
     adtech: 12
     saas: 10
+    martech: 10
+    ia: 10
+    llm: 10
 scoring:
   rag_threshold: 25
-  salary_min: 60000
+  salary_min: 70000
 skills:
 - snowplow
 - kafka
@@ -36,9 +40,10 @@ skills:
 - stakeholder-management
 - a/b-testing
 - programmatic-advertising
-- data-platforms
-- personalization
 - analytics
+- personalization
+- ml
+- data-platforms
 knowledge:
   dir: knowledge/juan
   profile_files:
