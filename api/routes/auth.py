@@ -66,6 +66,7 @@ async def callback(request: Request):
         session_token,
         httponly=True,
         samesite="lax",
+        secure=_base_url().startswith("https"),
         max_age=SESSION_TTL_DAYS * 86400,
     )
     return response

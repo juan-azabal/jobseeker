@@ -46,6 +46,26 @@ jobs:
             python main.py --notify --profile "$profile_id"
           done
 
+      - name: Sync results to Railway
+        if: success()
+        env:
+          RAILWAY_URL: ${{ secrets.RAILWAY_URL }}
+          INGEST_API_KEY: ${{ secrets.INGEST_API_KEY }}
+        run: |
+          if [ -z "$RAILWAY_URL" ] || [ -z "$INGEST_API_KEY" ]; then
+            echo "Railway secrets not set — skipping sync"
+            exit 0
+          fi
+          for f in agent/output/jobs_*.json; do
+            [ -f "$f" ] || continue
+            echo "Syncing $(basename $f)..."
+            curl -sf -X POST "$RAILWAY_URL/api/ingest" \
+              -H "Content-Type: application/json" \
+              -H "X-Ingest-Key: $INGEST_API_KEY" \
+              -d "{\"jobs\": $(cat "$f")}"
+            echo " done"
+          done
+
       - name: Persist seen jobs
         run: |
           git config user.name "github-actions[bot]"
