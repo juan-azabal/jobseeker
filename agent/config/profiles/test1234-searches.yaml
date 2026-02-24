@@ -25,4 +25,10 @@ searches:
   - linkedin
   results_wanted: 10
   hours_old: 72
+- term: Principal Product Manager python
+  location: France
+  sites:
+  - linkedin
+  results_wanted: 15
+  hours_old: 72
 is_remote: true
