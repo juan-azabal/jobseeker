@@ -73,6 +73,7 @@ export default function OnboardPage({ onComplete }: Props) {
           profile={profile}
           cvMarkdown={markdown}
           onSaved={onComplete}
+          isNew
         />
       </div>
     );
