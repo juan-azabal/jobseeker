@@ -2,7 +2,8 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-load_dotenv(override=True)  # Must be before route imports — auth.py reads env vars at module level
+load_dotenv()  # Must be before route imports — auth.py reads env vars at module level.
+# NOTE: no override=True — Railway env vars must always take precedence over any .env file.
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
