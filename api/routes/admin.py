@@ -62,6 +62,7 @@ def env_check(admin: dict = Depends(get_current_admin)):
         "gh_ref_value": os.environ.get("GH_REF", "(not set)"),     # safe to expose
         "db_path_value": db_path,                                   # safe to expose
         "db_file_exists": os.path.exists(db_path),
+        "all_env_keys": sorted(os.environ.keys()),                  # names only, no values
     }
 
 
