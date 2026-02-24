@@ -15,6 +15,7 @@ from api.db.queries import (
     get_jobs, get_job_by_id, get_job_status_by_title,
     get_user_job_score, get_total_job_count,
     set_job_applied, set_job_dismissed,
+    get_user_cv_md,
 )
 from api.middleware.auth import get_current_user
 from api.scoring import compute_tier, heuristic_score, load_profile_data
@@ -297,13 +298,15 @@ def generate_cv_endpoint(
     if row is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    user_cv_markdown = ""
-    profile_id = user.get("profile_id")
-    if profile_id:
-        jobagent_dir = os.environ.get("JOBAGENT_DIR", "agent")
-        cv_path = Path(jobagent_dir) / "knowledge" / profile_id / "cv.md"
-        if cv_path.exists():
-            user_cv_markdown = cv_path.read_text(encoding="utf-8")
+    # Prefer DB-stored cv_md (survives redeploys); fall back to disk
+    user_cv_markdown = get_user_cv_md(_db_path(), user["id"]) or ""
+    if not user_cv_markdown:
+        profile_id = user.get("profile_id")
+        if profile_id:
+            jobagent_dir = os.environ.get("JOBAGENT_DIR", "agent")
+            cv_path = Path(jobagent_dir) / "knowledge" / profile_id / "cv.md"
+            if cv_path.exists():
+                user_cv_markdown = cv_path.read_text(encoding="utf-8")
 
     # Inject per-user scored data if available (for plan building)
     ujs = get_user_job_score(_db_path(), user["id"], job_id)

@@ -317,3 +317,19 @@ def update_user_profile_id(db_path: str, user_id: int, profile_id: str) -> None:
     con.execute("UPDATE users SET profile_id = ? WHERE id = ?", (profile_id, user_id))
     con.commit()
     con.close()
+
+
+def save_user_cv_md(db_path: str, user_id: int, cv_md: str) -> None:
+    """Persist cv_md content in the users table so it survives redeploys."""
+    con = _connect(db_path)
+    con.execute("UPDATE users SET cv_md = ? WHERE id = ?", (cv_md, user_id))
+    con.commit()
+    con.close()
+
+
+def get_user_cv_md(db_path: str, user_id: int) -> str | None:
+    """Return the user's stored cv_md, or None if not set."""
+    con = _connect(db_path)
+    row = con.execute("SELECT cv_md FROM users WHERE id = ?", (user_id,)).fetchone()
+    con.close()
+    return row["cv_md"] if row else None
