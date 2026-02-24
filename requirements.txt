@@ -26,5 +26,6 @@ tqdm>=4.66
 pandas>=2.1
 markdownify>=0.13
 CurrencyConverter>=0.17
+country_converter>=0.7
 
 # Agent imported via sys.path (no setup.py). JOBAGENT_DIR=agent
