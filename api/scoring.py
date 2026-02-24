@@ -85,6 +85,69 @@ _DOMAIN_KEYWORDS = {
     ],
 }
 
+# City → country normalisation for country_weights scoring.
+_CITY_TO_COUNTRY: dict[str, str] = {
+    # Spain
+    "barcelona": "spain", "madrid": "spain", "valencia": "spain",
+    "bilbao": "spain", "seville": "spain", "sevilla": "spain",
+    # France
+    "paris": "france", "lyon": "france", "marseille": "france", "toulouse": "france",
+    # Germany
+    "berlin": "germany", "munich": "germany", "münchen": "germany",
+    "hamburg": "germany", "frankfurt": "germany", "cologne": "germany", "köln": "germany",
+    # Netherlands
+    "amsterdam": "netherlands", "rotterdam": "netherlands", "utrecht": "netherlands",
+    # UK
+    "london": "uk", "manchester": "uk", "edinburgh": "uk", "bristol": "uk",
+    # Portugal
+    "lisbon": "portugal", "porto": "portugal", "lisboa": "portugal",
+    # Italy
+    "milan": "italy", "rome": "italy", "milano": "italy", "roma": "italy",
+    # Sweden
+    "stockholm": "sweden", "gothenburg": "sweden",
+    # Denmark
+    "copenhagen": "denmark",
+    # Belgium
+    "brussels": "belgium", "bruxelles": "belgium",
+    # Ireland
+    "dublin": "ireland",
+    # Switzerland
+    "zurich": "switzerland", "zürich": "switzerland", "geneva": "switzerland",
+    # Austria
+    "vienna": "austria", "wien": "austria",
+    # Poland
+    "warsaw": "poland", "krakow": "poland",
+    # Czech Republic
+    "prague": "czech republic",
+    # Finland
+    "helsinki": "finland",
+    # Norway
+    "oslo": "norway",
+}
+
+# ISO language code → text signals that appear in JDs.
+# English is NOT listed here: it's the default language of most tech JDs so
+# detecting it as a "required language" would produce false positives everywhere.
+# All other signals use ≥5-char strings to avoid substring false-matches.
+_LANG_SIGNALS: dict[str, list[str]] = {
+    "fr": ["french", "français", "francais"],
+    "de": ["german", "deutsch"],
+    "pt": ["portuguese", "português", "portugues"],
+    "nl": ["dutch", "flemish", "nederlands"],
+    "es": ["spanish", "español", "espanol", "castellano"],
+    "it": ["italian", "italiano"],
+    "ca": ["catalan", "català", "catala", "valencian"],
+    "ar": ["arabic", "árabe"],
+    "zh": ["chinese", "mandarin"],
+    "ja": ["japanese"],
+    "ko": ["korean"],
+    "pl": ["polish", "polski"],
+    "sv": ["swedish", "svenska"],
+    "da": ["danish", "dansk"],
+    "fi": ["finnish", "suomi"],
+    "no": ["norwegian", "norsk"],
+}
+
 
 def compute_tier(score: int) -> str:
     if score >= 50:
@@ -127,7 +190,9 @@ def _load_profile_yaml_from_db(profile_id: str, profile_path: Path) -> dict | No
 def load_profile_data(profile_id: str | None) -> dict | None:
     """Load profile YAML and return scoring-relevant fields.
 
-    Returns dict with keys: domains, seniority, skills, home_locations, home_regions.
+    Returns dict with keys: domains, seniority, skills, home_locations,
+    home_regions, languages, location_preference, country_weights,
+    company_type_weights.
     Returns None if profile_id is missing or file not found.
     """
     if not profile_id:
@@ -195,6 +260,14 @@ def load_profile_data(profile_id: str | None) -> dict | None:
         "skills": [s.lower() for s in (raw.get("skills") or [])],
         "home_locations": home_locations,
         "home_regions": home_regions,
+        "languages": [lang.lower() for lang in user_block.get("languages", [])],
+        "location_preference": (user_block.get("location_preference") or "b").lower(),
+        "country_weights": {
+            k.lower(): int(v) for k, v in (target_block.get("country_weights") or {}).items()
+        },
+        "company_type_weights": {
+            k.lower(): int(v) for k, v in (target_block.get("company_type_weights") or {}).items()
+        },
     }
 
 
@@ -224,47 +297,134 @@ def _infer_domain(parsed: dict) -> str:
 def heuristic_score(profile: dict, parsed: dict, job: dict, is_reloc: bool) -> int:
     """Compute heuristic fit score 0-100 from parsed job data + user profile.
 
+    Score budget:
+      Domain          0-15
+      Seniority       0-15
+      Skills          0-30  (must-have 5×cap20 + nice-to-have 3×cap10)
+      Location        0-10
+      Country bonus   ±10
+      Language bonus  0-10
+      Company type    ±15
+      Red flags       0 to -15
+
     Args:
         profile: dict from load_profile_data()
         parsed: job's parsed JSON blob (dict)
         job: raw job row (for location field)
-        is_reloc: whether the job requires relocation for this user
+        is_reloc: unused — kept for API compatibility
     """
     if not parsed:
         return 0
 
     score = 0
 
-    # Domain (0-15) with override
+    # ── Domain (0-15) ───────────────────────────────────────────────────────
     domain = _infer_domain(parsed)
     score += profile["domains"].get(domain, 0)
 
-    # Seniority (0-15)
+    # ── Seniority (0-15) ────────────────────────────────────────────────────
     score += profile["seniority"].get(parsed.get("seniority", "unknown"), 0)
 
-    # Location (0-10)
-    loc_type = parsed.get("location_type", "unknown")
-    job_loc = (job.get("location") or "").lower()
-    home_locations = profile["home_locations"]
-
-    if loc_type == "remote" and not is_reloc:
-        score += 10
-    elif loc_type == "hybrid" and any(c in job_loc for c in home_locations):
-        score += 8
-    elif loc_type == "onsite" and any(c in job_loc for c in home_locations):
-        score += 6
-
-    # Skill overlap (0-30)
-    all_text = " ".join(
-        [s.lower() for s in parsed.get("must_have_skills", [])]
-        + [s.lower() for s in parsed.get("nice_to_have_skills", [])]
-        + [s.lower() for s in parsed.get("technical_stack", [])]
+    # ── Skills (0-30) ───────────────────────────────────────────────────────
+    # Must-have skills (technical-only since parser v1.1): 5 pts each, cap 20.
+    # Nice-to-have + technical stack text bag: 3 pts each, cap 10.
+    must_have_list = [s.lower() for s in (parsed.get("must_have_skills") or [])]
+    nice_text = " ".join(
+        [s.lower() for s in (parsed.get("nice_to_have_skills") or [])]
+        + [s.lower() for s in (parsed.get("technical_stack") or [])]
         + [parsed.get("responsibilities_summary", "").lower()]
     )
-    matches = sum(1 for skill in profile["skills"] if skill in all_text)
-    score += min(30, matches * 4)
+    must_matches = sum(1 for skill in profile["skills"] if skill in must_have_list)
+    nice_matches = sum(
+        1 for skill in profile["skills"]
+        if skill in nice_text and skill not in must_have_list
+    )
+    score += min(20, must_matches * 5) + min(10, nice_matches * 3)
 
-    # Red flags (-5 each, max -15)
+    # ── Location (0-10) ─────────────────────────────────────────────────────
+    loc_pref = profile.get("location_preference", "b")
+    loc_type = parsed.get("location_type", "unknown")
+    job_loc = (job.get("location") or "").lower()
+    home_locations = profile.get("home_locations", [])
+    home_regions = profile.get("home_regions", [])
+
+    if loc_pref == "a":
+        # Remote-only: remote full score, hybrid partial, onsite nothing
+        if loc_type == "remote":
+            score += 10
+        elif loc_type == "hybrid":
+            score += 4
+    elif loc_pref == "b":
+        # Remote + home city (default legacy behaviour)
+        if loc_type == "remote":
+            score += 10
+        elif loc_type == "hybrid" and any(c in job_loc for c in home_locations):
+            score += 8
+        elif loc_type == "onsite" and any(c in job_loc for c in home_locations):
+            score += 6
+    elif loc_pref == "c":
+        # Anywhere in same country
+        all_home = home_locations + home_regions
+        if loc_type == "remote":
+            score += 10
+        elif loc_type in ("hybrid", "onsite") and any(c in job_loc for c in all_home):
+            score += 8
+        elif loc_type == "hybrid":
+            score += 3  # partial credit: hybrid is flexible even without country match
+    elif loc_pref == "d":
+        # Anywhere in Europe — onsite/hybrid everywhere is fine
+        if loc_type == "remote":
+            score += 10
+        elif loc_type == "hybrid":
+            score += 10
+        elif loc_type == "onsite":
+            score += 8
+
+    # ── Country weights (±10) ───────────────────────────────────────────────
+    country_weights = profile.get("country_weights", {})
+    if country_weights:
+        locations_mentioned = [
+            loc.lower() for loc in (parsed.get("locations_mentioned") or [])
+        ]
+        # Normalise city names → country names
+        normalized_locs = {
+            _CITY_TO_COUNTRY.get(loc, loc) for loc in locations_mentioned
+        }
+        # Remote jobs are accessible from any preferred location
+        if loc_type == "remote":
+            normalized_locs.add("remote")
+        if normalized_locs:
+            best = max(country_weights.get(loc, 0) for loc in normalized_locs)
+            score += max(-10, min(10, best))
+
+    # ── Language bonus (0-10) ───────────────────────────────────────────────
+    languages = profile.get("languages", [])
+    if languages:
+        lang_text = " ".join([
+            parsed.get("experience_requirements", ""),
+            parsed.get("responsibilities_summary", ""),
+            job.get("title", ""),
+            (job.get("description") or "")[:1000],
+        ]).lower()
+        lang_bonus = 0
+        for lang in languages:
+            signals = _LANG_SIGNALS.get(lang.lower())
+            if signals is None:
+                # Unknown ISO code — skip; too short to safely use as substring
+                continue
+            if any(s in lang_text for s in signals):
+                lang_bonus += 5
+        score += min(10, lang_bonus)
+
+    # ── Company type (±15) ──────────────────────────────────────────────────
+    company_type_weights = profile.get("company_type_weights", {})
+    if company_type_weights:
+        company_type = (parsed.get("company_type") or "").lower()
+        if company_type:
+            ct_score = company_type_weights.get(company_type, 0)
+            score += max(-15, min(15, ct_score))
+
+    # ── Red flags (-5 each, max -15) ────────────────────────────────────────
     score -= min(15, len(parsed.get("red_flags") or []) * 5)
 
     return max(0, min(100, score))

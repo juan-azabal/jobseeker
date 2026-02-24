@@ -23,6 +23,10 @@ target:
   seniority_weights:
     director: 15
     senior: 10
+  country_weights:
+    spain: 10
+    remote: 10
+    france: 8
   domains:
     data: 15
     ecommerce: 5

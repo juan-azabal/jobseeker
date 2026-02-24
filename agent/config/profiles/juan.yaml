@@ -21,6 +21,12 @@ target:
     principal: 15
     staff: 12
     senior: 8
+  country_weights:
+    spain: 10
+    remote: 10
+    france: 5
+    germany: 3
+    netherlands: 3
   domains:
     data: 15
     adtech: 12

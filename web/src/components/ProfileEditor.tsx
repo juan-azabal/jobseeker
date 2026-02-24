@@ -1,6 +1,8 @@
 import { useState } from 'react';
 
 const SENIORITY_OPTIONS = ['junior', 'mid', 'senior', 'staff', 'principal', 'director', 'vp'];
+const COMPANY_TYPE_OPTIONS = ['startup', 'scaleup', 'enterprise', 'consultancy', 'agency', 'ngo'];
+const COMMON_COUNTRIES = ['spain', 'germany', 'netherlands', 'france', 'uk', 'portugal', 'remote'];
 
 interface Profile {
   name: string;
@@ -12,6 +14,8 @@ interface Profile {
   target_level: string;
   seniority_weights: Record<string, number>;
   domains: Record<string, number>;
+  country_weights: Record<string, number>;
+  company_type_weights: Record<string, number>;
   skills: string[];
   exclude_companies: string[];
   salary_min?: number;
@@ -37,12 +41,16 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
   );
   const [salaryMin, setSalaryMin] = useState(profile.salary_min ?? 60000);
   const [locationPref, setLocationPref] = useState(profile.location_preference ?? 'b');
+  const [countryWeights, setCountryWeights] = useState<Record<string, number>>(profile.country_weights ?? {});
+  const [companyTypeWeights, setCompanyTypeWeights] = useState<Record<string, number>>(profile.company_type_weights ?? {});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newDomain, setNewDomain] = useState('');
   const [newSkill, setNewSkill] = useState('');
   const [newLocation, setNewLocation] = useState('');
   const [newSeniority, setNewSeniority] = useState('');
+  const [newCountry, setNewCountry] = useState('');
+  const [newCompanyType, setNewCompanyType] = useState('');
 
   const handleSave = async () => {
     setError(null);
@@ -56,7 +64,7 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cv_markdown: cvMarkdown,
-          profile: { ...profile, name, skills, home_locations: locations, domains, seniority_weights: seniorityWeights },
+          profile: { ...profile, name, skills, home_locations: locations, domains, seniority_weights: seniorityWeights, country_weights: countryWeights, company_type_weights: companyTypeWeights },
           salary_min: salaryMin,
           location_preference: locationPref,
         }),
@@ -71,6 +79,8 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
           home_locations: locations,
           domains,
           seniority_weights: seniorityWeights,
+          country_weights: countryWeights,
+          company_type_weights: companyTypeWeights,
           skills,
           salary_min: salaryMin,
           location_preference: locationPref,
@@ -114,6 +124,32 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
     const next = { ...seniorityWeights };
     delete next[key];
     setSeniorityWeights(next);
+  };
+
+  const addCountry = (raw?: string) => {
+    const key = (raw ?? newCountry).trim().toLowerCase();
+    if (!key || key in countryWeights) return;
+    setCountryWeights({ ...countryWeights, [key]: 5 });
+    setNewCountry('');
+  };
+
+  const removeCountry = (key: string) => {
+    const next = { ...countryWeights };
+    delete next[key];
+    setCountryWeights(next);
+  };
+
+  const addCompanyType = (raw?: string) => {
+    const key = (raw ?? newCompanyType).trim().toLowerCase();
+    if (!key || key in companyTypeWeights) return;
+    setCompanyTypeWeights({ ...companyTypeWeights, [key]: 5 });
+    setNewCompanyType('');
+  };
+
+  const removeCompanyType = (key: string) => {
+    const next = { ...companyTypeWeights };
+    delete next[key];
+    setCompanyTypeWeights(next);
   };
 
   const addSkill = () => {
@@ -328,6 +364,118 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
           <option value="c">Anywhere in country</option>
           <option value="d">Anywhere in Europe</option>
         </select>
+      </div>
+
+      {/* Country weights */}
+      <div>
+        <label className="block text-zinc-300 text-sm font-medium mb-1">Country preferences</label>
+        <p className="text-zinc-500 text-xs mb-3">
+          Score jobs higher or lower based on where they're located. Negative = avoid. Add "remote" for fully remote jobs.
+        </p>
+        {Object.entries(countryWeights).map(([country, weight]) => (
+          <div key={country} className="flex items-center gap-3 mb-2">
+            <span className="text-zinc-400 text-sm w-24 truncate capitalize">{country}</span>
+            <input
+              type="range"
+              min={-10}
+              max={10}
+              value={weight}
+              className="flex-1"
+              onChange={(e) => setCountryWeights({ ...countryWeights, [country]: Number(e.target.value) })}
+            />
+            <span className={`text-sm w-7 text-right ${weight < 0 ? 'text-red-400' : weight > 0 ? 'text-emerald-400' : 'text-zinc-500'}`}>
+              {weight}
+            </span>
+            <button
+              onClick={() => removeCountry(country)}
+              className="text-zinc-600 hover:text-red-400 transition-colors text-sm leading-none"
+              title="Remove country"
+            >×</button>
+          </div>
+        ))}
+        {/* Quick-add common countries not yet in weights */}
+        <div className="flex flex-wrap gap-1.5 mt-2 mb-3">
+          {COMMON_COUNTRIES.filter((c) => !(c in countryWeights)).map((c) => (
+            <button
+              key={c}
+              onClick={() => addCountry(c)}
+              className="rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-500 transition-colors hover:border-zinc-500 hover:text-zinc-300 capitalize"
+            >
+              + {c}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            className="flex-1 rounded bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+            placeholder="Add country…"
+            value={newCountry}
+            onChange={(e) => setNewCountry(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addCountry()}
+          />
+          <button
+            onClick={() => addCountry()}
+            className="rounded bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-600 hover:text-white"
+          >
+            Add
+          </button>
+        </div>
+      </div>
+
+      {/* Company type weights */}
+      <div>
+        <label className="block text-zinc-300 text-sm font-medium mb-1">Company type preferences</label>
+        <p className="text-zinc-500 text-xs mb-3">
+          Optionally boost or penalise jobs by company type. Leave empty to treat all types equally.
+        </p>
+        {Object.entries(companyTypeWeights).map(([ct, weight]) => (
+          <div key={ct} className="flex items-center gap-3 mb-2">
+            <span className="text-zinc-400 text-sm w-24 truncate capitalize">{ct}</span>
+            <input
+              type="range"
+              min={-15}
+              max={15}
+              value={weight}
+              className="flex-1"
+              onChange={(e) => setCompanyTypeWeights({ ...companyTypeWeights, [ct]: Number(e.target.value) })}
+            />
+            <span className={`text-sm w-7 text-right ${weight < 0 ? 'text-red-400' : weight > 0 ? 'text-emerald-400' : 'text-zinc-500'}`}>
+              {weight}
+            </span>
+            <button
+              onClick={() => removeCompanyType(ct)}
+              className="text-zinc-600 hover:text-red-400 transition-colors text-sm leading-none"
+              title="Remove company type"
+            >×</button>
+          </div>
+        ))}
+        {/* Quick-add buttons for common types */}
+        <div className="flex flex-wrap gap-1.5 mt-2 mb-3">
+          {COMPANY_TYPE_OPTIONS.filter((t) => !(t in companyTypeWeights)).map((t) => (
+            <button
+              key={t}
+              onClick={() => addCompanyType(t)}
+              className="rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-500 transition-colors hover:border-zinc-500 hover:text-zinc-300 capitalize"
+            >
+              + {t}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            className="flex-1 rounded bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+            placeholder="Add company type…"
+            value={newCompanyType}
+            onChange={(e) => setNewCompanyType(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addCompanyType()}
+          />
+          <button
+            onClick={() => addCompanyType()}
+            className="rounded bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-600 hover:text-white"
+          >
+            Add
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-red-400 text-sm">{error}</p>}

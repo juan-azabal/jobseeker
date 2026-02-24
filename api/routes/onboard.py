@@ -231,6 +231,18 @@ def _generate_searches_yaml(profile: dict) -> str:
             "hours_old": 72,
         })
 
+    # LinkedIn skill-based: title + top profile skill (extra precision signal)
+    skills = profile.get("skills") or []
+    if skills:
+        top_skill = skills[0]
+        searches.append({
+            "term": f"{title} {top_skill}",
+            "location": primary_locations[0] if primary_locations and primary_locations[0] else "",
+            "sites": ["linkedin"],
+            "results_wanted": 15,
+            "hours_old": 72,
+        })
+
     return yaml.dump({"searches": searches, "is_remote": True},
                      default_flow_style=False, allow_unicode=True, sort_keys=False)
 
@@ -501,6 +513,8 @@ async def get_profile(user: dict = Depends(get_current_user)):
         # UI preferences (may not exist in manually-created YAMLs — use sensible defaults)
         "salary_min": target_block.get("salary_min", 60000),
         "location_preference": user_block.get("location_preference", "b"),
+        "country_weights": target_block.get("country_weights", {}),
+        "company_type_weights": target_block.get("company_type_weights", {}),
     }
 
     # Prefer DB-stored cv_md (survives redeploys); fall back to disk
@@ -521,6 +535,8 @@ class UpdateProfileRequest(BaseModel):
     home_locations: list[str]
     domains: dict[str, int]
     seniority_weights: dict[str, int] = {}
+    country_weights: dict[str, int] = {}
+    company_type_weights: dict[str, int] = {}
     skills: list[str]
     salary_min: int = 60000
     location_preference: str = "b"
@@ -573,6 +589,10 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
     if body.seniority_weights:
         raw["target"]["seniority_weights"] = CommentedMap(body.seniority_weights)
 
+    # Store country and company type weights (always write — empty dict clears them)
+    raw["target"]["country_weights"] = CommentedMap(body.country_weights)
+    raw["target"]["company_type_weights"] = CommentedMap(body.company_type_weights)
+
     # Replace skills as a plain list
     raw["skills"] = CommentedSeq(body.skills)
 
@@ -594,6 +614,7 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
         "track": target_block.get("track", "ic"),
         "domains": body.domains,
         "home_locations": body.home_locations,
+        "skills": body.skills,
     }
     try:
         searches_yaml = _generate_searches_yaml(profile_for_searches)
