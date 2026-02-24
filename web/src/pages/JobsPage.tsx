@@ -33,7 +33,7 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalInDb, setTotalInDb] = useState<number | null>(null);
-  const [filters, setFilters] = useState<Filters>({ tiers: ['A', 'B'], period: 'all', hideApplied: false, hideGeoRestricted: true });
+  const [filters, setFilters] = useState<Filters>({ tiers: ['A', 'B'], period: 'all', hideApplied: false, hideGeoRestricted: false });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -171,7 +171,7 @@ export default function JobsPage() {
           <div className="mt-16 text-center">
             <p className="text-sm text-zinc-600">No jobs match your current filters.</p>
             <button
-              onClick={() => setFilters({ tiers: ['A', 'B'], period: 'all', hideApplied: false, hideGeoRestricted: true })}
+              onClick={() => setFilters({ tiers: ['A', 'B'], period: 'all', hideApplied: false, hideGeoRestricted: false })}
               className="mt-3 text-xs text-zinc-500 underline hover:text-zinc-300 transition-colors"
             >
               Reset filters
