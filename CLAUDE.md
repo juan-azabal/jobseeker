@@ -129,6 +129,7 @@ Phase 8 — Completed
 - `juan.yaml` was accidentally overwritten by onboarding flow; profile YAML lives at `agent/config/profiles/juan.yaml`
 - Hamburger menu (`HamburgerMenu` component in `App.tsx`) replaces inline nav links; dropdown closes on outside click via `mousedown` listener + `useRef`
 - ProfileEditor: `addDomain` adds with weight 10; `removeDomain` deletes key from state; `addSkill`/`removeSkill` mutate array. Enter key supported on both inputs.
+- OnboardPage must pass `isNew` to ProfileEditor so first-time save uses POST `/save-profile` (creates YAML) instead of PATCH `/profile` (requires existing profile_id).
 
 - jobagent parser v1.1 (2026-02-23): `must_have_skills` in parsed JSON is now technical-only (SQL, Python, dbt…). Soft skills / years of experience / education requirements moved to new `experience_requirements` field. `key_tools` extraction in `api/cv/plan.py` benefits automatically — no jobseeker code change needed. `experience_requirements` available in `row["parsed"]["experience_requirements"]` for future use (scoring improvements, CV generation context).
 
