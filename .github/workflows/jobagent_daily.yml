@@ -63,6 +63,9 @@ jobs:
             echo "Railway secrets not set — skipping sync"
             exit 0
           fi
+          # Ensure HTTPS — Railway redirects HTTP→HTTPS and curl won't re-send POST body
+          case "$RAILWAY_URL" in http://*) RAILWAY_URL="https://${RAILWAY_URL#http://}" ;; esac
+          echo "Target: $RAILWAY_URL"
           for f in agent/output/jobs_*.json; do
             [ -f "$f" ] || continue
             echo "Syncing $(basename $f)..."
@@ -103,6 +106,7 @@ jobs:
             echo "Railway secrets not set — skipping health check"
             exit 0
           fi
+          case "$RAILWAY_URL" in http://*) RAILWAY_URL="https://${RAILWAY_URL#http://}" ;; esac
           echo "=== Pipeline health ==="
           response=$(curl -s -w "\n%{http_code}" "$RAILWAY_URL/api/ingest/status" \
             -H "X-Ingest-Key: $INGEST_API_KEY")
