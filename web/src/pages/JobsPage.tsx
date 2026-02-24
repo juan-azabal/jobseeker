@@ -30,6 +30,7 @@ function buildCVPrompt(jobs: JobSummary[]): string {
 export default function JobsPage() {
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [totalInDb, setTotalInDb] = useState<number | null>(null);
   const [filters, setFilters] = useState<Filters>({ tiers: ['A', 'B'], period: 'all', hideApplied: false });
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -41,17 +42,25 @@ export default function JobsPage() {
   const fetchJobs = (f: Filters) => {
     const qs = filtersToQuery(f);
     return fetch(`/api/jobs${qs ? '?' + qs : ''}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then((data: JobsResponse) => {
         setJobs(data.jobs);
         setTotalInDb(data.total_in_db);
+        setError(null);
         return data;
+      })
+      .catch((err: unknown) => {
+        console.error('fetchJobs error:', err);
+        setError('Failed to load jobs. Please refresh.');
       });
   };
 
   useEffect(() => {
     setLoading(true);
-    fetchJobs(filters).then(() => setLoading(false));
+    fetchJobs(filters).finally(() => setLoading(false));
 
     const url = new URL(window.location.href);
     if (filters.period !== 'all') url.searchParams.set('period', filters.period);
@@ -81,30 +90,36 @@ export default function JobsPage() {
 
   const handleBulkApply = async () => {
     setApplying(true);
-    await Promise.all(
-      [...selected].map((id) =>
-        fetch(`/api/jobs/${id}/apply`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ applied: true }),
-        }),
-      ),
-    );
-    setApplying(false);
-    setSelected(new Set());
-    fetchJobs(filters);
+    try {
+      await Promise.all(
+        [...selected].map((id) =>
+          fetch(`/api/jobs/${id}/apply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ applied: true }),
+          }),
+        ),
+      );
+      setSelected(new Set());
+      fetchJobs(filters);
+    } finally {
+      setApplying(false);
+    }
   };
 
   const handleBulkDismiss = async () => {
     setDismissing(true);
-    await Promise.all(
-      [...selected].map((id) =>
-        fetch(`/api/jobs/${id}/dismiss`, { method: 'POST' }),
-      ),
-    );
-    setDismissing(false);
-    setSelected(new Set());
-    fetchJobs(filters);
+    try {
+      await Promise.all(
+        [...selected].map((id) =>
+          fetch(`/api/jobs/${id}/dismiss`, { method: 'POST' }),
+        ),
+      );
+      setSelected(new Set());
+      fetchJobs(filters);
+    } finally {
+      setDismissing(false);
+    }
   };
 
   const handleBulkCVCopy = () => {
@@ -130,6 +145,16 @@ export default function JobsPage() {
         {loading ? (
           <div className="mt-16 text-center">
             <p className="text-xs text-zinc-600">Loading…</p>
+          </div>
+        ) : error ? (
+          <div className="mt-16 text-center">
+            <p className="text-sm text-red-400">{error}</p>
+            <button
+              onClick={() => { setLoading(true); fetchJobs(filters).finally(() => setLoading(false)); }}
+              className="mt-3 text-xs text-zinc-500 underline hover:text-zinc-300 transition-colors"
+            >
+              Try again
+            </button>
           </div>
         ) : jobs.length === 0 && totalInDb === 0 ? (
           <div className="mt-16 text-center">

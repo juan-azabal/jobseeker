@@ -16,23 +16,30 @@ export default function AdminPage() {
   const { user, isLoading } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
+  const [usersError, setUsersError] = useState(false);
   const [profile, setProfile] = useState('');
   const [triggering, setTriggering] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{ ok: boolean; message: string } | null>(null);
 
-  // Redirect non-admins
+  // Fetch users — must be before early returns to satisfy Rules of Hooks
+  useEffect(() => {
+    fetch('/api/admin/users')
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data: AdminUser[]) => {
+        setUsers(data);
+        setUsersError(false);
+      })
+      .catch(() => setUsersError(true))
+      .finally(() => setUsersLoading(false));
+  }, []);
+
+  // Redirect non-admins (after hooks)
   if (!isLoading && (!user || !user.is_admin)) {
     return <Navigate to="/jobs" replace />;
   }
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    fetch('/api/admin/users')
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setUsers)
-      .catch(() => setUsers([]))
-      .finally(() => setUsersLoading(false));
-  }, []);
 
   async function handleTrigger() {
     setTriggering(true);
@@ -103,6 +110,8 @@ export default function AdminPage() {
         </h2>
         {usersLoading ? (
           <p className="text-sm text-zinc-500">Loading…</p>
+        ) : usersError ? (
+          <p className="text-sm text-red-400">Failed to load users.</p>
         ) : users.length === 0 ? (
           <p className="text-sm text-zinc-500">No users found.</p>
         ) : (
