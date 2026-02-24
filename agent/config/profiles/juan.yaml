@@ -17,6 +17,10 @@ user:
 target:
   level: principal
   track: ic
+  seniority_weights:
+    principal: 15
+    staff: 12
+    senior: 8
   domains:
     data: 15
     adtech: 12

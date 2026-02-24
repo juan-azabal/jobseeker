@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+const SENIORITY_OPTIONS = ['junior', 'mid', 'senior', 'staff', 'principal', 'director', 'vp'];
+
 interface Profile {
   name: string;
   email: string | null;
@@ -8,6 +10,7 @@ interface Profile {
   current_level: string;
   track: string;
   target_level: string;
+  seniority_weights: Record<string, number>;
   domains: Record<string, number>;
   skills: string[];
   exclude_companies: string[];
@@ -29,6 +32,9 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
   const [skills, setSkills] = useState<string[]>(profile.skills);
   const [locations, setLocations] = useState<string[]>(profile.home_locations);
   const [domains, setDomains] = useState<Record<string, number>>(profile.domains);
+  const [seniorityWeights, setSeniorityWeights] = useState<Record<string, number>>(
+    profile.seniority_weights ?? {}
+  );
   const [salaryMin, setSalaryMin] = useState(profile.salary_min ?? 60000);
   const [locationPref, setLocationPref] = useState(profile.location_preference ?? 'b');
   const [saving, setSaving] = useState(false);
@@ -36,6 +42,7 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
   const [newDomain, setNewDomain] = useState('');
   const [newSkill, setNewSkill] = useState('');
   const [newLocation, setNewLocation] = useState('');
+  const [newSeniority, setNewSeniority] = useState('');
 
   const handleSave = async () => {
     setError(null);
@@ -49,13 +56,13 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cv_markdown: cvMarkdown,
-          profile: { ...profile, name, skills, home_locations: locations, domains },
+          profile: { ...profile, name, skills, home_locations: locations, domains, seniority_weights: seniorityWeights },
           salary_min: salaryMin,
           location_preference: locationPref,
         }),
       });
     } else {
-      // Existing user: PATCH — surgically update editable fields, preserve stories/seniority
+      // Existing user: PATCH — surgically update editable fields, preserve stories etc.
       resp = await fetch('/api/onboard/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -63,6 +70,7 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
           name,
           home_locations: locations,
           domains,
+          seniority_weights: seniorityWeights,
           skills,
           salary_min: salaryMin,
           location_preference: locationPref,
@@ -95,6 +103,19 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
     setDomains(next);
   };
 
+  const addSeniority = (raw?: string) => {
+    const key = (raw ?? newSeniority).trim().toLowerCase();
+    if (!key || key in seniorityWeights) return;
+    setSeniorityWeights({ ...seniorityWeights, [key]: 10 });
+    setNewSeniority('');
+  };
+
+  const removeSeniority = (key: string) => {
+    const next = { ...seniorityWeights };
+    delete next[key];
+    setSeniorityWeights(next);
+  };
+
   const addSkill = () => {
     const s = newSkill.trim().toLowerCase();
     if (!s || skills.includes(s)) return;
@@ -119,6 +140,60 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
+      </div>
+
+      {/* Seniority weights */}
+      <div>
+        <label className="block text-zinc-300 text-sm font-medium mb-1">Seniority weights</label>
+        <p className="text-zinc-500 text-xs mb-3">
+          How much to prioritize each seniority level. Higher = more relevant. Add levels from your CV or that you aspire to.
+        </p>
+        {Object.entries(seniorityWeights).map(([level, weight]) => (
+          <div key={level} className="flex items-center gap-3 mb-2">
+            <span className="text-zinc-400 text-sm w-20 truncate capitalize">{level}</span>
+            <input
+              type="range"
+              min={1}
+              max={15}
+              value={weight}
+              className="flex-1"
+              onChange={(e) => setSeniorityWeights({ ...seniorityWeights, [level]: Number(e.target.value) })}
+            />
+            <span className="text-emerald-400 text-sm w-7 text-right">{weight}</span>
+            <button
+              onClick={() => removeSeniority(level)}
+              className="text-zinc-600 hover:text-red-400 transition-colors text-sm leading-none"
+              title="Remove level"
+            >×</button>
+          </div>
+        ))}
+        {/* Quick-add buttons for common levels not yet in weights */}
+        <div className="flex flex-wrap gap-1.5 mt-2 mb-3">
+          {SENIORITY_OPTIONS.filter((l) => !(l in seniorityWeights)).map((l) => (
+            <button
+              key={l}
+              onClick={() => addSeniority(l)}
+              className="rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-500 transition-colors hover:border-zinc-500 hover:text-zinc-300 capitalize"
+            >
+              + {l}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            className="flex-1 rounded bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+            placeholder="Add custom level…"
+            value={newSeniority}
+            onChange={(e) => setNewSeniority(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addSeniority()}
+          />
+          <button
+            onClick={() => addSeniority()}
+            className="rounded bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-600 hover:text-white"
+          >
+            Add
+          </button>
+        </div>
       </div>
 
       {/* Domain weights */}

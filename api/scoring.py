@@ -179,10 +179,15 @@ def load_profile_data(profile_id: str | None) -> dict | None:
         canonical = _DOMAIN_ALIASES.get(domain, domain)
         normalized_domains[canonical] = max(normalized_domains.get(canonical, 0), weight)
 
-    # Compute seniority weights from level+track (never stored in YAML per convention)
-    level = target_block.get("level", "")
-    track = target_block.get("track", "ic")
-    seniority_weights = _compute_seniority_weights(level, track)
+    # Prefer explicitly stored seniority_weights; fall back to computing from level+track
+    # for backward compat with profiles that pre-date the seniority_weights feature.
+    stored_sw = target_block.get("seniority_weights")
+    if stored_sw:
+        seniority_weights = {k.lower(): int(v) for k, v in stored_sw.items()}
+    else:
+        level = target_block.get("level", "")
+        track = target_block.get("track", "ic")
+        seniority_weights = _compute_seniority_weights(level, track)
 
     return {
         "domains": normalized_domains,

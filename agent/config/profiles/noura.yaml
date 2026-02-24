@@ -20,6 +20,9 @@ user:
 target:
   level: director
   track: management
+  seniority_weights:
+    director: 15
+    senior: 10
   domains:
     data: 15
     ecommerce: 5

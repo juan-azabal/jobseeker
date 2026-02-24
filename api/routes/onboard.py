@@ -53,6 +53,9 @@ class GenerateProfileRequest(BaseModel):
 @router.post("/generate-profile", dependencies=[Depends(get_current_user)])
 async def generate_profile(body: GenerateProfileRequest):
     profile = _extract_profile_from_cv(body.cv_markdown)
+    # Bootstrap seniority_weights from extracted current/target level so the
+    # ProfileEditor can show them as editable sliders from the start.
+    profile.setdefault("seniority_weights", _derive_seniority_weights(profile))
     return profile
 
 
@@ -143,13 +146,34 @@ _LOCATION_MAP: dict[str, str] = {
 }
 
 
+def _derive_seniority_weights(profile: dict) -> dict[str, int]:
+    """Bootstrap seniority_weights from CV-extracted current/target level.
+
+    Called during generate-profile and first-time save-profile to give users
+    a sensible starting point they can then adjust in the ProfileEditor.
+    """
+    current = (profile.get("current_level") or "").lower().strip()
+    target = (profile.get("target_level") or "").lower().strip()
+    weights: dict[str, int] = {}
+    if target:
+        weights[target] = 15  # primary aspirational level
+    if current and current != target:
+        weights[current] = 10  # level already demonstrated
+    return weights
+
+
 def _generate_searches_yaml(profile: dict) -> str:
     """Generate a per-user searches.yaml based on their profile (level, track, domains, locations).
 
     Uses programmatic rules — no LLM. Called during first-time onboarding.
     Returns the YAML string to write as {profile_id}-searches.yaml.
     """
-    level = (profile.get("target_level") or profile.get("current_level") or "senior").lower()
+    # Prefer seniority_weights (user-defined) over the old level field.
+    sw = profile.get("seniority_weights") or {}
+    if sw:
+        level = max(sw, key=lambda k: sw[k])
+    else:
+        level = (profile.get("target_level") or profile.get("current_level") or "senior").lower()
     track = (profile.get("track") or "ic").lower()
 
     # Normalize and sort domains by weight (top 3)
@@ -289,12 +313,17 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
         body.profile, profile_id, body.salary_min, body.location_preference
     )
 
-    # Generate per-user searches and patch the profile YAML to reference it
+    # Generate per-user searches and patch the profile YAML to reference it.
+    # Also inject seniority_weights (user-editable, not in the agent's _build_profile_yaml).
     searches_yaml = _generate_searches_yaml(body.profile)
     searches_rel_path = f"config/profiles/{profile_id}-searches.yaml"
     try:
         profile_data = yaml.safe_load(profile_yaml)
         profile_data["searches"] = searches_rel_path
+        # Store user-defined seniority_weights (prefer what the user set in ProfileEditor)
+        sw = body.profile.get("seniority_weights") or _derive_seniority_weights(body.profile)
+        if sw:
+            profile_data.setdefault("target", {})["seniority_weights"] = sw
         profile_yaml = yaml.dump(profile_data, default_flow_style=False,
                                  allow_unicode=True, sort_keys=False)
         logger.info("Generated per-user searches for %s (%d searches)",
@@ -451,14 +480,21 @@ async def get_profile(user: dict = Depends(get_current_user)):
     # Normalize nested YAML (jobagent format) → flat format ProfileEditor expects
     user_block = raw.get("user", {})
     target_block = raw.get("target", {})
+    # seniority_weights: prefer explicitly stored value; derive from level+track for
+    # older profiles that pre-date this feature.
+    stored_sw = target_block.get("seniority_weights") or {}
+    if not stored_sw:
+        stored_sw = _derive_seniority_weights({"target_level": target_block.get("level", "senior")})
+
     profile_data = {
         "name": user_block.get("name", ""),
         "email": user_block.get("email", None),
         "languages": user_block.get("languages", []),
         "home_locations": user_block.get("home_locations", []),
         "current_level": "",
-        "track": "",
-        "target_level": "",
+        "track": target_block.get("track", "ic"),
+        "target_level": target_block.get("level", ""),
+        "seniority_weights": stored_sw,
         "domains": target_block.get("domains", {}),
         "skills": raw.get("skills", []),
         "exclude_companies": user_block.get("exclude_companies", []),
@@ -484,6 +520,7 @@ class UpdateProfileRequest(BaseModel):
     name: str
     home_locations: list[str]
     domains: dict[str, int]
+    seniority_weights: dict[str, int] = {}
     skills: list[str]
     salary_min: int = 60000
     location_preference: str = "b"
@@ -532,6 +569,10 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
     domains_node = CommentedMap(body.domains)
     raw["target"]["domains"] = domains_node
 
+    # Store user-defined seniority weights
+    if body.seniority_weights:
+        raw["target"]["seniority_weights"] = CommentedMap(body.seniority_weights)
+
     # Replace skills as a plain list
     raw["skills"] = CommentedSeq(body.skills)
 
@@ -544,10 +585,11 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
     # Persist updated YAML to DB so it survives redeploys
     save_user_profile_yaml(db_path_patch, user["id"], updated_yaml)
 
-    # Regenerate per-user searches from the updated profile
-    # level/track come from the YAML (not editable in UI yet, but already in the profile)
+    # Regenerate per-user searches from the updated profile.
+    # seniority_weights from the request take priority; track still comes from YAML.
     target_block = raw.get("target") or {}
     profile_for_searches = {
+        "seniority_weights": body.seniority_weights or target_block.get("seniority_weights") or {},
         "target_level": target_block.get("level", "senior"),
         "track": target_block.get("track", "ic"),
         "domains": body.domains,
