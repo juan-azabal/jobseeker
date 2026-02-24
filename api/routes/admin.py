@@ -5,7 +5,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from api.db.queries import get_all_users
+from api.db.queries import get_all_users, reset_user_onboarding
 from api.middleware.auth import get_current_admin
 
 logger = logging.getLogger(__name__)
@@ -22,9 +22,21 @@ def list_users(admin: dict = Depends(get_current_admin)):
     """Return all registered users with admin flags."""
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
     users = get_all_users(db_path)
-    # Strip sensitive columns before returning
-    safe_keys = {"id", "email", "name", "avatar_url", "profile_id", "is_admin", "created_at", "last_login"}
+    safe_keys = {"id", "email", "name", "avatar_url", "profile_id", "is_admin",
+                 "created_at", "last_login", "has_cv", "has_yaml"}
     return [{k: v for k, v in u.items() if k in safe_keys} for u in users]
+
+
+@router.post("/users/{user_id}/reset-onboarding")
+def reset_onboarding(user_id: int, admin: dict = Depends(get_current_admin)):
+    """Clear profile_id, cv_md, profile_yaml for a user so they go through onboarding again.
+
+    Applied/dismissed job history is preserved.
+    """
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    reset_user_onboarding(db_path, user_id)
+    logger.info("Onboarding reset for user %s by admin %s", user_id, admin["email"])
+    return {"ok": True, "user_id": user_id}
 
 
 @router.post("/trigger-pipeline")

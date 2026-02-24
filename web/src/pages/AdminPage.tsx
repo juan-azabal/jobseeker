@@ -8,6 +8,8 @@ interface AdminUser {
   name: string;
   profile_id: string | null;
   is_admin: number;
+  has_cv: number;
+  has_yaml: number;
   created_at: string;
   last_login: string;
 }
@@ -17,12 +19,13 @@ export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState(false);
+  const [resetting, setResetting] = useState<number | null>(null);
   const [profile, setProfile] = useState('');
   const [triggering, setTriggering] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{ ok: boolean; message: string } | null>(null);
 
-  // Fetch users — must be before early returns to satisfy Rules of Hooks
-  useEffect(() => {
+  const loadUsers = () => {
+    setUsersLoading(true);
     fetch('/api/admin/users')
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -34,7 +37,10 @@ export default function AdminPage() {
       })
       .catch(() => setUsersError(true))
       .finally(() => setUsersLoading(false));
-  }, []);
+  };
+
+  // Fetch users — must be before early returns to satisfy Rules of Hooks
+  useEffect(() => { loadUsers(); }, []);
 
   // Redirect non-admins (after hooks)
   if (!isLoading && (!user || !user.is_admin)) {
@@ -62,6 +68,20 @@ export default function AdminPage() {
       setTriggerResult({ ok: false, message: 'Network error' });
     } finally {
       setTriggering(false);
+    }
+  }
+
+  async function handleResetOnboarding(userId: number, userName: string) {
+    if (!confirm(`Reset onboarding for "${userName}"? They will be sent back to the onboarding flow. Job history is preserved.`)) return;
+    setResetting(userId);
+    try {
+      const r = await fetch(`/api/admin/users/${userId}/reset-onboarding`, { method: 'POST' });
+      if (r.ok) loadUsers();
+      else alert('Reset failed');
+    } catch {
+      alert('Network error');
+    } finally {
+      setResetting(null);
     }
   }
 
@@ -122,8 +142,10 @@ export default function AdminPage() {
                   <th className="pb-2 pr-4">Name</th>
                   <th className="pb-2 pr-4">Email</th>
                   <th className="pb-2 pr-4">Profile</th>
+                  <th className="pb-2 pr-4">Data</th>
                   <th className="pb-2 pr-4">Role</th>
-                  <th className="pb-2">Last login</th>
+                  <th className="pb-2 pr-4">Last login</th>
+                  <th className="pb-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -133,6 +155,14 @@ export default function AdminPage() {
                     <td className="py-2.5 pr-4 text-zinc-400">{u.email}</td>
                     <td className="py-2.5 pr-4 font-mono text-xs text-zinc-500">
                       {u.profile_id ?? '—'}
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      <span className={`mr-1 text-xs ${u.has_cv ? 'text-emerald-400' : 'text-red-500'}`} title="CV">
+                        {u.has_cv ? '✓CV' : '✗CV'}
+                      </span>
+                      <span className={`text-xs ${u.has_yaml ? 'text-emerald-400' : 'text-red-500'}`} title="YAML">
+                        {u.has_yaml ? '✓YAML' : '✗YAML'}
+                      </span>
                     </td>
                     <td className="py-2.5 pr-4">
                       {u.is_admin ? (
@@ -145,8 +175,18 @@ export default function AdminPage() {
                         </span>
                       )}
                     </td>
-                    <td className="py-2.5 text-xs text-zinc-500">
+                    <td className="py-2.5 pr-4 text-xs text-zinc-500">
                       {u.last_login ? new Date(u.last_login).toLocaleDateString() : '—'}
+                    </td>
+                    <td className="py-2.5">
+                      <button
+                        onClick={() => handleResetOnboarding(u.id, u.name)}
+                        disabled={resetting === u.id}
+                        className="rounded px-2 py-0.5 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-amber-400 disabled:opacity-40"
+                        title="Reset onboarding (clears profile + CV, keeps job history)"
+                      >
+                        {resetting === u.id ? '…' : 'Reset'}
+                      </button>
                     </td>
                   </tr>
                 ))}

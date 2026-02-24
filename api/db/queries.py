@@ -395,7 +395,24 @@ def get_all_users(db_path: str) -> list[dict]:
     """Return all users ordered by creation date (newest first)."""
     con = _connect(db_path)
     rows = con.execute(
-        "SELECT id, email, name, avatar_url, profile_id, is_admin, created_at, last_login FROM users ORDER BY created_at DESC"
+        """SELECT id, email, name, avatar_url, profile_id, is_admin, created_at, last_login,
+                  (cv_md IS NOT NULL AND cv_md != '') AS has_cv,
+                  (profile_yaml IS NOT NULL AND profile_yaml != '') AS has_yaml
+           FROM users ORDER BY created_at DESC"""
     ).fetchall()
     con.close()
     return [dict(r) for r in rows]
+
+
+def reset_user_onboarding(db_path: str, user_id: int) -> None:
+    """Clear profile_id, cv_md, and profile_yaml so a user goes through onboarding again.
+
+    Applied/dismissed job history (user_job_status) is preserved.
+    """
+    con = _connect(db_path)
+    con.execute(
+        "UPDATE users SET profile_id = NULL, cv_md = NULL, profile_yaml = NULL WHERE id = ?",
+        (user_id,),
+    )
+    con.commit()
+    con.close()
