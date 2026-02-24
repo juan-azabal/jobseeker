@@ -103,7 +103,7 @@ function AppRoutes() {
         <HamburgerMenu />
       </header>
       <Routes>
-        <Route path="/onboard" element={<OnboardPage onComplete={() => window.location.replace('/jobs')} />} />
+        <Route path="/onboard" element={<OnboardPage onComplete={() => window.location.replace('/jobs?welcome=1')} />} />
         <Route path="/" element={<Navigate to={user?.profile_id ? '/jobs' : '/onboard'} replace />} />
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/jobs/:jobId" element={<JobDetailRoute />} />

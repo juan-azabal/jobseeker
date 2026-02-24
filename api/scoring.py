@@ -1,0 +1,153 @@
+"""Per-user heuristic job scoring.
+
+Ported from agent/main.py _heuristic_score(). Runs at query time for jobs
+without RAG scores — no LLM calls, instant, free.
+"""
+
+import json
+import os
+from pathlib import Path
+
+import yaml
+
+# Domain override keywords (mirrors agent/main.py _DOMAIN_KEYWORDS)
+_DOMAIN_KEYWORDS = {
+    "data": [
+        "data platform", "data pipeline", "data warehouse", "data lake",
+        "lakehouse", "databricks", "snowflake", "clickhouse", "etl",
+        "data product", "data governance", "data quality", "data model",
+    ],
+    "ml": [
+        "machine learning", "ml model", "ai agent", "llm", "nlp",
+        "inference", "training", "deep learning", "neural",
+    ],
+    "adtech": [
+        "advertising", "ad tech", "programmatic", "dsp", "ssp",
+        "header bidding", "rtb", "publisher monetization",
+    ],
+    "saas": [
+        "saas", "subscription", "b2b platform", "developer tool",
+        "devops", "observability", "monitoring", "cloud platform",
+    ],
+}
+
+
+def compute_tier(score: int) -> str:
+    if score >= 50:
+        return "A"
+    if score >= 30:
+        return "B"
+    return "C"
+
+
+def load_profile_data(profile_id: str | None) -> dict | None:
+    """Load profile YAML and return scoring-relevant fields.
+
+    Returns dict with keys: domains, seniority, skills, home_locations, home_regions.
+    Returns None if profile_id is missing or file not found.
+    """
+    if not profile_id:
+        return None
+
+    jobagent_dir = os.environ.get("JOBAGENT_DIR", "agent")
+    profile_path = Path(jobagent_dir) / "config" / "profiles" / f"{profile_id}.yaml"
+
+    try:
+        raw = yaml.safe_load(profile_path.read_text())
+    except Exception:
+        return None
+
+    user_block = raw.get("user", {})
+    target_block = raw.get("target", {})
+    home_locations = [loc.lower() for loc in user_block.get("home_locations", [])]
+
+    # Auto-derive home regions via country-converter
+    import sys
+    agent_dir = str(Path(jobagent_dir).resolve())
+    if agent_dir not in sys.path:
+        sys.path.insert(0, agent_dir)
+    try:
+        from geo import derive_home_regions
+        home_regions = derive_home_regions(home_locations)
+    except Exception:
+        home_regions = []
+
+    return {
+        "domains": {k.lower(): v for k, v in (target_block.get("domains") or {}).items()},
+        "seniority": {k.lower(): v for k, v in (target_block.get("seniority") or {}).items()},
+        "skills": [s.lower() for s in (raw.get("skills") or [])],
+        "home_locations": home_locations,
+        "home_regions": home_regions,
+    }
+
+
+def _infer_domain(parsed: dict) -> str:
+    """Override 'other' domain using keyword detection."""
+    domain = parsed.get("domain", "other")
+    if domain != "other":
+        return domain
+
+    all_text = " ".join([
+        parsed.get("responsibilities_summary", ""),
+        " ".join(parsed.get("must_have_skills") or []),
+        " ".join(parsed.get("technical_stack") or []),
+    ]).lower()
+
+    best_domain = "other"
+    best_count = 0
+    for d, keywords in _DOMAIN_KEYWORDS.items():
+        count = sum(1 for kw in keywords if kw in all_text)
+        if count > best_count:
+            best_count = count
+            best_domain = d
+
+    return best_domain if best_count >= 1 else "other"
+
+
+def heuristic_score(profile: dict, parsed: dict, job: dict, is_reloc: bool) -> int:
+    """Compute heuristic fit score 0-100 from parsed job data + user profile.
+
+    Args:
+        profile: dict from load_profile_data()
+        parsed: job's parsed JSON blob (dict)
+        job: raw job row (for location field)
+        is_reloc: whether the job requires relocation for this user
+    """
+    if not parsed:
+        return 0
+
+    score = 0
+
+    # Domain (0-15) with override
+    domain = _infer_domain(parsed)
+    score += profile["domains"].get(domain, 0)
+
+    # Seniority (0-15)
+    score += profile["seniority"].get(parsed.get("seniority", "unknown"), 0)
+
+    # Location (0-10)
+    loc_type = parsed.get("location_type", "unknown")
+    job_loc = (job.get("location") or "").lower()
+    home_locations = profile["home_locations"]
+
+    if loc_type == "remote" and not is_reloc:
+        score += 10
+    elif loc_type == "hybrid" and any(c in job_loc for c in home_locations):
+        score += 8
+    elif loc_type == "onsite" and any(c in job_loc for c in home_locations):
+        score += 6
+
+    # Skill overlap (0-30)
+    all_text = " ".join(
+        [s.lower() for s in parsed.get("must_have_skills", [])]
+        + [s.lower() for s in parsed.get("nice_to_have_skills", [])]
+        + [s.lower() for s in parsed.get("technical_stack", [])]
+        + [parsed.get("responsibilities_summary", "").lower()]
+    )
+    matches = sum(1 for skill in profile["skills"] if skill in all_text)
+    score += min(30, matches * 4)
+
+    # Red flags (-5 each, max -15)
+    score -= min(15, len(parsed.get("red_flags") or []) * 5)
+
+    return max(0, min(100, score))

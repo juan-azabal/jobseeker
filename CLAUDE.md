@@ -28,6 +28,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `api/routes/` — one file per resource
   - `api/db/` — SQLite init, migrations, queries
   - `api/ingest.py` — pipeline output → SQLite
+  - `api/scoring.py` — per-user heuristic scoring (ported from agent)
   - `api/cv/` — CV generation pipeline
 - Frontend: `web/`
   - `web/src/components/` — React components
@@ -99,9 +100,17 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - Company names / Core Skills themes / project names use COLOR_ACCENT (#1F4E79) instead of bold
 - Phase 7 — Deparameterize Scoring (rubric role_type/geography, adjacent domains, home locations)
 - Phase 8 — Per-Profile Pipeline (searches, watchlist, prefilter per-user)
+- Phase 9 — Per-User Scoring + New-User Bootstrap
+  - DB: `jobs` table is shared (no score/tier/scored columns), `user_job_scores` table holds per-user RAG scores
+  - `api/scoring.py`: heuristic scorer (domain 0-15, seniority 0-15, location 0-10, skills 0-30, red_flags -15) runs at query time for jobs without RAG scores — no LLM, instant, free
+  - Ingest: `ingest_from_list()` accepts optional `profile_id`; common job data → `jobs`, per-user RAG scores → `user_job_scores`
+  - Jobs route: `_score_and_tier_jobs()` prefers RAG score, falls back to heuristic; tier filtering post-scoring; `total_in_db` in response
+  - Onboarding pipeline: `save_profile()` pushes profile YAML + cv.md + seen_ids.txt to GitHub via Contents API, triggers `workflow_dispatch` (fire-and-forget). Env: `GH_ACTIONS_TOKEN`, `GH_REPO`, `GH_REF`
+  - GHA: single-profile dispatch via `inputs.profile`, ingest syncs with `profile_id` in payload
+  - Frontend: empty state with "Scanning job boards" + 60s auto-poll when `totalInDb === 0`; "No matching filters" state with reset button
 
 ### Current
-Phase 8 — Completed
+Phase 9 — Completed
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
@@ -132,6 +141,10 @@ Phase 8 — Completed
 - OnboardPage must pass `isNew` to ProfileEditor so first-time save uses POST `/save-profile` (creates YAML) instead of PATCH `/profile` (requires existing profile_id).
 
 - jobagent parser v1.1 (2026-02-23): `must_have_skills` in parsed JSON is now technical-only (SQL, Python, dbt…). Soft skills / years of experience / education requirements moved to new `experience_requirements` field. `key_tools` extraction in `api/cv/plan.py` benefits automatically — no jobseeker code change needed. `experience_requirements` available in `row["parsed"]["experience_requirements"]` for future use (scoring improvements, CV generation context).
+- Per-user scoring: `jobs` table stores shared data only (no score/tier/scored). Per-user RAG scores in `user_job_scores(user_id, job_id, score, tier, scored, scored_at)`. Heuristic scores computed at query time from profile YAML + parsed JSON — never stored. Migration `005_user_scores.sql` recreates jobs table without those columns.
+- Ingest stores per-user scores only when `profile_id` is provided AND the job has a `rag_score` with a non-null `score` value. Jobs without RAG scores rely on heuristic at query time.
+- Onboarding triggers pipeline: `save_profile()` (first-time only) pushes files to GitHub repo via Contents API and fires `workflow_dispatch`. Requires `GH_ACTIONS_TOKEN` (PAT with contents:write + actions:write), `GH_REPO`, `GH_REF`.
+- Frontend empty state: when `total_in_db === 0` (no jobs scraped yet), shows "Scanning job boards" with 60s auto-poll. When jobs exist but filters exclude all, shows "No matching jobs" with reset button.
 
 ### Blockers
 {none}

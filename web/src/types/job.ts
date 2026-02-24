@@ -75,5 +75,6 @@ export interface JobDetail extends JobSummary {
 export interface JobsResponse {
   jobs: JobSummary[];
   total: number;
+  total_in_db: number;
   filters: { tier: string[]; period: string };
 }
