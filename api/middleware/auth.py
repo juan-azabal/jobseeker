@@ -2,6 +2,7 @@ import os
 from fastapi import Depends, HTTPException, Request
 from api.db.queries import get_session, get_user_by_google_id
 import sqlite3
+from typing import Annotated
 
 SESSION_COOKIE = "jsk"
 
@@ -28,4 +29,11 @@ def get_current_user(request: Request) -> dict:
     user = _get_user_by_id(_db_path(), session["user_id"])
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
+def get_current_admin(user: Annotated[dict, Depends(get_current_user)]) -> dict:
+    """Require the current user to have admin privileges."""
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
     return user

@@ -6,6 +6,7 @@ interface User {
   name: string;
   avatar_url: string | null;
   profile_id: string | null;
+  is_admin?: number;
 }
 
 interface AuthState {

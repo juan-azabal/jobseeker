@@ -6,6 +6,7 @@ import JobDetailPage from './pages/JobDetailPage';
 import LoginPage from './pages/LoginPage';
 import OnboardPage from './pages/OnboardPage';
 import ProfilePage from './pages/ProfilePage';
+import AdminPage from './pages/AdminPage';
 
 function JobDetailRoute() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -15,6 +16,7 @@ function JobDetailRoute() {
 
 function HamburgerMenu() {
   const { user, logout } = useAuth();
+  const isAdmin = !!user?.is_admin;
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -71,6 +73,19 @@ function HamburgerMenu() {
             </svg>
             My Profile
           </Link>
+          {isAdmin && (
+            <Link
+              to="/admin"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M7 1.5a2 2 0 100 4 2 2 0 000-4zM3 10.5c0-2.21 1.79-4 4-4s4 1.79 4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                <path d="M10.5 8.5l1 1 2-2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Admin
+            </Link>
+          )}
           <div className="mx-3 my-1 h-px bg-zinc-800" />
           <button
             onClick={() => { setOpen(false); logout(); }}
@@ -108,6 +123,7 @@ function AppRoutes() {
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/jobs/:jobId" element={<JobDetailRoute />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/admin" element={<AdminPage />} />
       </Routes>
     </div>
   );
