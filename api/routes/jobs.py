@@ -76,7 +76,11 @@ def _is_remote_requiring_reloc(job: dict, home_locations: list[str], home_region
     job_loc = (job.get("location") or "").lower()
 
     restriction = (job.get("remote_restriction") or "").lower()
-    if not restriction:
+    # Only use LLM-parsed restriction as fallback when the raw DB field is an empty
+    # string (scraper found the field but it was blank) — NOT when it is NULL (scraper
+    # found no explicit restriction at all). NULL raw + LLM inference causes false
+    # positives that incorrectly geo-restrict jobs listed for the user's home country.
+    if not restriction and job.get("remote_restriction") == "":
         parsed = job.get("parsed")
         if isinstance(parsed, str):
             try:
@@ -153,8 +157,12 @@ def _score_and_tier_jobs(
             score = 0
 
         # Relocation penalty on heuristic scores (RAG scores already account for location)
+        # Remote geo-restricted (e.g. "US only"): user works from home, penalty is smaller.
+        # Onsite/hybrid outside home: requires physical relocation, full penalty.
         if job.get("ujs_score") is None and is_reloc and score > 0:
-            score = max(0, score - 15)
+            loc_type = (job.get("location_type") or job["_parsed_dict"].get("location_type") or "")
+            penalty = 5 if loc_type == "remote" else 15
+            score = max(0, score - penalty)
 
         job["score"] = score
         job["tier"] = compute_tier(score)
@@ -245,7 +253,9 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
         if profile:
             score = heuristic_score(profile, row["parsed"] or {}, row, is_reloc)
             if is_reloc and score > 0:
-                score = max(0, score - 15)
+                loc_type = row.get("location_type") or (row.get("parsed") or {}).get("location_type") or ""
+                penalty = 5 if loc_type == "remote" else 15
+                score = max(0, score - penalty)
             row["score"] = score
         else:
             row["score"] = 0

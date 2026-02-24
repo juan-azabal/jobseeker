@@ -328,15 +328,17 @@ def heuristic_score(profile: dict, parsed: dict, job: dict, is_reloc: bool) -> i
     # ── Skills (0-30) ───────────────────────────────────────────────────────
     # Must-have skills (technical-only since parser v1.1): 5 pts each, cap 20.
     # Nice-to-have + technical stack text bag: 3 pts each, cap 10.
-    must_have_list = [s.lower() for s in (parsed.get("must_have_skills") or [])]
+    # Normalise hyphens → spaces so "stakeholder-management" matches "stakeholder management".
+    must_have_list = [s.lower().replace("-", " ") for s in (parsed.get("must_have_skills") or [])]
     nice_text = " ".join(
         [s.lower() for s in (parsed.get("nice_to_have_skills") or [])]
         + [s.lower() for s in (parsed.get("technical_stack") or [])]
         + [parsed.get("responsibilities_summary", "").lower()]
-    )
-    must_matches = sum(1 for skill in profile["skills"] if skill in must_have_list)
+    ).replace("-", " ")
+    profile_skills = [s.replace("-", " ") for s in profile["skills"]]
+    must_matches = sum(1 for skill in profile_skills if skill in must_have_list)
     nice_matches = sum(
-        1 for skill in profile["skills"]
+        1 for skill in profile_skills
         if skill in nice_text and skill not in must_have_list
     )
     score += min(20, must_matches * 5) + min(10, nice_matches * 3)
@@ -428,6 +430,9 @@ def heuristic_score(profile: dict, parsed: dict, job: dict, is_reloc: bool) -> i
             score += max(-15, min(15, ct_score))
 
     # ── Red flags (-5 each, max -15) ────────────────────────────────────────
-    score -= min(15, len(parsed.get("red_flags") or []) * 5)
+    # Filter out placeholder strings the LLM emits when there are no real red flags.
+    _NULL_FLAG = {"none mentioned", "none", "n/a", "null", "none noted", "no red flags", "none identified"}
+    real_flags = [f for f in (parsed.get("red_flags") or []) if f.strip().lower() not in _NULL_FLAG]
+    score -= min(15, len(real_flags) * 5)
 
     return max(0, min(100, score))
