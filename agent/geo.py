@@ -1,11 +1,15 @@
-"""Geographic region utilities powered by country-converter.
+"""Geographic region utilities powered by country-converter, pytz, babel.
 
 Auto-derives region terms (EU, EMEA, Europe, …) from a user's home_locations
 so that relocation detection works for any country without manual config.
+Also provides timezone abbreviation detection and location→language mapping.
 """
 
 import re
+from datetime import datetime
+
 import country_converter as coco
+import pytz
 
 _cc = coco.CountryConverter()
 
@@ -102,3 +106,79 @@ def matches_region(text: str, region_pattern: re.Pattern | None) -> bool:
     if region_pattern is None:
         return False
     return region_pattern.search(text) is not None
+
+
+# ---------------------------------------------------------------------------
+# Timezone abbreviations (derived from pytz at import time)
+# ---------------------------------------------------------------------------
+
+def _build_tz_abbreviations() -> frozenset[str]:
+    """Extract all timezone abbreviations from pytz (winter + summer variants)."""
+    abbrevs: set[str] = set()
+    for tz_name in pytz.all_timezones:
+        try:
+            tz = pytz.timezone(tz_name)
+            abbrevs.add(tz.localize(datetime(2024, 1, 15)).strftime("%Z").lower())
+            abbrevs.add(tz.localize(datetime(2024, 7, 15)).strftime("%Z").lower())
+        except Exception:
+            pass
+    # Remove numeric offsets (+03, -05) and single-char entries
+    abbrevs = {a for a in abbrevs if not a.startswith(("+", "-")) and len(a) >= 2}
+    # Add common non-standard terms used in job postings
+    abbrevs.update(["timezone", "time zone", "hours", "time-zone", "tz"])
+    return frozenset(abbrevs)
+
+
+TZ_TERMS: frozenset[str] = _build_tz_abbreviations()
+
+
+def is_pure_timezone(restriction: str) -> bool:
+    """Return True if every comma-separated token in restriction is a timezone term.
+
+    Used to distinguish 'CET timezone hours' (not reloc) from 'Germany' (reloc).
+    """
+    if not restriction:
+        return False
+    for tok in restriction.split(","):
+        tok = tok.strip().lower()
+        if not tok:
+            continue
+        if not any(tz in tok for tz in TZ_TERMS):
+            return False
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Location → language mapping (powered by babel + country-converter)
+# ---------------------------------------------------------------------------
+
+def location_to_languages(location_text: str) -> list[str]:
+    """Return official language names for a job location string.
+
+    Resolves country names via country-converter, then looks up official
+    languages via babel. Returns English-language names like ["French", "German"].
+    Falls back to empty list for unrecognised locations.
+    """
+    from babel.languages import get_official_languages
+    from babel import Locale
+
+    if not location_text:
+        return []
+
+    # Try to resolve the location to a country ISO2 code
+    iso2 = _cc.convert(location_text.strip(), to="ISO2")
+    if iso2 == "not found":
+        # Try extracting the last word (often the country in "Berlin, Germany")
+        parts = [p.strip() for p in re.split(r"[,;/()]", location_text) if p.strip()]
+        for part in reversed(parts):
+            iso2 = _cc.convert(part, to="ISO2")
+            if iso2 != "not found":
+                break
+    if iso2 == "not found":
+        return []
+
+    try:
+        lang_codes = get_official_languages(iso2, de_facto=True)
+        return [Locale(lc).get_language_name("en") for lc in lang_codes]
+    except Exception:
+        return []

@@ -115,14 +115,8 @@ def _is_remote_requiring_reloc(job: dict, home_locations: list[str], home_region
 
     # 6. Restriction names a specific place (not just a timezone)
     if restriction:
-        tz_words = ["timezone", "time zone", "hours", "cet", "gmt", "utc",
-                    "est", "pst", "eet", "wet"]
-        is_pure_tz = all(
-            any(tw in tok for tw in tz_words)
-            for tok in restriction.split(",")
-            for _ in [tok.strip()] if tok.strip()
-        )
-        if not is_pure_tz:
+        from geo import is_pure_timezone
+        if not is_pure_timezone(restriction):
             return True
 
     return False

@@ -182,9 +182,58 @@ def _heuristic_score(job):
     return max(0, min(100, score))
 
 
+# --- Currency conversion via ECB data (CurrencyConverter) ---
+
+from currency_converter import CurrencyConverter as _CurrencyConverter
+_fx = _CurrencyConverter(fallback_on_missing_rate=True)
+
+# Map text signals → ISO 4217 currency codes
+_CURRENCY_SIGNALS: list[tuple[list[str], str]] = [
+    (["cad"],                                "CAD"),
+    (["usd", "$"],                           "USD"),
+    (["pln", "zl", "zlot"],                  "PLN"),
+    (["gbp", "£"],                           "GBP"),
+    (["chf"],                                "CHF"),
+    (["sek"],                                "SEK"),
+    (["dkk"],                                "DKK"),
+    (["nok"],                                "NOK"),
+    (["inr", "₹", "lakh", "lpa"],           "INR"),
+    (["brl", "r$"],                          "BRL"),
+    (["aud", "a$"],                          "AUD"),
+    (["sgd", "s$"],                          "SGD"),
+    (["czk", "kč"],                          "CZK"),
+    (["huf", "ft"],                          "HUF"),
+    (["ron", "lei"],                         "RON"),
+    (["jpy", "¥", "yen"],                   "JPY"),
+    (["ils", "₪", "shekel"],                "ILS"),
+    (["try", "₺", "tl"],                    "TRY"),
+]
+
+
+def _to_eur(amount: float, currency_code: str) -> float:
+    """Convert amount to EUR using ECB rates. Returns amount unchanged if already EUR."""
+    if currency_code == "EUR":
+        return amount
+    try:
+        return _fx.convert(amount, currency_code, "EUR")
+    except Exception:
+        return amount  # unknown currency — assume EUR
+
+
+def _detect_currency(salary_str: str, job: dict) -> str:
+    """Detect currency from salary text and job metadata. Returns ISO code."""
+    # CAD needs special handling: "$" + Canada location
+    if "$" in salary_str and "canada" in (job.get("location") or "").lower():
+        return "CAD"
+    for signals, code in _CURRENCY_SIGNALS:
+        if any(sig in salary_str for sig in signals):
+            return code
+    return "EUR"
+
+
 def _extract_max_salary_eur(job):
     """Extract max salary as EUR equivalent. Returns 0 if not available."""
-    p = job.get("parsed", {})
+    p = job.get("parsed") or {}
     salary_str = (p.get("salary_mentioned") or "").lower()
     if not salary_str or salary_str == "null":
         max_amt = job.get("max_amount")
@@ -192,9 +241,9 @@ def _extract_max_salary_eur(job):
             try:
                 val = float(max_amt)
                 currency = (job.get("currency") or "").upper()
-                if currency in ("USD", "CAD") or "$" in str(job.get("min_amount", "")):
-                    return val * 0.92 if currency == "USD" else val * 0.67
-                return val
+                if not currency or currency == "EUR":
+                    return val
+                return _to_eur(val, currency)
             except (ValueError, TypeError):
                 return 0
         return 0
@@ -216,23 +265,9 @@ def _extract_max_salary_eur(job):
     if max_val < 20000:
         max_val *= 12  # monthly → annual
 
-    # Currency conversions (rough)
-    if "cad" in salary_str or ("$" in salary_str and "canada" in (job.get("location") or "").lower()):
-        max_val *= 0.67
-    elif "usd" in salary_str or "$" in salary_str:
-        max_val *= 0.92
-    elif "pln" in salary_str or "zl" in salary_str or "zlot" in salary_str:
-        max_val *= 0.23
-    elif "gbp" in salary_str or "£" in salary_str:
-        max_val *= 1.17
-    elif "chf" in salary_str:
-        max_val *= 1.05
-    elif "sek" in salary_str:
-        max_val *= 0.088
-    elif "dkk" in salary_str:
-        max_val *= 0.13
-    elif "nok" in salary_str:
-        max_val *= 0.087
+    # Currency conversion via ECB rates
+    currency = _detect_currency(salary_str, job)
+    max_val = _to_eur(max_val, currency)
 
     # Sanity cap: >250K EUR is almost certainly a parse error
     if max_val > 250000:
@@ -294,14 +329,8 @@ def _is_remote_requiring_reloc(job, home_locations=None, home_regions=None, regi
 
     # 6. Restriction names a specific place (not just a timezone)
     if restriction:
-        tz_words = ["timezone", "time zone", "hours", "cet", "gmt", "utc",
-                    "est", "pst", "eet", "wet"]
-        is_pure_tz = all(
-            any(tw in tok for tw in tz_words)
-            for tok in restriction.split(",")
-            for _ in [tok.strip()] if tok.strip()
-        )
-        if not is_pure_tz:
+        from geo import is_pure_timezone
+        if not is_pure_timezone(restriction):
             return True
 
     # 7. No signals → truly global remote → not reloc

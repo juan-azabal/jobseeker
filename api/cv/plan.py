@@ -14,58 +14,7 @@ import json
 import re
 from datetime import datetime
 
-# ── Location → language hints ─────────────────────────────────────────────
-
-_LOCATION_LANGUAGE_MAP: dict[str, str] = {
-    "france":       "French",
-    "paris":        "French",
-    "lyon":         "French",
-    "marseille":    "French",
-    "bordeaux":     "French",
-    "germany":      "German",
-    "berlin":       "German",
-    "munich":       "German",
-    "münchen":      "German",
-    "frankfurt":    "German",
-    "hamburg":      "German",
-    "netherlands":  "Dutch",
-    "amsterdam":    "Dutch",
-    "rotterdam":    "Dutch",
-    "portugal":     "Portuguese",
-    "lisbon":       "Portuguese",
-    "porto":        "Portuguese",
-    "brazil":       "Portuguese",
-    "são paulo":    "Portuguese",
-    "rio":          "Portuguese",
-    "italy":        "Italian",
-    "milan":        "Italian",
-    "rome":         "Italian",
-    "torino":       "Italian",
-    "sweden":       "Swedish",
-    "stockholm":    "Swedish",
-    "denmark":      "Danish",
-    "copenhagen":   "Danish",
-    "norway":       "Norwegian",
-    "oslo":         "Norwegian",
-    "finland":      "Finnish",
-    "helsinki":     "Finnish",
-    "poland":       "Polish",
-    "warsaw":       "Polish",
-    "czech":        "Czech",
-    "prague":       "Czech",
-    "switzerland":  "French",   # majority cantons
-    "zurich":       "German",
-    "geneva":       "French",
-    "japan":        "Japanese",
-    "tokyo":        "Japanese",
-    "china":        "Mandarin",
-    "shanghai":     "Mandarin",
-    "beijing":      "Mandarin",
-    "mexico":       "Spanish",
-    "colombia":     "Spanish",
-    "argentina":    "Spanish",
-    "chile":        "Spanish",
-}
+# ── Location → language hints (powered by babel + country-converter) ──────
 
 # ── Known technical tools (for key_tools extraction) ─────────────────────
 
@@ -237,13 +186,24 @@ def _detect_business_model(parsed: dict, jd_text: str) -> str:
 
 
 def _location_language_hints(locations: list[str]) -> list[str]:
-    """Return language hints for a list of location strings."""
+    """Return language hints for a list of location strings.
+
+    Uses babel + country-converter to resolve locations to official languages.
+    Skips English (assumed default) and returns unique names.
+    """
+    import sys
+    from pathlib import Path
+    # Ensure agent dir is on path for geo module
+    agent_dir = str(Path(__file__).resolve().parents[2] / "agent")
+    if agent_dir not in sys.path:
+        sys.path.insert(0, agent_dir)
+    from geo import location_to_languages
+
     hints: list[str] = []
     for loc in locations:
-        loc_lower = loc.lower()
-        for keyword, language in _LOCATION_LANGUAGE_MAP.items():
-            if language and keyword in loc_lower and language not in hints:
-                hints.append(language)
+        for lang in location_to_languages(loc):
+            if lang not in hints and lang != "English":
+                hints.append(lang)
     return hints
 
 
