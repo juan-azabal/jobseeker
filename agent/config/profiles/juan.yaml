@@ -32,11 +32,13 @@ skills:
 - dbt
 - data-governance
 - gdpr
+- observability
 - stakeholder-management
 - a/b-testing
+- programmatic-advertising
+- data-platforms
 - personalization
 - analytics
-- programmatic-advertising
 knowledge:
   dir: knowledge/juan
   profile_files:
