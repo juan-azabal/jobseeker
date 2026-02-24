@@ -1,0 +1,36 @@
+user:
+  id: ad3823c4
+  name: Alice Martin
+  email: alice@example.com
+  active: true
+  languages:
+  - en
+  - fr
+  home_locations:
+  - paris
+  - france
+  location_preference: b
+target:
+  level: principal
+  track: ic
+  domains:
+    data: 15
+    ml: 10
+scoring:
+  rag_threshold: 25
+  salary_min: 80000
+skills:
+- python
+- sql
+knowledge:
+  dir: knowledge/ad3823c4
+  profile_files:
+  - cv.md
+  collection_name: ad3823c4_profile
+stories: {}
+preferences: config/preferences.yaml
+searches: config/profiles/ad3823c4-searches.yaml
+watchlist: config/watchlist.yaml
+seen_ids: config/seen_ids/ad3823c4.txt
+exclude_companies:
+- OldCorp
