@@ -336,6 +336,40 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
     return {"profile_id": profile_id}
 
 
+async def _push_searches_to_github(profile_id: str, searches_yaml: str) -> None:
+    """Push only the searches file to GitHub (no pipeline trigger)."""
+    gh_token = os.environ.get("GH_ACTIONS_TOKEN", "")
+    gh_repo = os.environ.get("GH_REPO", "")
+    gh_ref = os.environ.get("GH_REF", "main")
+    if not gh_token or not gh_repo:
+        return
+    headers = {
+        "Authorization": f"Bearer {gh_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    gh_path = f"agent/config/profiles/{profile_id}-searches.yaml"
+    url = f"https://api.github.com/repos/{gh_repo}/contents/{gh_path}"
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(url, headers=headers, params={"ref": gh_ref})
+        sha = resp.json().get("sha") if resp.status_code == 200 else None
+        gh_body = {
+            "message": f"chore: update searches for {profile_id} [skip ci]",
+            "content": base64.b64encode(searches_yaml.encode()).decode(),
+            "branch": gh_ref,
+        }
+        if sha:
+            gh_body["sha"] = sha
+        put_resp = await client.put(url, json=gh_body, headers=headers)
+        if put_resp.status_code in (200, 201):
+            logger.info("GitHub searches sync OK: %s", gh_path)
+        else:
+            logger.warning(
+                "GitHub searches sync FAILED: %s HTTP %d — %s",
+                gh_path, put_resp.status_code, put_resp.text[:200],
+            )
+
+
 async def _sync_and_trigger_pipeline(
     profile_id: str, profile_yaml: str, cv_markdown: str, searches_yaml: str = ""
 ) -> None:
@@ -528,6 +562,28 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
 
     # Persist updated YAML to DB so it survives redeploys
     save_user_profile_yaml(db_path_patch, user["id"], updated_yaml)
+
+    # Regenerate per-user searches from the updated profile
+    # level/track come from the YAML (not editable in UI yet, but already in the profile)
+    target_block = raw.get("target") or {}
+    profile_for_searches = {
+        "target_level": target_block.get("level", "senior"),
+        "track": target_block.get("track", "ic"),
+        "domains": body.domains,
+        "home_locations": body.home_locations,
+    }
+    try:
+        searches_yaml = _generate_searches_yaml(profile_for_searches)
+        searches_path = os.path.join(
+            jobagent_dir, "config", "profiles", f"{profile_id}-searches.yaml"
+        )
+        with open(searches_path, "w") as f:
+            f.write(searches_yaml)
+        logger.info("Regenerated searches for profile %s after profile edit", profile_id)
+        # Push updated searches to GitHub (fire-and-forget)
+        await _push_searches_to_github(profile_id, searches_yaml)
+    except Exception:
+        logger.exception("Searches regeneration failed for %s (non-fatal)", profile_id)
 
     return {"ok": True}
 
