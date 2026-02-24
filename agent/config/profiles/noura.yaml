@@ -18,7 +18,7 @@ user:
   - españa
   location_preference: b
 target:
-  level: senior
+  level: director
   track: management
   domains:
     data: 15
@@ -27,7 +27,7 @@ target:
     mortgagetech: 8
 scoring:
   rag_threshold: 25
-  salary_min: 55000
+  salary_min: 60000
 skills:
 - data-driven
 - analytics
@@ -52,7 +52,6 @@ searches: config/searches.yaml
 watchlist: config/watchlist.yaml
 seen_ids: config/seen_ids/noura.txt
 exclude_companies:
-- UserTesting
 - Trioteca
 - Planteka
 - Colvin
