@@ -5,8 +5,9 @@ interface User {
   email: string;
   name: string;
   avatar_url: string | null;
-  profile_id: string | null;
-  is_admin?: number;
+  profile_id: string;  // always set from first login
+  onboarded: boolean;  // true once profile_yaml is persisted (CV uploaded + profile saved)
+  is_admin?: boolean;
   // Impersonation fields (present when an admin is viewing as another user)
   is_impersonating?: boolean;
   real_user_id?: number;

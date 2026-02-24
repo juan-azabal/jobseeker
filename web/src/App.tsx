@@ -150,7 +150,7 @@ function AppRoutes() {
       <ImpersonationBanner />
       <Routes>
         <Route path="/onboard" element={<OnboardPage onComplete={() => window.location.replace('/jobs?welcome=1')} />} />
-        <Route path="/" element={<Navigate to={user?.profile_id ? '/jobs' : '/onboard'} replace />} />
+        <Route path="/" element={<Navigate to={user?.onboarded ? '/jobs' : '/onboard'} replace />} />
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/jobs/:jobId" element={<JobDetailRoute />} />
         <Route path="/profile" element={<ProfilePage />} />

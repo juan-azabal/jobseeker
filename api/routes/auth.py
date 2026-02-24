@@ -1,6 +1,7 @@
 import logging
 import os
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
@@ -59,7 +60,7 @@ async def callback(request: Request):
         "email": email,
         "name": userinfo.get("name"),
         "avatar_url": userinfo.get("picture"),
-        "profile_id": None,
+        "profile_id": uuid.uuid4().hex[:8],  # only used for new users; existing users keep their profile_id via COALESCE
     })
 
     # Auto-promote users whose email is listed in ADMIN_EMAILS env var (idempotent)

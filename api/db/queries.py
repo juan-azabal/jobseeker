@@ -304,7 +304,8 @@ def upsert_user(db_path: str, user: dict[str, Any]) -> dict:
           email      = excluded.email,
           name       = excluded.name,
           avatar_url = excluded.avatar_url,
-          last_login = excluded.last_login
+          last_login = excluded.last_login,
+          profile_id = COALESCE(users.profile_id, excluded.profile_id)
         """,
         {**user, "now": now},
     )

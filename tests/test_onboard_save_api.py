@@ -30,7 +30,8 @@ def authed_client(tmp_path, monkeypatch):
     monkeypatch.setenv("JOBAGENT_DIR", jobagent_dir)
     user = upsert_user(db_path, {
         "google_id": "g_t", "email": "t@t.com",
-        "name": "T", "avatar_url": None, "profile_id": None,
+        "name": "T", "avatar_url": None,
+        "profile_id": "test1234",  # pre-assigned at login (new behavior)
     })
     create_session(db_path, "tok", user["id"], "2099-01-01T00:00:00")
     c = TestClient(app)
@@ -66,9 +67,9 @@ def test_save_profile_writes_files(authed_client):
             "location_preference": "b",
         },
     )
-    # profile_id is now a random 8-char hex — get it from the response
+    # profile_id is pre-assigned at login and returned unchanged by save-profile
     profile_id = resp.json()["profile_id"]
-    assert len(profile_id) == 8 and all(c in "0123456789abcdef" for c in profile_id)
+    assert profile_id == "test1234"  # matches what was set in the fixture
     assert os.path.exists(os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}.yaml"))
     assert os.path.exists(os.path.join(jobagent_dir, "knowledge", profile_id, "cv.md"))
     assert os.path.exists(os.path.join(jobagent_dir, "config", "seen_ids", f"{profile_id}.txt"))

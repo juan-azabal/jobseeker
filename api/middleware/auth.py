@@ -28,13 +28,32 @@ def get_current_user(request: Request) -> dict:
         impersonated = get_user_by_id(_db_path(), impersonated_id)
         if impersonated:
             return {
-                **impersonated,
+                **_safe_user_dict(impersonated),
                 "is_impersonating": True,
                 "real_user_id": real_user["id"],
                 "real_user_name": real_user.get("name", ""),
             }
 
-    return real_user
+    return _safe_user_dict(real_user)
+
+
+def _safe_user_dict(row: dict) -> dict:
+    """Return only the fields that are safe to expose to the frontend.
+
+    Excludes large blobs (cv_md, profile_yaml) and internal identifiers (google_id).
+    Adds the computed ``onboarded`` flag so the frontend can gate the onboarding flow
+    without checking profile_id (which is now always set from first login).
+    """
+    return {
+        "id": row["id"],
+        "email": row.get("email"),
+        "name": row.get("name"),
+        "avatar_url": row.get("avatar_url"),
+        "profile_id": row.get("profile_id"),
+        "is_admin": bool(row.get("is_admin")),
+        # onboarded = CV + profile YAML have been persisted; used by frontend to gate /onboard
+        "onboarded": bool(row.get("profile_yaml")),
+    }
 
 
 def get_current_admin(user: Annotated[dict, Depends(get_current_user)]) -> dict:

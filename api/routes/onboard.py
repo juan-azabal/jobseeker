@@ -15,10 +15,8 @@ logger = logging.getLogger(__name__)
 
 from api.middleware.auth import get_current_user
 from api.db.queries import (
-    update_user_profile_id,
     save_user_cv_md, get_user_cv_md,
     save_user_profile_yaml, get_user_profile_yaml,
-    get_user_id_by_profile_id,
 )
 
 MAX_CV_BYTES = 5 * 1024 * 1024  # 5 MB
@@ -251,16 +249,16 @@ class SaveProfileRequest(BaseModel):
 @router.post("/save-profile")
 async def save_profile(body: SaveProfileRequest, request: Request, user: dict = Depends(get_current_user)):
     jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "agent"))
-    existing_profile_id = user.get("profile_id")
+    # profile_id is always set from first login — never None for authenticated users.
+    profile_id = user["profile_id"]
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
 
-    if existing_profile_id:
-        # User already has a profile — update cv.md and restore YAML if completely lost.
-        db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
-
+    if user.get("onboarded"):
+        # User already has a profile (profile_yaml in DB) — update cv.md and restore YAML if lost.
         if body.cv_markdown:  # Guard: never overwrite existing cv_md with empty string
             save_user_cv_md(db_path, user["id"], body.cv_markdown)
             # Also write to disk for the current process lifetime
-            knowledge_dir = os.path.join(jobagent_dir, "knowledge", existing_profile_id)
+            knowledge_dir = os.path.join(jobagent_dir, "knowledge", profile_id)
             os.makedirs(knowledge_dir, exist_ok=True)
             with open(os.path.join(knowledge_dir, "cv.md"), "w") as f:
                 f.write(body.cv_markdown)
@@ -268,40 +266,25 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
         # Recovery: if profile YAML is completely gone (not in DB, not on disk), regenerate it.
         # This breaks the redirect loop caused by Railway ephemeral filesystem wipes.
         # We only regenerate when YAML is truly absent — never overwrite an existing one.
-        yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{existing_profile_id}.yaml")
+        yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}.yaml")
         stored_yaml = get_user_profile_yaml(db_path, user["id"])
         if not stored_yaml and not os.path.exists(yaml_path):
             try:
-                logger.info("Profile YAML missing for %s — regenerating from submitted profile data", existing_profile_id)
+                logger.info("Profile YAML missing for %s — regenerating from submitted profile data", profile_id)
                 recovered_yaml = _build_profile_yaml(
-                    body.profile, existing_profile_id, body.salary_min, body.location_preference
+                    body.profile, profile_id, body.salary_min, body.location_preference
                 )
                 os.makedirs(os.path.dirname(yaml_path), exist_ok=True)
                 with open(yaml_path, "w") as f:
                     f.write(recovered_yaml)
                 save_user_profile_yaml(db_path, user["id"], recovered_yaml)
             except Exception:
-                logger.exception("YAML recovery failed for %s — continuing without YAML", existing_profile_id)
+                logger.exception("YAML recovery failed for %s — continuing without YAML", profile_id)
 
-        return {"profile_id": existing_profile_id}
+        return {"profile_id": profile_id}
 
-    # First-time setup: generate full YAML from CV data
-    base_id = _generate_profile_id(body.profile.get("name", "user"))
-    # Avoid collision: if another user already owns this profile_id, append a suffix
-    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
-    profile_id = base_id
-    suffix = 2
-    while True:
-        existing_owner = get_user_id_by_profile_id(db_path, profile_id)
-        if existing_owner is None:
-            break  # profile_id is free
-        profile_id = f"{base_id}{suffix}"
-        suffix += 1
-    if profile_id != base_id:
-        logger.warning(
-            "profile_id collision: %r already taken, assigning %r to user_id=%d",
-            base_id, profile_id, user["id"],
-        )
+    # First-time setup: profile_id was assigned at login, just generate YAML + searches.
+    logger.info("First-time onboarding for user_id=%d profile_id=%r", user["id"], profile_id)
     profile_yaml = _build_profile_yaml(
         body.profile, profile_id, body.salary_min, body.location_preference
     )
@@ -322,8 +305,6 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
 
     _write_profile_files(jobagent_dir, profile_id, body.cv_markdown, profile_yaml, searches_yaml)
 
-    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
-    update_user_profile_id(db_path, user["id"], profile_id)
     save_user_cv_md(db_path, user["id"], body.cv_markdown)
     save_user_profile_yaml(db_path, user["id"], profile_yaml)
 
