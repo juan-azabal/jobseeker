@@ -1,0 +1,35 @@
+searches:
+- term: Director of Product data
+  location: Spain
+  sites:
+  - indeed
+  - google
+  results_wanted: 20
+  hours_old: 72
+- term: Director of Product ML AI
+  location: Spain
+  sites:
+  - indeed
+  - google
+  results_wanted: 20
+  hours_old: 72
+- term: Director of Product ecommerce marketplace
+  location: Spain
+  sites:
+  - indeed
+  - google
+  results_wanted: 20
+  hours_old: 72
+- term: Director of Product remote
+  location: Spain
+  sites:
+  - linkedin
+  results_wanted: 15
+  hours_old: 72
+- term: Director of Product data
+  location: ''
+  sites:
+  - linkedin
+  results_wanted: 10
+  hours_old: 72
+is_remote: true

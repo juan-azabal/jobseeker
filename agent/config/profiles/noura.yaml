@@ -46,7 +46,7 @@ knowledge:
   collection_name: noura_profile
 stories: {}
 preferences: config/preferences.yaml
-searches: config/searches.yaml
+searches: config/profiles/noura-searches.yaml
 watchlist: config/watchlist.yaml
 seen_ids: config/seen_ids/noura.txt
 exclude_companies:

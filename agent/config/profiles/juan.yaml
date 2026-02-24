@@ -51,7 +51,7 @@ knowledge:
   collection_name: juan_profile
 stories: {}
 preferences: config/preferences.yaml
-searches: config/searches.yaml
+searches: config/profiles/juan-searches.yaml
 watchlist: config/watchlist.yaml
 seen_ids: config/seen_ids/juan.txt
 exclude_companies:

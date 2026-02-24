@@ -75,11 +75,159 @@ def _generate_profile_id(name: str) -> str:  # noqa: ARG001 — name ignored, ke
     return uuid.uuid4().hex[:8]
 
 
-def _write_profile_files(jobagent_dir: str, profile_id: str, cv_markdown: str, profile_yaml: str) -> None:
+# ---------------------------------------------------------------------------
+# Per-user searches generation
+# ---------------------------------------------------------------------------
+
+_DOMAIN_SEARCH_TERMS: dict[str, str] = {
+    "data":        "data",
+    "ml":          "ML AI",
+    "adtech":      "AdTech advertising",
+    "ecommerce":   "ecommerce marketplace",
+    "fintech":     "fintech payments",
+    "saas":        "SaaS B2B",
+    "platform":    "platform developer tools",
+    "analytics":   "analytics data",
+    "healthtech":  "healthtech digital health",
+    "edtech":      "edtech education",
+    "growth":      "growth user acquisition",
+    "marketplace": "marketplace",
+    "developer":   "developer tools",
+    "api":         "API platform",
+    "mobile":      "mobile app",
+    "gaming":      "gaming",
+    "crypto":      "blockchain crypto web3",
+    "hr":          "HR people tech",
+    "proptech":    "proptech real estate",
+    "legaltech":   "legaltech",
+    "security":    "cybersecurity",
+    "logistics":   "logistics supply chain",
+    "travel":      "travel hospitality",
+    "media":       "media content",
+}
+
+_DOMAIN_ALIASES: dict[str, str] = {
+    "ia": "ml", "ai": "ml", "llm": "ml", "martech": "adtech",
+}
+
+_IC_TITLES: dict[str, str] = {
+    "junior":    "Junior Product Manager",
+    "mid":       "Product Manager",
+    "senior":    "Senior Product Manager",
+    "staff":     "Staff Product Manager",
+    "principal": "Principal Product Manager",
+    "director":  "Principal Product Manager",  # IC director → keep principal title
+    "vp":        "Staff Product Manager",
+}
+_MGMT_TITLES: dict[str, str] = {
+    "junior":    "Product Manager",
+    "mid":       "Senior Product Manager",
+    "senior":    "Head of Product",
+    "staff":     "Head of Product",
+    "principal": "Head of Product",
+    "director":  "Director of Product",
+    "vp":        "VP Product",
+}
+
+_LOCATION_MAP: dict[str, str] = {
+    "spain": "Spain", "españa": "Spain", "barcelona": "Spain", "madrid": "Spain",
+    "netherlands": "Netherlands", "amsterdam": "Netherlands",
+    "germany": "Germany", "berlin": "Germany", "munich": "Germany",
+    "france": "France", "paris": "France",
+    "uk": "UK", "london": "UK", "england": "UK",
+    "portugal": "Portugal", "lisbon": "Portugal",
+    "italy": "Italy", "milan": "Italy",
+    "sweden": "Sweden", "stockholm": "Sweden",
+    "denmark": "Denmark", "copenhagen": "Denmark",
+    "belgium": "Belgium", "brussels": "Belgium",
+    "ireland": "Ireland", "dublin": "Ireland",
+    "remote": "",
+}
+
+
+def _generate_searches_yaml(profile: dict) -> str:
+    """Generate a per-user searches.yaml based on their profile (level, track, domains, locations).
+
+    Uses programmatic rules — no LLM. Called during first-time onboarding.
+    Returns the YAML string to write as {profile_id}-searches.yaml.
+    """
+    level = (profile.get("target_level") or profile.get("current_level") or "senior").lower()
+    track = (profile.get("track") or "ic").lower()
+
+    # Normalize and sort domains by weight (top 3)
+    raw_domains = profile.get("domains") or {}
+    normalized: dict[str, int] = {}
+    for d, w in raw_domains.items():
+        canonical = _DOMAIN_ALIASES.get(d.lower(), d.lower())
+        normalized[canonical] = max(normalized.get(canonical, 0), int(w))
+    top_domains = [d for d, _ in sorted(normalized.items(), key=lambda x: -x[1])[:3]]
+
+    # Resolve title
+    title_map = _MGMT_TITLES if track == "management" else _IC_TITLES
+    title = title_map.get(level, "Senior Product Manager")
+
+    # Normalize locations (deduplicated, ordered)
+    home_locs: list[str] = profile.get("home_locations") or []
+    primary_locations: list[str] = []
+    for loc in home_locs:
+        mapped = _LOCATION_MAP.get(loc.lower(), "")
+        if mapped and mapped not in primary_locations:
+            primary_locations.append(mapped)
+    if not primary_locations:
+        primary_locations = [""]  # blank = global search
+
+    searches: list[dict] = []
+
+    # Main searches: title + domain × location on Indeed + Google
+    for domain in (top_domains or [""])[:3]:
+        domain_term = _DOMAIN_SEARCH_TERMS.get(domain, domain) if domain else ""
+        query = f"{title} {domain_term}".strip() if domain_term else title
+        for location in primary_locations[:2]:
+            # Skip exact duplicates (e.g. if same location appears twice)
+            entry = {"term": query, "location": location,
+                     "sites": ["indeed", "google"], "results_wanted": 20, "hours_old": 72}
+            if entry not in searches:
+                searches.append(entry)
+
+    # LinkedIn broad: title + remote
+    searches.append({
+        "term": f"{title} remote",
+        "location": primary_locations[0] if primary_locations[0] else "",
+        "sites": ["linkedin"],
+        "results_wanted": 15,
+        "hours_old": 72,
+    })
+
+    # LinkedIn targeted: top domain
+    if top_domains:
+        domain_term = _DOMAIN_SEARCH_TERMS.get(top_domains[0], top_domains[0])
+        searches.append({
+            "term": f"{title} {domain_term}",
+            "location": "",
+            "sites": ["linkedin"],
+            "results_wanted": 10,
+            "hours_old": 72,
+        })
+
+    return yaml.dump({"searches": searches, "is_remote": True},
+                     default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+
+def _write_profile_files(
+    jobagent_dir: str,
+    profile_id: str,
+    cv_markdown: str,
+    profile_yaml: str,
+    searches_yaml: str = "",
+) -> None:
     profiles_dir = os.path.join(jobagent_dir, "config", "profiles")
     os.makedirs(profiles_dir, exist_ok=True)
     with open(os.path.join(profiles_dir, f"{profile_id}.yaml"), "w") as f:
         f.write(profile_yaml)
+
+    if searches_yaml:
+        with open(os.path.join(profiles_dir, f"{profile_id}-searches.yaml"), "w") as f:
+            f.write(searches_yaml)
 
     knowledge_dir = os.path.join(jobagent_dir, "knowledge", profile_id)
     os.makedirs(knowledge_dir, exist_ok=True)
@@ -157,7 +305,22 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
     profile_yaml = _build_profile_yaml(
         body.profile, profile_id, body.salary_min, body.location_preference
     )
-    _write_profile_files(jobagent_dir, profile_id, body.cv_markdown, profile_yaml)
+
+    # Generate per-user searches and patch the profile YAML to reference it
+    searches_yaml = _generate_searches_yaml(body.profile)
+    searches_rel_path = f"config/profiles/{profile_id}-searches.yaml"
+    try:
+        profile_data = yaml.safe_load(profile_yaml)
+        profile_data["searches"] = searches_rel_path
+        profile_yaml = yaml.dump(profile_data, default_flow_style=False,
+                                 allow_unicode=True, sort_keys=False)
+        logger.info("Generated per-user searches for %s (%d searches)",
+                    profile_id, len(yaml.safe_load(searches_yaml).get("searches", [])))
+    except Exception:
+        logger.exception("Failed to patch searches path for %s — using global default", profile_id)
+        searches_yaml = ""
+
+    _write_profile_files(jobagent_dir, profile_id, body.cv_markdown, profile_yaml, searches_yaml)
 
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
     update_user_profile_id(db_path, user["id"], profile_id)
@@ -166,14 +329,16 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
 
     # Sync profile to GitHub repo and trigger the scraping pipeline (fire-and-forget)
     try:
-        await _sync_and_trigger_pipeline(profile_id, profile_yaml, body.cv_markdown)
+        await _sync_and_trigger_pipeline(profile_id, profile_yaml, body.cv_markdown, searches_yaml)
     except Exception:
         logger.exception("Pipeline sync/trigger failed for %s (non-fatal)", profile_id)
 
     return {"profile_id": profile_id}
 
 
-async def _sync_and_trigger_pipeline(profile_id: str, profile_yaml: str, cv_markdown: str) -> None:
+async def _sync_and_trigger_pipeline(
+    profile_id: str, profile_yaml: str, cv_markdown: str, searches_yaml: str = ""
+) -> None:
     """Push profile files to GitHub repo and trigger the agent pipeline.
 
     Requires env vars: GH_ACTIONS_TOKEN (PAT with contents:write + actions:write),
@@ -201,6 +366,10 @@ async def _sync_and_trigger_pipeline(profile_id: str, profile_yaml: str, cv_mark
             (f"agent/knowledge/{profile_id}/cv.md", cv_markdown),
             (f"agent/config/seen_ids/{profile_id}.txt", ""),
         ]
+        if searches_yaml:
+            files_to_push.append(
+                (f"agent/config/profiles/{profile_id}-searches.yaml", searches_yaml)
+            )
         for path, content in files_to_push:
             url = f"https://api.github.com/repos/{gh_repo}/contents/{path}"
 
