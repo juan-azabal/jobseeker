@@ -39,6 +39,29 @@ def reset_onboarding(user_id: int, admin: dict = Depends(get_current_admin)):
     return {"ok": True, "user_id": user_id}
 
 
+@router.get("/env-check")
+def env_check(admin: dict = Depends(get_current_admin)):
+    """Diagnostic: confirm which critical env vars the running process can see.
+
+    Returns boolean flags only — never the actual values.
+    """
+    vars_to_check = [
+        "GH_ACTIONS_TOKEN",
+        "GH_REPO",
+        "GH_REF",
+        "ADMIN_EMAILS",
+        "DB_PATH",
+        "SECRET_KEY",
+        "GOOGLE_CLIENT_ID",
+    ]
+    return {
+        "present": {k: bool(os.environ.get(k, "")) for k in vars_to_check},
+        "gh_token_length": len(os.environ.get("GH_ACTIONS_TOKEN", "")),
+        "gh_repo_value": os.environ.get("GH_REPO", "(not set)"),  # safe to expose
+        "gh_ref_value": os.environ.get("GH_REF", "(not set)"),    # safe to expose
+    }
+
+
 @router.post("/trigger-pipeline")
 async def trigger_pipeline(body: TriggerRequest = TriggerRequest(), admin: dict = Depends(get_current_admin)):
     """Dispatch the GHA scraping pipeline for a specific profile or all active profiles.
