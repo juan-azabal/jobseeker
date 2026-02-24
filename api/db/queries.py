@@ -333,3 +333,19 @@ def get_user_cv_md(db_path: str, user_id: int) -> str | None:
     row = con.execute("SELECT cv_md FROM users WHERE id = ?", (user_id,)).fetchone()
     con.close()
     return row["cv_md"] if row else None
+
+
+def save_user_profile_yaml(db_path: str, user_id: int, profile_yaml: str) -> None:
+    """Persist profile YAML in the users table so it survives redeploys."""
+    con = _connect(db_path)
+    con.execute("UPDATE users SET profile_yaml = ? WHERE id = ?", (profile_yaml, user_id))
+    con.commit()
+    con.close()
+
+
+def get_user_profile_yaml(db_path: str, user_id: int) -> str | None:
+    """Return the user's stored profile YAML, or None if not set."""
+    con = _connect(db_path)
+    row = con.execute("SELECT profile_yaml FROM users WHERE id = ?", (user_id,)).fetchone()
+    con.close()
+    return row["profile_yaml"] if row else None

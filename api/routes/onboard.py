@@ -13,7 +13,11 @@ import yaml
 logger = logging.getLogger(__name__)
 
 from api.middleware.auth import get_current_user
-from api.db.queries import update_user_profile_id, save_user_cv_md, get_user_cv_md
+from api.db.queries import (
+    update_user_profile_id,
+    save_user_cv_md, get_user_cv_md,
+    save_user_profile_yaml, get_user_profile_yaml,
+)
 
 MAX_CV_BYTES = 5 * 1024 * 1024  # 5 MB
 
@@ -121,6 +125,7 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
     update_user_profile_id(db_path, user["id"], profile_id)
     save_user_cv_md(db_path, user["id"], body.cv_markdown)
+    save_user_profile_yaml(db_path, user["id"], profile_yaml)
 
     # Sync profile to GitHub repo and trigger the scraping pipeline (fire-and-forget)
     try:
@@ -198,9 +203,16 @@ async def get_profile(user: dict = Depends(get_current_user)):
     jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "agent"))
     yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}.yaml")
     cv_path = os.path.join(jobagent_dir, "knowledge", profile_id, "cv.md")
+    db_path_get = os.environ.get("DB_PATH", "data/jobseeker.db")
 
+    # Restore YAML from DB if the filesystem was wiped (e.g. Railway redeploy)
     if not os.path.exists(yaml_path):
-        raise HTTPException(status_code=404, detail="Profile file not found")
+        stored_yaml = get_user_profile_yaml(db_path_get, user["id"])
+        if not stored_yaml:
+            raise HTTPException(status_code=404, detail="Profile file not found")
+        os.makedirs(os.path.dirname(yaml_path), exist_ok=True)
+        with open(yaml_path, "w") as f:
+            f.write(stored_yaml)
 
     with open(yaml_path) as f:
         raw = yaml.safe_load(f)
@@ -253,9 +265,16 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
 
     jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "agent"))
     yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}.yaml")
+    db_path_patch = os.environ.get("DB_PATH", "data/jobseeker.db")
 
+    # Restore YAML from DB if the filesystem was wiped (e.g. Railway redeploy)
     if not os.path.exists(yaml_path):
-        raise HTTPException(status_code=404, detail="Profile file not found")
+        stored_yaml = get_user_profile_yaml(db_path_patch, user["id"])
+        if not stored_yaml:
+            raise HTTPException(status_code=404, detail="Profile file not found")
+        os.makedirs(os.path.dirname(yaml_path), exist_ok=True)
+        with open(yaml_path, "w") as f:
+            f.write(stored_yaml)
 
     from ruamel.yaml import YAML  # noqa: PLC0415
     from ruamel.yaml.comments import CommentedMap, CommentedSeq  # noqa: PLC0415
@@ -284,8 +303,12 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
 
     buf = io.StringIO()
     ry.dump(raw, buf)
+    updated_yaml = buf.getvalue()
     with open(yaml_path, "w") as f:
-        f.write(buf.getvalue())
+        f.write(updated_yaml)
+
+    # Persist updated YAML to DB so it survives redeploys
+    save_user_profile_yaml(db_path_patch, user["id"], updated_yaml)
 
     return {"ok": True}
 
