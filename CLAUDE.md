@@ -108,9 +108,16 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - Onboarding pipeline: `save_profile()` pushes profile YAML + cv.md + seen_ids.txt to GitHub via Contents API, triggers `workflow_dispatch` (fire-and-forget). Env: `GH_ACTIONS_TOKEN`, `GH_REPO`, `GH_REF`
   - GHA: single-profile dispatch via `inputs.profile`, ingest syncs with `profile_id` in payload
   - Frontend: empty state with "Scanning job boards" + 60s auto-poll when `totalInDb === 0`; "No matching filters" state with reset button
+- Phase 10 — Ops: Persistence, Health Monitoring, Admin
+  - Railway volume (`/data`) holds SQLite; `cv_md` + `profile_yaml` persisted in `users` table (migrations 006, 007) so they survive ephemeral filesystem resets on redeploy
+  - Auto-prune: `cleanup_old_jobs()` deletes jobs + dependent rows older than 90 days on every ingest; called in `ingest_from_list()`
+  - `GET /api/ingest/status` (X-Ingest-Key protected): returns total_jobs, last_ingested_at, scored_profiles, total_scored, jobs_older_than_90d
+  - GHA "Verify ingest health" step prints status after every run
+  - `GET /api/onboard/profile`: opportunistic cv_md save — if DB is NULL but file exists on disk, persists to DB immediately
+  - Admin system: `is_admin INTEGER DEFAULT 0` on users (migration 008); `ADMIN_EMAILS` env var auto-promotes on login; `get_current_admin` dependency (403 if not admin); `api/routes/admin.py` with `GET /api/admin/users` + `POST /api/admin/trigger-pipeline`; React `/admin` page with pipeline trigger + users table (visible only to admins in hamburger menu)
 
 ### Current
-Phase 9 — Completed
+Phase 10 — Completed
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
@@ -145,6 +152,11 @@ Phase 9 — Completed
 - Ingest stores per-user scores only when `profile_id` is provided AND the job has a `rag_score` with a non-null `score` value. Jobs without RAG scores rely on heuristic at query time.
 - Onboarding triggers pipeline: `save_profile()` (first-time only) pushes files to GitHub repo via Contents API and fires `workflow_dispatch`. Requires `GH_ACTIONS_TOKEN` (PAT with contents:write + actions:write), `GH_REPO`, `GH_REF`.
 - Frontend empty state: when `total_in_db === 0` (no jobs scraped yet), shows "Scanning job boards" with 60s auto-poll. When jobs exist but filters exclude all, shows "No matching jobs" with reset button.
+- cv_md persistence: saved in `users.cv_md` (migration 006) on `POST /save-profile` and opportunistically on `GET /profile` (if file on disk but DB NULL). Guard in `save_profile`: empty cv_markdown is never written to DB (prevents accidental overwrite).
+- profile_yaml persistence: saved in `users.profile_yaml` (migration 007) on first-time save and on every `PATCH /profile`. Restored from DB to disk on `GET /profile` and `PATCH /profile` if filesystem was wiped.
+- Admin access: `is_admin` column on users (migration 008, default 0). Set `ADMIN_EMAILS=email@example.com` env var in Railway; users matching that email are auto-promoted to admin on next login. `get_current_admin` dependency in `api/middleware/auth.py`. Admin link in hamburger menu only visible to admins.
+- `POST /api/admin/trigger-pipeline`: dispatches `jobagent_daily.yml` workflow via GitHub API. Optional `{"profile": "id"}` body to target a specific profile. Requires same GH_ACTIONS_TOKEN/GH_REPO/GH_REF as onboarding.
+- Job cleanup: `cleanup_old_jobs(db_path, days=90)` deletes from user_job_scores + user_job_status + jobs where last_seen < cutoff. Called automatically at end of every ingest.
 
 ### Blockers
 {none}
