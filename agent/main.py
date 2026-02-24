@@ -560,7 +560,11 @@ def main():
 
     # Resolve profile-specific paths
     seen_ids_path    = profile.get("seen_ids", f"config/seen_ids/{profile_id}.txt")
-    preferences_path = profile.get("preferences", "config/preferences.yaml")
+    _per_user_prefs = f"config/profiles/{profile_id}-preferences.yaml"
+    preferences_path = profile.get(
+        "preferences",
+        _per_user_prefs if os.path.exists(_per_user_prefs) else "config/preferences.yaml",
+    )
     searches_path    = profile.get("searches", "config/searches.yaml")
     watchlist_path   = profile.get("watchlist", "config/watchlist.yaml")
     applied_path     = "config/applied.yaml"  # personal, always per-instance

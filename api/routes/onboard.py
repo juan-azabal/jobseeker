@@ -145,6 +145,58 @@ _LOCATION_MAP: dict[str, str] = {
     "remote": "",
 }
 
+# city/country → canonical country name, used to derive the relocation-rejection rule
+# in per-user preferences.yaml. Keep in sync with _LOCATION_MAP.
+_HOME_TO_COUNTRY: dict[str, str] = {
+    "spain": "Spain", "españa": "Spain", "barcelona": "Spain", "madrid": "Spain",
+    "valencia": "Spain", "bilbao": "Spain",
+    "netherlands": "Netherlands", "amsterdam": "Netherlands", "rotterdam": "Netherlands",
+    "germany": "Germany", "berlin": "Germany", "munich": "Germany", "hamburg": "Germany",
+    "france": "France", "paris": "France", "lyon": "France",
+    "uk": "UK", "london": "UK", "england": "UK", "manchester": "UK",
+    "portugal": "Portugal", "lisbon": "Portugal", "porto": "Portugal",
+    "italy": "Italy", "milan": "Italy", "rome": "Italy",
+    "sweden": "Sweden", "stockholm": "Sweden",
+    "denmark": "Denmark", "copenhagen": "Denmark",
+    "belgium": "Belgium", "brussels": "Belgium",
+    "ireland": "Ireland", "dublin": "Ireland",
+    "switzerland": "Switzerland", "zurich": "Switzerland",
+    "austria": "Austria", "vienna": "Austria",
+    "poland": "Poland", "warsaw": "Poland",
+    "czechia": "Czechia", "prague": "Czechia",
+    "finland": "Finland", "helsinki": "Finland",
+    "norway": "Norway", "oslo": "Norway",
+}
+
+
+# Seniority level → experience-year phrases to exclude from job titles.
+# Levels below the target are treated as junior relative to the user's target.
+_SENIORITY_DEALBREAKERS: dict[str, list[str]] = {
+    "junior":    [],
+    "mid":       ["intern", "internship"],
+    "senior":    ["junior", "intern", "internship", "entry level", "entry-level",
+                  "associate product manager", "APM", "0-2 years", "1-3 years"],
+    "staff":     ["junior", "intern", "internship", "entry level", "entry-level",
+                  "associate product manager", "APM", "0-2 years", "1-3 years", "2-4 years"],
+    "principal": ["junior", "intern", "internship", "entry level", "entry-level",
+                  "associate product manager", "APM", "0-2 years", "1-3 years", "2-4 years"],
+    "director":  ["junior", "intern", "internship", "entry level", "entry-level",
+                  "associate product manager", "APM", "0-2 years", "1-3 years", "2-4 years"],
+    "vp":        ["junior", "intern", "internship", "entry level", "entry-level",
+                  "associate product manager", "APM", "0-2 years", "1-3 years", "2-4 years"],
+}
+
+# IC track title keywords (no director/VP — those are management-track roles)
+_IC_TITLE_KEYWORDS: list[str] = [
+    "product manager", "product lead", "product owner",
+    "principal pm", "staff pm", "senior pm",
+]
+# Management track includes IC keywords + leadership titles
+_MGMT_TITLE_KEYWORDS: list[str] = _IC_TITLE_KEYWORDS + [
+    "director of product", "head of product",
+    "group product manager", "vp product", "vp of product",
+]
+
 
 def _derive_seniority_weights(profile: dict) -> dict[str, int]:
     """Bootstrap seniority_weights from CV-extracted current/target level.
@@ -184,15 +236,35 @@ def _generate_searches_yaml(profile: dict) -> str:
         normalized[canonical] = max(normalized.get(canonical, 0), int(w))
     top_domains = [d for d, _ in sorted(normalized.items(), key=lambda x: -x[1])[:3]]
 
-    # Resolve title
+    # Resolve top-2 distinct title variants from seniority_weights
     title_map = _MGMT_TITLES if track == "management" else _IC_TITLES
-    title = title_map.get(level, "Senior Product Manager")
+    titles: list[str] = []
+    for lvl, _ in sorted(sw.items(), key=lambda x: -x[1]):
+        t = title_map.get(lvl)
+        if t and t not in titles:
+            titles.append(t)
+        if len(titles) == 2:
+            break
+    if not titles:
+        titles = [title_map.get(level, "Senior Product Manager")]
+    title = titles[0]
+    title2 = titles[1] if len(titles) > 1 else None
 
-    # Normalize locations (deduplicated, ordered)
+    # Normalize locations from home_locations (deduplicated, ordered)
     home_locs: list[str] = profile.get("home_locations") or []
     primary_locations: list[str] = []
     for loc in home_locs:
         mapped = _LOCATION_MAP.get(loc.lower(), "")
+        if mapped and mapped not in primary_locations:
+            primary_locations.append(mapped)
+    # Extend with high-weight countries from country_weights (cap 3 total)
+    country_weights_map = profile.get("country_weights") or {}
+    for c, w in sorted(country_weights_map.items(), key=lambda x: -x[1]):
+        if len(primary_locations) >= 3:
+            break
+        if w <= 0 or c == "remote":
+            continue
+        mapped = _LOCATION_MAP.get(c.lower(), "")
         if mapped and mapped not in primary_locations:
             primary_locations.append(mapped)
     if not primary_locations:
@@ -231,6 +303,16 @@ def _generate_searches_yaml(profile: dict) -> str:
             "hours_old": 72,
         })
 
+    # LinkedIn: 2nd title variant (if distinct from primary)
+    if title2:
+        searches.append({
+            "term": f"{title2} remote",
+            "location": primary_locations[0] if primary_locations[0] else "",
+            "sites": ["linkedin"],
+            "results_wanted": 15,
+            "hours_old": 72,
+        })
+
     # LinkedIn skill-based: title + top profile skill (extra precision signal)
     skills = profile.get("skills") or []
     if skills:
@@ -247,12 +329,75 @@ def _generate_searches_yaml(profile: dict) -> str:
                      default_flow_style=False, allow_unicode=True, sort_keys=False)
 
 
+def _generate_preferences_yaml(profile: dict) -> str:
+    """Generate per-user preferences YAML fully from profile data.
+
+    No hardcoded salary, cities, or seniority assumptions — everything derived.
+    deal_breakers and title_must_contain_one_of depend on seniority_weights + track.
+    """
+    home_locs = profile.get("home_locations") or []
+    salary_min = int(profile.get("salary_min") or 60000)
+    exclude_companies = list(profile.get("exclude_companies") or [])
+    sw = profile.get("seniority_weights") or {}
+    track = (profile.get("track") or "ic").lower()
+
+    # Seniority-aware deal_breakers
+    top_level = max(sw, key=lambda k: sw[k]) if sw else "senior"
+    deal_breakers = list(_SENIORITY_DEALBREAKERS.get(top_level, _SENIORITY_DEALBREAKERS["senior"]))
+
+    # Title keywords depend on IC vs management track
+    title_keywords = _MGMT_TITLE_KEYWORDS if track == "management" else _IC_TITLE_KEYWORDS
+
+    # Onsite cities: map home_locations to canonical country/city names
+    accept_cities: list[str] = []
+    for loc in home_locs:
+        mapped = _LOCATION_MAP.get(loc.lower(), "")
+        if mapped and mapped not in accept_cities:
+            accept_cities.append(mapped)
+
+    # Primary country for relocation rejection rule
+    primary_country = None
+    for loc in home_locs:
+        c = _HOME_TO_COUNTRY.get(loc.lower())
+        if c:
+            primary_country = c
+            break
+
+    location_block: dict = {
+        "accept_remote": True,
+        "accept_hybrid": True,
+        "accept_onsite_cities": accept_cities,
+    }
+    if primary_country:
+        location_block["reject_if_requires_relocation_outside"] = primary_country
+
+    data = {
+        "prefilter": {
+            "deal_breakers": deal_breakers,
+            "title_must_contain_one_of": title_keywords,
+            "title_exclude": [
+                "business development", "crm manager", "marketing manager",
+                "project manager", "program manager", "sales", "account manager",
+                "customer success", "deposit product", "lending", "insurance", "growth",
+            ],
+            "exclude_companies": [
+                "Gartner", "Capterra", "GetApp", "Software Advice", "G2",
+            ] + exclude_companies,
+            "location": location_block,
+        },
+        "scoring": {"auto_generate_package": 65, "manual_review": 50, "auto_reject": 50},
+        "salary": {"min_eur": salary_min, "max_eur": salary_min + 40000, "currency": "EUR"},
+    }
+    return yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+
 def _write_profile_files(
     jobagent_dir: str,
     profile_id: str,
     cv_markdown: str,
     profile_yaml: str,
     searches_yaml: str = "",
+    preferences_yaml: str = "",
 ) -> None:
     profiles_dir = os.path.join(jobagent_dir, "config", "profiles")
     os.makedirs(profiles_dir, exist_ok=True)
@@ -262,6 +407,10 @@ def _write_profile_files(
     if searches_yaml:
         with open(os.path.join(profiles_dir, f"{profile_id}-searches.yaml"), "w") as f:
             f.write(searches_yaml)
+
+    if preferences_yaml:
+        with open(os.path.join(profiles_dir, f"{profile_id}-preferences.yaml"), "w") as f:
+            f.write(preferences_yaml)
 
     knowledge_dir = os.path.join(jobagent_dir, "knowledge", profile_id)
     os.makedirs(knowledge_dir, exist_ok=True)
@@ -327,7 +476,9 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
 
     # Generate per-user searches and patch the profile YAML to reference it.
     # Also inject seniority_weights (user-editable, not in the agent's _build_profile_yaml).
-    searches_yaml = _generate_searches_yaml(body.profile)
+    profile_for_gen = {**body.profile, "salary_min": body.salary_min}
+    searches_yaml = _generate_searches_yaml(profile_for_gen)
+    preferences_yaml = _generate_preferences_yaml(profile_for_gen)
     searches_rel_path = f"config/profiles/{profile_id}-searches.yaml"
     try:
         profile_data = yaml.safe_load(profile_yaml)
@@ -343,23 +494,29 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
     except Exception:
         logger.exception("Failed to patch searches path for %s — using global default", profile_id)
         searches_yaml = ""
+        preferences_yaml = ""
 
-    _write_profile_files(jobagent_dir, profile_id, body.cv_markdown, profile_yaml, searches_yaml)
+    _write_profile_files(
+        jobagent_dir, profile_id, body.cv_markdown, profile_yaml,
+        searches_yaml, preferences_yaml,
+    )
 
     save_user_cv_md(db_path, user["id"], body.cv_markdown)
     save_user_profile_yaml(db_path, user["id"], profile_yaml)
 
     # Sync profile to GitHub repo and trigger the scraping pipeline (fire-and-forget)
     try:
-        await _sync_and_trigger_pipeline(profile_id, profile_yaml, body.cv_markdown, searches_yaml)
+        await _sync_and_trigger_pipeline(
+            profile_id, profile_yaml, body.cv_markdown, searches_yaml, preferences_yaml,
+        )
     except Exception:
         logger.exception("Pipeline sync/trigger failed for %s (non-fatal)", profile_id)
 
     return {"profile_id": profile_id}
 
 
-async def _push_searches_to_github(profile_id: str, searches_yaml: str) -> None:
-    """Push only the searches file to GitHub (no pipeline trigger)."""
+async def _push_file_to_github(gh_path: str, content: str, message: str) -> None:
+    """Push a single file to GitHub (no pipeline trigger)."""
     gh_token = os.environ.get("GH_ACTIONS_TOKEN", "")
     gh_repo = os.environ.get("GH_REPO", "")
     gh_ref = os.environ.get("GH_REF", "main")
@@ -370,30 +527,30 @@ async def _push_searches_to_github(profile_id: str, searches_yaml: str) -> None:
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    gh_path = f"agent/config/profiles/{profile_id}-searches.yaml"
     url = f"https://api.github.com/repos/{gh_repo}/contents/{gh_path}"
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.get(url, headers=headers, params={"ref": gh_ref})
         sha = resp.json().get("sha") if resp.status_code == 200 else None
-        gh_body = {
-            "message": f"chore: update searches for {profile_id} [skip ci]",
-            "content": base64.b64encode(searches_yaml.encode()).decode(),
+        gh_body: dict = {
+            "message": message,
+            "content": base64.b64encode(content.encode()).decode(),
             "branch": gh_ref,
         }
         if sha:
             gh_body["sha"] = sha
         put_resp = await client.put(url, json=gh_body, headers=headers)
         if put_resp.status_code in (200, 201):
-            logger.info("GitHub searches sync OK: %s", gh_path)
+            logger.info("GitHub file sync OK: %s", gh_path)
         else:
             logger.warning(
-                "GitHub searches sync FAILED: %s HTTP %d — %s",
+                "GitHub file sync FAILED: %s HTTP %d — %s",
                 gh_path, put_resp.status_code, put_resp.text[:200],
             )
 
 
 async def _sync_and_trigger_pipeline(
-    profile_id: str, profile_yaml: str, cv_markdown: str, searches_yaml: str = ""
+    profile_id: str, profile_yaml: str, cv_markdown: str,
+    searches_yaml: str = "", preferences_yaml: str = "",
 ) -> None:
     """Push profile files to GitHub repo and trigger the agent pipeline.
 
@@ -425,6 +582,10 @@ async def _sync_and_trigger_pipeline(
         if searches_yaml:
             files_to_push.append(
                 (f"agent/config/profiles/{profile_id}-searches.yaml", searches_yaml)
+            )
+        if preferences_yaml:
+            files_to_push.append(
+                (f"agent/config/profiles/{profile_id}-preferences.yaml", preferences_yaml)
             )
         for path, content in files_to_push:
             url = f"https://api.github.com/repos/{gh_repo}/contents/{path}"
@@ -605,19 +766,23 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
     # Persist updated YAML to DB so it survives redeploys
     save_user_profile_yaml(db_path_patch, user["id"], updated_yaml)
 
-    # Regenerate per-user searches from the updated profile.
+    # Regenerate per-user searches + preferences from the updated profile.
     # seniority_weights from the request take priority; track still comes from YAML.
     target_block = raw.get("target") or {}
-    profile_for_searches = {
+    user_block = raw.get("user") or {}
+    profile_for_gen = {
         "seniority_weights": body.seniority_weights or target_block.get("seniority_weights") or {},
         "target_level": target_block.get("level", "senior"),
         "track": target_block.get("track", "ic"),
         "domains": body.domains,
         "home_locations": body.home_locations,
         "skills": body.skills,
+        "country_weights": dict(body.country_weights),
+        "salary_min": body.salary_min,
+        "exclude_companies": list(user_block.get("exclude_companies") or []),
     }
     try:
-        searches_yaml = _generate_searches_yaml(profile_for_searches)
+        searches_yaml = _generate_searches_yaml(profile_for_gen)
         searches_path = os.path.join(
             jobagent_dir, "config", "profiles", f"{profile_id}-searches.yaml"
         )
@@ -625,9 +790,29 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
             f.write(searches_yaml)
         logger.info("Regenerated searches for profile %s after profile edit", profile_id)
         # Push updated searches to GitHub (fire-and-forget)
-        await _push_searches_to_github(profile_id, searches_yaml)
+        await _push_file_to_github(
+            f"agent/config/profiles/{profile_id}-searches.yaml",
+            searches_yaml,
+            f"chore: update searches for {profile_id} [skip ci]",
+        )
     except Exception:
         logger.exception("Searches regeneration failed for %s (non-fatal)", profile_id)
+
+    try:
+        preferences_yaml = _generate_preferences_yaml(profile_for_gen)
+        prefs_path = os.path.join(
+            jobagent_dir, "config", "profiles", f"{profile_id}-preferences.yaml"
+        )
+        with open(prefs_path, "w") as f:
+            f.write(preferences_yaml)
+        logger.info("Regenerated preferences for profile %s after profile edit", profile_id)
+        await _push_file_to_github(
+            f"agent/config/profiles/{profile_id}-preferences.yaml",
+            preferences_yaml,
+            f"chore: update preferences for {profile_id} [skip ci]",
+        )
+    except Exception:
+        logger.exception("Preferences regeneration failed for %s (non-fatal)", profile_id)
 
     return {"ok": True}
 

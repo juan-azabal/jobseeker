@@ -17,6 +17,11 @@ prefilter:
   - principal pm
   - staff pm
   - senior pm
+  - director of product
+  - head of product
+  - group product manager
+  - vp product
+  - vp of product
   title_exclude:
   - business development
   - crm manager
@@ -36,10 +41,10 @@ prefilter:
   - GetApp
   - Software Advice
   - G2
-  - Gartner Digital Markets
-  - Softonic
-  - Marfeel
-  - LaVanguardia
+  - Trioteca
+  - Planteka
+  - Colvin
+  - La Cyca Projects & Services
   location:
     accept_remote: true
     accept_hybrid: true
@@ -51,6 +56,6 @@ scoring:
   manual_review: 50
   auto_reject: 50
 salary:
-  min_eur: 70000
-  max_eur: 110000
+  min_eur: 60000
+  max_eur: 100000
   currency: EUR
