@@ -104,9 +104,9 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
     existing_profile_id = user.get("profile_id")
 
     if existing_profile_id:
-        # User already has a profile — only update cv.md, never overwrite the YAML
-        # (the YAML may contain rich data built manually: story banks, seniority weights, etc.)
+        # User already has a profile — update cv.md and restore YAML if completely lost.
         db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+
         if body.cv_markdown:  # Guard: never overwrite existing cv_md with empty string
             save_user_cv_md(db_path, user["id"], body.cv_markdown)
             # Also write to disk for the current process lifetime
@@ -114,6 +114,22 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
             os.makedirs(knowledge_dir, exist_ok=True)
             with open(os.path.join(knowledge_dir, "cv.md"), "w") as f:
                 f.write(body.cv_markdown)
+
+        # Recovery: if profile YAML is completely gone (not in DB, not on disk), regenerate it.
+        # This breaks the redirect loop caused by Railway ephemeral filesystem wipes.
+        # We only regenerate when YAML is truly absent — never overwrite an existing one.
+        yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{existing_profile_id}.yaml")
+        stored_yaml = get_user_profile_yaml(db_path, user["id"])
+        if not stored_yaml and not os.path.exists(yaml_path):
+            logger.info("Profile YAML missing for %s — regenerating from submitted profile data", existing_profile_id)
+            recovered_yaml = _build_profile_yaml(
+                body.profile, existing_profile_id, body.salary_min, body.location_preference
+            )
+            os.makedirs(os.path.dirname(yaml_path), exist_ok=True)
+            with open(yaml_path, "w") as f:
+                f.write(recovered_yaml)
+            save_user_profile_yaml(db_path, user["id"], recovered_yaml)
+
         return {"profile_id": existing_profile_id}
 
     # First-time setup: generate full YAML from CV data
