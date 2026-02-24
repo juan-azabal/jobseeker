@@ -377,3 +377,21 @@ def get_user_profile_yaml(db_path: str, user_id: int) -> str | None:
     row = con.execute("SELECT profile_yaml FROM users WHERE id = ?", (user_id,)).fetchone()
     con.close()
     return row["profile_yaml"] if row else None
+
+
+def set_user_admin(db_path: str, user_id: int, is_admin: bool) -> None:
+    """Grant or revoke admin privileges for a user."""
+    con = _connect(db_path)
+    con.execute("UPDATE users SET is_admin = ? WHERE id = ?", (1 if is_admin else 0, user_id))
+    con.commit()
+    con.close()
+
+
+def get_all_users(db_path: str) -> list[dict]:
+    """Return all users ordered by creation date (newest first)."""
+    con = _connect(db_path)
+    rows = con.execute(
+        "SELECT id, email, name, avatar_url, profile_id, is_admin, created_at, last_login FROM users ORDER BY created_at DESC"
+    ).fetchall()
+    con.close()
+    return [dict(r) for r in rows]

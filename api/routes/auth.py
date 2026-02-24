@@ -6,7 +6,7 @@ from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from api.db.queries import create_session, delete_session, get_session, get_user_by_google_id, upsert_user
+from api.db.queries import create_session, delete_session, get_session, get_user_by_google_id, upsert_user, set_user_admin
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -55,6 +55,12 @@ async def callback(request: Request):
         "avatar_url": userinfo.get("picture"),
         "profile_id": None,
     })
+
+    # Auto-promote users whose email is listed in ADMIN_EMAILS env var (idempotent)
+    admin_emails = {e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}
+    if user.get("email") in admin_emails and not user.get("is_admin"):
+        set_user_admin(_db_path(), user["id"], True)
+        user = {**user, "is_admin": 1}
 
     session_token = secrets.token_urlsafe(32)
     expires_at = (datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS)).isoformat()

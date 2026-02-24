@@ -13,6 +13,7 @@ from api.routes.jobs import router as jobs_router
 from api.routes.auth import router as auth_router
 from api.routes.onboard import router as onboard_router
 from api.routes.ingest import router as ingest_router
+from api.routes.admin import router as admin_router
 
 app = FastAPI(title="JobSeeker")
 
@@ -34,6 +35,7 @@ app.include_router(auth_router)
 app.include_router(jobs_router)
 app.include_router(onboard_router)
 app.include_router(ingest_router)
+app.include_router(admin_router)
 
 
 @app.get("/api/health")
