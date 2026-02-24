@@ -104,20 +104,28 @@ def _is_us_only(job):
             return True
 
     us_visa_signals = [
+        # Explicit US work authorisation requirements
         "authorized to work in the u.s",
         "authorized to work for any employer in the u.s",
-        "unable to sponsor",
         "must be authorized to work in the united states",
         "u.s. work authorization",
         "us work authorization",
-        "must be legally authorized",
         "e-verify",
-        "remote, nationwide",
-        "remote nationwide",
-        "humana",
-        "401(k)",
-        "401k",
+        # "unable to sponsor" kept but scoped below — common in US postings
+        # "must be legally authorized" removed: too broad, appears in EU job descriptions too
+        # "401(k)" / "401k" removed: US multinationals include benefits in templates even for
+        #   EU roles; filtering on this causes heavy false positives for remote jobs
+        # "humana" removed: matches "derechos humanos" / "capital humano" in Spanish descriptions
+        # "remote, nationwide" / "remote nationwide" removed without US context: UK/EU companies
+        #   legitimately use this phrasing for country-wide remote roles
     ]
+
+    # "unable to sponsor" is very US-specific but occasionally used by EU companies too;
+    # only treat as US-only signal when combined with explicit US work-auth language nearby.
+    if "unable to sponsor" in description and (
+        "united states" in description or "u.s." in description or "visa sponsorship" in description
+    ):
+        return True
 
     for signal in us_visa_signals:
         if signal in description:
