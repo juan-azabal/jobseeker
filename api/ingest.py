@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from api.db.queries import upsert_job, get_job_by_id, upsert_user_job_score, get_user_id_by_profile_id
+from api.db.queries import upsert_job, get_job_by_id, upsert_user_job_score, get_user_id_by_profile_id, cleanup_old_jobs
 from api.scoring import compute_tier
 
 
@@ -82,7 +82,10 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None 
                 upsert_user_job_score(db_path, user_id, job_id, score, tier, scored_json)
                 scored += 1
 
-    return {"inserted": inserted, "updated": updated, "skipped": skipped, "scored": scored}
+    # Prune jobs not seen in the last 90 days to keep the DB bounded
+    deleted = cleanup_old_jobs(db_path)
+
+    return {"inserted": inserted, "updated": updated, "skipped": skipped, "scored": scored, "deleted": deleted}
 
 
 def ingest(db_path: str, jobagent_dir: str, profile_id: str | None = None) -> dict:

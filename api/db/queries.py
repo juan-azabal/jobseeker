@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 
@@ -152,6 +152,29 @@ def get_total_job_count(db_path: str) -> int:
     return row["cnt"] if row else 0
 
 
+def cleanup_old_jobs(db_path: str, days: int = 90) -> int:
+    """Delete jobs not seen in the last `days` days and their dependent rows.
+
+    Returns the number of jobs deleted.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+    con = _connect(db_path)
+    # Delete dependent rows first (SQLite FK enforcement is off by default)
+    con.execute(
+        "DELETE FROM user_job_scores WHERE job_id IN (SELECT job_id FROM jobs WHERE last_seen < ?)",
+        (cutoff,),
+    )
+    con.execute(
+        "DELETE FROM user_job_status WHERE job_id IN (SELECT job_id FROM jobs WHERE last_seen < ?)",
+        (cutoff,),
+    )
+    cur = con.execute("DELETE FROM jobs WHERE last_seen < ?", (cutoff,))
+    deleted = cur.rowcount
+    con.commit()
+    con.close()
+    return deleted
+
+
 # ── Per-user scores ───────────────────────────────────────────────────────
 
 def upsert_user_job_score(
@@ -185,12 +208,17 @@ def get_ingest_status(db_path: str) -> dict:
     scores_row = con.execute(
         "SELECT COUNT(DISTINCT user_id) AS scored_profiles, COUNT(*) AS total_scored FROM user_job_scores"
     ).fetchone()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).date().isoformat()
+    old_row = con.execute(
+        "SELECT COUNT(*) AS old_jobs FROM jobs WHERE last_seen < ?", (cutoff,)
+    ).fetchone()
     con.close()
     return {
         "total_jobs": row["total_jobs"],
         "last_ingested_at": row["last_ingested_at"],
         "scored_profiles": scores_row["scored_profiles"],
         "total_scored": scores_row["total_scored"],
+        "jobs_older_than_90d": old_row["old_jobs"],
     }
 
 
@@ -333,3 +361,19 @@ def get_user_cv_md(db_path: str, user_id: int) -> str | None:
     row = con.execute("SELECT cv_md FROM users WHERE id = ?", (user_id,)).fetchone()
     con.close()
     return row["cv_md"] if row else None
+
+
+def save_user_profile_yaml(db_path: str, user_id: int, profile_yaml: str) -> None:
+    """Persist profile YAML in the users table so it survives redeploys."""
+    con = _connect(db_path)
+    con.execute("UPDATE users SET profile_yaml = ? WHERE id = ?", (profile_yaml, user_id))
+    con.commit()
+    con.close()
+
+
+def get_user_profile_yaml(db_path: str, user_id: int) -> str | None:
+    """Return the user's stored profile YAML, or None if not set."""
+    con = _connect(db_path)
+    row = con.execute("SELECT profile_yaml FROM users WHERE id = ?", (user_id,)).fetchone()
+    con.close()
+    return row["profile_yaml"] if row else None
