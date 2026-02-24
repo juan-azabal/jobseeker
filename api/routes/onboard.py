@@ -121,14 +121,17 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
         yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{existing_profile_id}.yaml")
         stored_yaml = get_user_profile_yaml(db_path, user["id"])
         if not stored_yaml and not os.path.exists(yaml_path):
-            logger.info("Profile YAML missing for %s — regenerating from submitted profile data", existing_profile_id)
-            recovered_yaml = _build_profile_yaml(
-                body.profile, existing_profile_id, body.salary_min, body.location_preference
-            )
-            os.makedirs(os.path.dirname(yaml_path), exist_ok=True)
-            with open(yaml_path, "w") as f:
-                f.write(recovered_yaml)
-            save_user_profile_yaml(db_path, user["id"], recovered_yaml)
+            try:
+                logger.info("Profile YAML missing for %s — regenerating from submitted profile data", existing_profile_id)
+                recovered_yaml = _build_profile_yaml(
+                    body.profile, existing_profile_id, body.salary_min, body.location_preference
+                )
+                os.makedirs(os.path.dirname(yaml_path), exist_ok=True)
+                with open(yaml_path, "w") as f:
+                    f.write(recovered_yaml)
+                save_user_profile_yaml(db_path, user["id"], recovered_yaml)
+            except Exception:
+                logger.exception("YAML recovery failed for %s — continuing without YAML", existing_profile_id)
 
         return {"profile_id": existing_profile_id}
 

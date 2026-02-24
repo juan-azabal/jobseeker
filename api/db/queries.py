@@ -327,8 +327,12 @@ def create_session(db_path: str, token: str, user_id: int, expires_at: str) -> N
 
 
 def get_session(db_path: str, token: str) -> dict | None:
+    """Return the session row only if it exists and has not expired."""
     con = _connect(db_path)
-    row = con.execute("SELECT * FROM sessions WHERE token = ?", (token,)).fetchone()
+    row = con.execute(
+        "SELECT * FROM sessions WHERE token = ? AND expires_at > datetime('now')",
+        (token,),
+    ).fetchone()
     con.close()
     return dict(row) if row else None
 
