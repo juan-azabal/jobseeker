@@ -22,9 +22,9 @@ target:
   track: management
   domains:
     data: 15
-    ecommerce: 12
+    ecommerce: 5
     ai: 10
-    mortgagetech: 8
+    mortgagetech: 0
 scoring:
   rag_threshold: 25
   salary_min: 60000
@@ -34,13 +34,11 @@ skills:
 - stakeholder-management
 - a/b-testing
 - design-thinking
-- product-metrics
-- user-centric
-- agile
+- product-development-frameworks
+- user-centric-mindset
+- agile-methodologies
 - sql
 - python
-- ux
-- ui
 knowledge:
   dir: knowledge/noura
   profile_files:
