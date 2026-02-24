@@ -13,7 +13,7 @@ import yaml
 logger = logging.getLogger(__name__)
 
 from api.middleware.auth import get_current_user
-from api.db.queries import update_user_profile_id
+from api.db.queries import update_user_profile_id, save_user_cv_md, get_user_cv_md
 
 MAX_CV_BYTES = 5 * 1024 * 1024  # 5 MB
 
@@ -102,6 +102,9 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
     if existing_profile_id:
         # User already has a profile — only update cv.md, never overwrite the YAML
         # (the YAML may contain rich data built manually: story banks, seniority weights, etc.)
+        db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+        save_user_cv_md(db_path, user["id"], body.cv_markdown)
+        # Also write to disk for the current process lifetime
         knowledge_dir = os.path.join(jobagent_dir, "knowledge", existing_profile_id)
         os.makedirs(knowledge_dir, exist_ok=True)
         with open(os.path.join(knowledge_dir, "cv.md"), "w") as f:
@@ -117,6 +120,7 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
 
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
     update_user_profile_id(db_path, user["id"], profile_id)
+    save_user_cv_md(db_path, user["id"], body.cv_markdown)
 
     # Sync profile to GitHub repo and trigger the scraping pipeline (fire-and-forget)
     try:
@@ -220,8 +224,10 @@ async def get_profile(user: dict = Depends(get_current_user)):
         "location_preference": user_block.get("location_preference", "b"),
     }
 
-    cv_markdown = ""
-    if os.path.exists(cv_path):
+    # Prefer DB-stored cv_md (survives redeploys); fall back to disk
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    cv_markdown = get_user_cv_md(db_path, user["id"]) or ""
+    if not cv_markdown and os.path.exists(cv_path):
         with open(cv_path) as f:
             cv_markdown = f.read()
 
