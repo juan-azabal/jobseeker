@@ -39,6 +39,10 @@ skills:
 - data-platforms
 - analytics
 - personalization
+- ml
+- cros
+- api
+- sdk
 knowledge:
   dir: knowledge/juan
   profile_files:
