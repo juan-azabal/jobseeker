@@ -94,6 +94,11 @@ export default function JobCard({ job, selected = false, onSelect, onClick }: Pr
                 {job.location_type}
               </span>
             )}
+            {job.geo_restricted && (
+              <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-amber-500/70 border border-amber-500/20">
+                Relocation
+              </span>
+            )}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">

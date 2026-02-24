@@ -178,6 +178,7 @@ def list_jobs(
     date_from: str | None = None,
     date_to: str | None = None,
     hide_applied: bool = Query(default=False),
+    hide_geo_restricted: bool = Query(default=False),
     limit: int = Query(default=100, ge=1, le=500),
     user: dict = Depends(get_current_user),
 ):
@@ -197,10 +198,13 @@ def list_jobs(
 
     jobs = _score_and_tier_jobs(jobs, profile, home_locations, home_regions)
 
-    # Apply tier filter after scoring (tiers are computed per-user now)
+    # Apply post-scoring filters
     if tier:
         tiers_upper = {t.upper() for t in tier}
         jobs = [j for j in jobs if j["tier"] in tiers_upper]
+
+    if hide_geo_restricted:
+        jobs = [j for j in jobs if not j.get("geo_restricted")]
 
     # Strip internal fields from response
     for job in jobs:
@@ -214,7 +218,7 @@ def list_jobs(
 
     return {
         "jobs": jobs,
-        "filters": {"tier": tier, "period": period or "all"},
+        "filters": {"tier": tier, "period": period or "all", "hide_geo_restricted": hide_geo_restricted},
         "total": len(jobs),
         "total_in_db": total_in_db,
     }

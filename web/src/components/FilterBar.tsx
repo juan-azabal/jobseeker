@@ -2,6 +2,7 @@ export interface Filters {
   tiers: string[];
   period: string;
   hideApplied: boolean;
+  hideGeoRestricted: boolean;
 }
 
 interface Props {
@@ -47,6 +48,7 @@ export default function FilterBar({ filters, onChange }: Props) {
 
   const setPeriod = (period: string) => onChange({ ...filters, period });
   const toggleHideApplied = () => onChange({ ...filters, hideApplied: !filters.hideApplied });
+  const toggleHideGeoRestricted = () => onChange({ ...filters, hideGeoRestricted: !filters.hideGeoRestricted });
 
   return (
     <div className="mb-6 flex flex-wrap items-center gap-2">
@@ -105,6 +107,17 @@ export default function FilterBar({ filters, onChange }: Props) {
         }`}
       >
         {filters.hideApplied ? 'Show applied' : 'Hide applied'}
+      </button>
+
+      <button
+        onClick={toggleHideGeoRestricted}
+        className={`rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all duration-150 ${
+          filters.hideGeoRestricted
+            ? 'border-zinc-600 bg-zinc-700/40 text-zinc-300'
+            : 'border-transparent text-zinc-600 hover:border-zinc-700 hover:text-zinc-400'
+        }`}
+      >
+        {filters.hideGeoRestricted ? 'Show relocation' : 'Hide relocation'}
       </button>
     </div>
   );
