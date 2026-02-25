@@ -9,6 +9,7 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
         cookieDomainRewrite: 'localhost',
+        timeout: 300_000, // 5 min — backfill-embeddings can be slow on first run
       },
     },
   },
