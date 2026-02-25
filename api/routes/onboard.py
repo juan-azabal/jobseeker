@@ -860,8 +860,9 @@ async def add_skill(body: AddSkillRequest, user: dict = Depends(get_current_user
 
     # Pre-compute embedding for the new skill (non-blocking)
     try:
-        from api.embeddings import get_embedding
+        from api.embeddings import get_embedding, clear_memory_cache
         get_embedding(skill, db_path)
+        clear_memory_cache()  # invalidate so subsequent requests pick up the new skill
     except Exception:
         pass  # best-effort, don't block response
 

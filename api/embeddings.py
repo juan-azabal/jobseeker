@@ -40,6 +40,18 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 # ---------------------------------------------------------------------------
 
 
+_MAX_MEMORY_CACHE = 2000  # max entries in process-level cache
+
+# Process-level in-memory cache: avoids repeated SQLite reads within the same
+# process lifecycle (e.g. scoring 100 jobs in one request).
+_memory_cache: dict[str, list[float]] = {}
+
+
+def clear_memory_cache() -> None:
+    """Clear the in-memory embedding cache (call after profile skill updates)."""
+    _memory_cache.clear()
+
+
 def _normalize(text: str) -> str:
     return text.strip().lower()
 
@@ -124,7 +136,7 @@ def get_embedding(text: str, db_path: str) -> list[float] | None:
 def get_embeddings_batch(
     texts: list[str], db_path: str
 ) -> dict[str, list[float]]:
-    """Get embeddings for multiple texts. Cache-first, API only for misses.
+    """Get embeddings for multiple texts. Memory cache → SQLite → API.
 
     Returns dict of normalized_text → embedding. Missing texts (API failure)
     are omitted from the result.
@@ -141,16 +153,31 @@ def get_embeddings_batch(
 
     normalized_keys = list(norm_map.keys())
 
-    # Bulk cache lookup
-    cached = _load_batch_from_cache(db_path, normalized_keys)
-    result = dict(cached)
+    # 1. Check process-level memory cache first
+    result: dict[str, list[float]] = {}
+    mem_misses = []
+    for k in normalized_keys:
+        if k in _memory_cache:
+            result[k] = _memory_cache[k]
+        else:
+            mem_misses.append(k)
 
-    # Determine misses
-    misses = [k for k in normalized_keys if k not in cached]
+    if not mem_misses:
+        return result
+
+    # 2. Bulk SQLite cache lookup for memory misses
+    cached = _load_batch_from_cache(db_path, mem_misses)
+    for k, emb in cached.items():
+        result[k] = emb
+        if len(_memory_cache) < _MAX_MEMORY_CACHE:
+            _memory_cache[k] = emb
+
+    # 3. Determine remaining misses (not in memory or SQLite)
+    misses = [k for k in mem_misses if k not in cached]
     if not misses:
         return result
 
-    # Call API for misses
+    # 4. Call API for remaining misses
     try:
         client = openai.OpenAI()
         response = client.embeddings.create(model=MODEL, input=misses)
@@ -159,6 +186,8 @@ def get_embeddings_batch(
         for text, emb in zip(misses, new_embeddings):
             result[text] = emb
             to_cache.append((text, emb))
+            if len(_memory_cache) < _MAX_MEMORY_CACHE:
+                _memory_cache[text] = emb
         _save_batch_to_cache(db_path, to_cache)
     except Exception as exc:
         logger.warning("Batch embedding API call failed: %s", exc)

@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 MATCH_THRESHOLD = 0.80    # strong match
 PARTIAL_THRESHOLD = 0.68  # partial match
+MAX_PAIRS = 500           # skip semantic matching for pathological cases
 
 
 @dataclass
@@ -34,10 +35,23 @@ def match_skills(
     """
     if not job_skills:
         return []
+    if not user_skills:
+        return [
+            SkillMatch(job_skill=s, status="none", user_skill=None, similarity=0.0)
+            for s in job_skills
+        ]
 
-    # Normalize all skills
-    norm_user = [s.strip().lower().replace("-", " ") for s in user_skills]
-    norm_job = [s.strip().lower().replace("-", " ") for s in job_skills]
+    # Normalize all skills; skip overly long strings (likely sentences, not skills)
+    norm_user = [s.strip().lower().replace("-", " ") for s in user_skills if len(s.strip()) <= 200]
+    norm_job = [s.strip().lower().replace("-", " ") for s in job_skills if len(s.strip()) <= 200]
+
+    # Performance guard: skip semantic matching for pathological cases
+    if len(norm_user) * len(norm_job) > MAX_PAIRS:
+        logger.info(
+            "Pair count %d exceeds %d — falling back to substring matching",
+            len(norm_user) * len(norm_job), MAX_PAIRS,
+        )
+        return _substring_match(norm_user, norm_job, job_skills)
 
     # Get embeddings for all unique skills
     all_skills = list(set(norm_user + norm_job))
