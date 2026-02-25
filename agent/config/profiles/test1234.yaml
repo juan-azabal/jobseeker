@@ -31,7 +31,7 @@ knowledge:
   - cv.md
   collection_name: test1234_profile
 stories: {}
-preferences: config/profiles/test1234-preferences.yaml
+preferences: config/preferences.yaml
 searches: config/profiles/test1234-searches.yaml
 watchlist: config/watchlist.yaml
 seen_ids: config/seen_ids/test1234.txt
