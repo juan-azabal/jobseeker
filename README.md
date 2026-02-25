@@ -15,6 +15,7 @@ A personal job search platform. Web CRM + autonomous scraping/scoring engine in 
 - **Daily digest** — automated scraping + email notification (GitHub Actions cron)
 - **Self-service onboarding** — upload CV, review extracted profile, save → pipeline fires automatically
 - **Cross-user dedup** — jobs parsed by one user are reused by subsequent users (saves LLM costs)
+- **Semantic skill matching** — cosine similarity matching between profile skills and job requirements; skill chips colored by match status in job detail
 - **Admin panel** — trigger pipeline, view users, manage system
 
 ---
@@ -114,9 +115,11 @@ jobsearch/
 │   ├── routes/             # auth, jobs, onboard, ingest, admin
 │   ├── middleware/          # session auth, admin guards
 │   ├── cv/                 # CV generation pipeline (plan → prompt → LLM → validate → docx)
-│   ├── db/                 # SQLite init, migrations (001–010), queries
+│   ├── db/                 # SQLite init, migrations (001–012), queries
 │   ├── ingest.py           # agent output → SQLite
 │   ├── scoring.py          # per-user heuristic scoring (no LLM)
+│   ├── embeddings.py       # OpenAI embedding service with SQLite cache
+│   ├── skill_matcher.py    # semantic skill matching (cosine similarity)
 │   ├── geo.py              # geographic utilities
 │   └── onboard_utils.py    # CV parsing + profile generation
 ├── web/                    # React frontend
@@ -142,9 +145,9 @@ jobsearch/
 │   ├── scripts/            # reparse, rescore, ingest payload builder
 │   ├── schemas/            # JSON output contracts
 │   └── patterns/           # Module interface contracts
-├── tests/                  # Backend tests (245)
+├── tests/                  # Backend tests (299)
 ├── data/                   # jobseeker.db (gitignored)
-├── scripts/                # seed_dev.py
+├── scripts/                # seed_dev.py, backfill_embeddings.py
 └── requirements.txt        # Merged deps
 ```
 
@@ -182,6 +185,7 @@ jobsearch/
 | 9 | Per-user scoring + new-user bootstrap | ✅ |
 | 10 | Ops: persistence, health, admin | ✅ |
 | 11 | Cross-user dedup + sequential pipeline | ✅ |
+| 12 | Semantic skill matching | ✅ |
 | N | Onboarding UX for new profile fields | 🔜 |
 | R | Refactor & test coverage | 🔜 |
 | F | Ship: Dockerfile, README, deploy | 🔜 |
