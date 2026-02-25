@@ -25,7 +25,7 @@ function JobDetailRoute() {
       onBack={() => navigate(-1)}
       prevId={prevId}
       nextId={nextId}
-      onNavigate={(id) => navigate(`/jobs/${id}`, { state: { jobIds } })}
+      onNavigate={(id) => navigate(`/jobs/${id}`, { state: { jobIds }, replace: true })}
     />
   );
 }
