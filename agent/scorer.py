@@ -68,6 +68,7 @@ def _build_scoring_prompt(profile: dict) -> str:
     top_domains = sorted(domains.items(), key=lambda x: -x[1])
     core_domains = [d for d, s in top_domains if s >= 12]
     adjacent_domains = [d for d, s in top_domains if 6 <= s < 12]
+    penalty_domains = [d for d, s in top_domains if s < 0]
     core_str = ", ".join(core_domains) if core_domains else "tech"
 
     # Adjacent clause: if adjacent domains exist, list them; otherwise omit
@@ -75,6 +76,17 @@ def _build_scoring_prompt(profile: dict) -> str:
         adjacent_clause = "Adjacent domains (" + ", ".join(adjacent_domains) + ")"
     else:
         adjacent_clause = "Tangentially related domains"
+
+    # Penalty clause: if negative-weight domains exist, inject a cap instruction
+    if penalty_domains:
+        penalty_domains_str = ", ".join(sorted(penalty_domains))
+        penalty_clause = (
+            f"- PENALTY: If the role's domain is primarily {penalty_domains_str}, "
+            "cap domain_fit at 4 regardless of other signals. "
+            "The candidate has explicitly deprioritized these domains."
+        )
+    else:
+        penalty_clause = ""
 
     top_levels = sorted(seniority.items(), key=lambda x: -x[1])
     target_levels = [lvl for lvl, s in top_levels if s >= 10]
@@ -90,6 +102,7 @@ def _build_scoring_prompt(profile: dict) -> str:
         .replace("{adjacent_clause}", adjacent_clause)
         .replace("{target_str}", target_str)
         .replace("{geography}", geography)
+        .replace("{penalty_clause}", penalty_clause)
     )
 
 

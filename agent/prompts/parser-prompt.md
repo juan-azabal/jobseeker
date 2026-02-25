@@ -1,4 +1,4 @@
-# Parser Prompt v1.1 — 2026-02-23
+# Parser Prompt v1.2 — 2026-02-25
 <!-- Source of truth. parser.py reads this file at runtime. -->
 
 You are a job description parser. Extract structured information from the job description below.
@@ -14,7 +14,8 @@ Return ONLY valid JSON with this exact structure (no markdown, no backticks):
   "nice_to_have_skills": ["preferred/bonus technical skills and tools (same technical-only rule as must_have_skills)"],
   "technical_stack": ["specific technologies, tools, platforms mentioned anywhere in the JD (union of all tech mentioned, including those in must_have_skills)"],
   "experience_requirements": ["years of experience requirements, domain background requirements, education/degree requirements, and soft skills or competencies explicitly required. Examples: '5+ years in product management', 'Experience in B2B SaaS', 'Bachelor degree in CS or related', 'Strong stakeholder management', 'Fluent English'."],
-  "domain": "adtech|data|ml|fintech|saas|ecommerce|healthcare|other",
+  "domain": "adtech|data|ml|fintech|saas|ecommerce|healthcare|game|edtech|climate|marketplace|platform|growth|devtools|infra|media|security|logistics|hr_tech|legal_tech|other",
+  "_domain_guide": "adtech=advertising/programmatic/DSP/SSP, data=data platform/warehouse/pipelines/ETL, ml=machine learning/AI/LLM/NLP, fintech=financial services/payments/banking, saas=B2B software/cloud platform, ecommerce=online retail/shopping, healthcare=medical/health systems, game=video games/gaming studio/esports, edtech=education technology/e-learning/LMS, climate=climate tech/sustainability/carbon/renewable energy, marketplace=two-sided marketplace/buyer-seller platform, platform=internal developer platform/platform engineering, growth=user acquisition/product-led growth/PLG/conversion, devtools=developer tools/SDK/IDE/CLI/developer experience, infra=cloud infrastructure/Kubernetes/SRE/reliability, media=content/publishing/streaming/broadcast, security=cybersecurity/identity/threat detection/zero-trust, logistics=supply chain/last-mile/shipping/fulfillment, hr_tech=HR/talent/recruitment/HRIS/payroll, legal_tech=legal ops/contract management/compliance platform",
   "responsibilities_summary": "2-3 sentence summary of what the role does",
   "team_size_hints": "any mentions of team size or reports",
   "salary_mentioned": "any salary info found, or null",

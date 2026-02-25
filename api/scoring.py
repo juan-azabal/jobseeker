@@ -16,12 +16,24 @@ from api.skill_matcher import SkillMatch, match_skills
 logger = logging.getLogger(__name__)
 
 # Maps profile domain names → parser-emitted domain names.
-# Parser enum: adtech|data|ml|fintech|saas|ecommerce|healthcare|other
+# Parser enum: adtech|data|ml|fintech|saas|ecommerce|healthcare|game|edtech|climate|
+#              marketplace|platform|growth|devtools|infra|media|security|logistics|
+#              hr_tech|legal_tech|other
 _DOMAIN_ALIASES: dict[str, str] = {
     "ia": "ml",
     "ai": "ml",
     "llm": "ml",
     "martech": "adtech",
+    # New aliases for expanded enum
+    "gaming": "game",
+    "ed-tech": "edtech",
+    "greentech": "climate",
+    "cleantech": "climate",
+    "developer-tools": "devtools",
+    "devsecops": "security",
+    "cybersecurity": "security",
+    "hrtech": "hr_tech",
+    "legaltech": "legal_tech",
 }
 
 # Seniority levels ordered from most junior to most senior
@@ -84,6 +96,63 @@ _DOMAIN_KEYWORDS = {
     "saas": [
         "saas", "subscription", "b2b platform", "developer tool",
         "devops", "observability", "monitoring", "cloud platform",
+    ],
+    # Expanded enum (Phase 13.2)
+    "game": [
+        "video game", "gaming", "game engine", "game studio", "mobile game",
+        "multiplayer", "esports", "player engagement", "game development",
+    ],
+    "edtech": [
+        "education technology", "e-learning", "online course", "learning platform",
+        "ed tech", "curriculum", "lms", "learning management",
+    ],
+    "climate": [
+        "carbon", "sustainability", "renewable energy", "clean energy",
+        "climate tech", "green tech", "carbon offset", "net zero",
+        "carbon footprint", "emissions",
+    ],
+    "marketplace": [
+        "marketplace", "two-sided marketplace", "buyer seller",
+        "vendor management", "listings platform", "seller platform",
+    ],
+    "platform": [
+        "platform engineering", "infrastructure platform", "developer platform",
+        "platform team", "internal platform",
+    ],
+    "growth": [
+        "user acquisition", "product-led growth", "plg", "monetization",
+        "conversion rate", "retention", "growth hacking", "funnel optimization",
+    ],
+    "devtools": [
+        "developer tools", "developer experience", "devex", "sdk",
+        "api platform", "cli tools", "developer productivity", "ide",
+    ],
+    "infra": [
+        "infrastructure", "infrastructure as code", "kubernetes",
+        "cloud infrastructure", "reliability", "sre", "site reliability",
+        "devops platform", "platform infrastructure",
+    ],
+    "media": [
+        "media", "content platform", "publishing", "streaming",
+        "broadcast", "editorial", "digital media",
+    ],
+    "security": [
+        "cybersecurity", "security platform", "identity management",
+        "authentication", "authorization", "threat detection",
+        "zero trust", "siem", "vulnerability management",
+    ],
+    "logistics": [
+        "logistics", "supply chain", "last mile", "shipping",
+        "fulfillment", "warehouse management", "fleet management",
+    ],
+    "hr_tech": [
+        "human resources", "talent management", "recruitment platform",
+        "applicant tracking", "hris", "payroll", "people ops",
+        "workforce management",
+    ],
+    "legal_tech": [
+        "legal tech", "legal ops", "contract management",
+        "compliance platform", "legal automation", "e-discovery",
     ],
 }
 
@@ -292,6 +361,68 @@ def _infer_domain(parsed: dict) -> str:
     return best_domain if best_count >= 1 else "other"
 
 
+_SEMANTIC_DOMAIN_THRESHOLD = 0.75
+_SEMANTIC_DOMAIN_MAX = 15
+
+
+def _semantic_domain_score(
+    profile: dict, parsed: dict, job: dict, db_path: str | None
+) -> int:
+    """Semantic domain scoring when enum and keyword detection both fail.
+
+    Fires only when _infer_domain() returns 'other' (cascade: enum → keywords → semantic).
+    Uses embedding similarity between the job text and user domain labels.
+
+    Returns a score in [-15, 15]. Returns 0 if no domain matches >= 0.75 threshold,
+    no db_path, or no domains in profile.
+    """
+    if not db_path:
+        return 0
+
+    domains = profile.get("domains", {})
+    if not domains:
+        return 0
+
+    # Build job domain text from stable signals
+    job_text = " ".join(filter(None, [
+        job.get("company", ""),
+        parsed.get("domain", ""),
+        job.get("title", ""),
+    ])).strip()
+    if not job_text:
+        return 0
+
+    domain_names = list(domains.keys())
+
+    # Lazy import to avoid circular import at module level
+    from api.embeddings import get_embeddings_batch, cosine_similarity
+
+    all_texts = [job_text] + domain_names
+    embeddings = get_embeddings_batch(all_texts, db_path)
+
+    job_emb = embeddings.get(job_text.strip().lower())
+    if job_emb is None:
+        return 0
+
+    best_sim = 0.0
+    best_domain = None
+    for domain_name in domain_names:
+        domain_emb = embeddings.get(domain_name.strip().lower())
+        if domain_emb is None:
+            continue
+        sim = cosine_similarity(job_emb, domain_emb)
+        if sim > best_sim:
+            best_sim = sim
+            best_domain = domain_name
+
+    if best_sim < _SEMANTIC_DOMAIN_THRESHOLD or best_domain is None:
+        return 0
+
+    weight = domains[best_domain]
+    score = int(weight * best_sim)
+    return max(-_SEMANTIC_DOMAIN_MAX, min(_SEMANTIC_DOMAIN_MAX, score))
+
+
 def precompute_skill_lookup(
     profile_skills: list[str],
     all_job_skills: list[str],
@@ -400,8 +531,13 @@ def heuristic_score(
     score = 0
 
     # ── Domain (0-15) ───────────────────────────────────────────────────────
+    # Cascade: enum match → keyword override → semantic fallback
     domain = _infer_domain(parsed)
-    score += profile["domains"].get(domain, 0)
+    if domain != "other":
+        score += profile["domains"].get(domain, 0)
+    else:
+        # Both enum and keyword detection failed — use semantic similarity
+        score += _semantic_domain_score(profile, parsed, job, db_path)
 
     # ── Seniority (0-15) ────────────────────────────────────────────────────
     score += profile["seniority"].get(parsed.get("seniority", "unknown"), 0)
