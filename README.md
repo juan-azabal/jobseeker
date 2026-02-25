@@ -13,6 +13,9 @@ A personal job search platform. Web CRM + autonomous scraping/scoring engine in 
 - **Profile page** — view and edit job-matching preferences: domains, skills, locations, salary
 - **Google OAuth** — sign in with Google; HTTP-only session cookie
 - **Daily digest** — automated scraping + email notification (GitHub Actions cron)
+- **Self-service onboarding** — upload CV, review extracted profile, save → pipeline fires automatically
+- **Cross-user dedup** — jobs parsed by one user are reused by subsequent users (saves LLM costs)
+- **Admin panel** — trigger pipeline, view users, manage system
 
 ---
 
@@ -24,6 +27,8 @@ A personal job search platform. Web CRM + autonomous scraping/scoring engine in 
 | Frontend | React 19 · TypeScript · Vite · Tailwind CSS v4 |
 | Auth | Google OAuth via Authlib |
 | Agent | Python · JobSpy · ChromaDB · OpenAI (gpt-4o/mini) |
+| CV Gen | Anthropic Claude / OpenAI · python-docx |
+| Infra | Railway (backend) · GitHub Actions (agent pipeline) |
 
 ---
 
@@ -42,6 +47,7 @@ cd jobsearch
 python3.12 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+cd web && npm install && cd ..
 cp .env.example .env   # fill in credentials
 ```
 
@@ -55,6 +61,7 @@ bash dev.sh            # starts backend (:8000) + frontend (:5173)
 
 ## Environment variables
 
+### Core
 | Variable | Description | Default |
 |---|---|---|
 | `GOOGLE_CLIENT_ID` | OAuth client ID | — |
@@ -62,8 +69,39 @@ bash dev.sh            # starts backend (:8000) + frontend (:5173)
 | `SESSION_SECRET` | Session signing key | `dev-secret-change-in-prod` |
 | `DB_PATH` | SQLite database path | `data/jobseeker.db` |
 | `JOBAGENT_DIR` | Path to agent engine | `agent` |
-| `OPENAI_API_KEY` | OpenAI API key (agent) | — |
-| `ANTHROPIC_API_KEY` | Anthropic API key (CV gen) | — |
+| `ADMIN_EMAILS` | Comma-separated admin emails | — |
+
+### API Keys
+| Variable | Description | Default |
+|---|---|---|
+| `OPENAI_API_KEY` | OpenAI API key (agent parsing + scoring) | — |
+| `ANTHROPIC_API_KEY` | Anthropic API key (CV generation) | — |
+| `INGEST_API_KEY` | Shared secret for ingest/batch-lookup endpoints | — |
+
+### CV Generation
+| Variable | Description | Default |
+|---|---|---|
+| `CV_LLM_PROVIDER` | LLM provider (anthropic\|openai) | `anthropic` |
+| `CV_LLM_MODEL` | Model override | provider default |
+| `CV_REFERENCES_DIR` | CV reference files directory | `api/cv/references/` |
+
+### GitHub Actions Integration
+| Variable | Description | Default |
+|---|---|---|
+| `GH_ACTIONS_TOKEN` | GitHub PAT (contents:write + actions:write) | — |
+| `GH_REPO` | GitHub repo `owner/repo` | — |
+| `GH_REF` | Git branch for dispatch | `main` |
+
+### Agent Email
+| Variable | Description | Default |
+|---|---|---|
+| `GMAIL_ADDRESS` | Gmail sender for digests | — |
+| `GMAIL_APP_PASSWORD` | Gmail app password | — |
+
+### Railway
+| Variable | Description | Default |
+|---|---|---|
+| `RAILWAY_URL` | Railway API base URL | — |
 
 ---
 
@@ -73,32 +111,77 @@ bash dev.sh            # starts backend (:8000) + frontend (:5173)
 jobsearch/
 ├── api/                    # FastAPI backend
 │   ├── main.py
-│   ├── routes/             # auth, jobs, onboard
-│   ├── cv/                 # CV generation pipeline
-│   ├── db/                 # SQLite init, migrations, queries
-│   └── ingest.py           # agent output → SQLite
+│   ├── routes/             # auth, jobs, onboard, ingest, admin
+│   ├── middleware/          # session auth, admin guards
+│   ├── cv/                 # CV generation pipeline (plan → prompt → LLM → validate → docx)
+│   ├── db/                 # SQLite init, migrations (001–010), queries
+│   ├── ingest.py           # agent output → SQLite
+│   ├── scoring.py          # per-user heuristic scoring (no LLM)
+│   ├── geo.py              # geographic utilities
+│   └── onboard_utils.py    # CV parsing + profile generation
 ├── web/                    # React frontend
 │   └── src/
-│       ├── pages/          # Login, Onboard, Jobs, JobDetail, Profile
-│       ├── components/     # FilterBar, JobCard, ProfileEditor, etc.
+│       ├── pages/          # Login, Onboard, Jobs, JobDetail, Profile, Admin
+│       ├── components/     # FilterBar, JobCard, ProfileEditor, ScoreBreakdown, etc.
+│       ├── context/        # AuthContext
 │       └── types/          # TypeScript types
 ├── agent/                  # Scraping/scoring engine
-│   ├── main.py             # Pipeline orchestrator
+│   ├── main.py             # Pipeline orchestrator (12 steps)
+│   ├── api_cache.py        # Cross-user parsed-job cache via Railway DB
+│   ├── scraper.py          # JobSpy (Indeed/Google/LinkedIn)
+│   ├── ats_scraper.py      # Greenhouse/Lever/Ashby APIs
+│   ├── wttj_scraper.py     # Welcome to the Jungle (Algolia)
+│   ├── prefilter.py        # Keyword filtering (no API calls)
+│   ├── parser.py           # gpt-4o-mini structured extraction
+│   ├── scorer.py           # gpt-4o RAG scoring via ChromaDB
+│   ├── notifier.py         # Gmail SMTP digest
 │   ├── config/profiles/    # Per-user YAML profiles
-│   ├── knowledge/          # CV knowledge base
-│   ├── prompts/            # LLM prompts (parser, scoring)
-│   └── scripts/            # reparse, rescore utilities
+│   ├── config/seen_ids/    # Per-user seen job ID lists
+│   ├── knowledge/          # Per-user CV knowledge base
+│   ├── prompts/            # LLM prompts (parser, scoring rubric)
+│   ├── scripts/            # reparse, rescore, ingest payload builder
+│   ├── schemas/            # JSON output contracts
+│   └── patterns/           # Module interface contracts
+├── tests/                  # Backend tests (245)
 ├── data/                   # jobseeker.db (gitignored)
-├── tests/                  # Backend tests
-└── requirements.txt        # Merged deps (web + agent)
+├── scripts/                # seed_dev.py
+└── requirements.txt        # Merged deps
 ```
 
 ---
 
 ## Development notes
 
+- **Dev backend**: `venv/bin/uvicorn api.main:app --reload --port 8000`
+- **Dev frontend**: `cd web && npm run dev`
+- **Dev both**: `bash dev.sh`
 - **Ingest jobs**: `python -m api.ingest`
 - **Run agent**: `cd agent && ../venv/bin/python main.py --profile juan --notify`
 - **Backend tests**: `pytest tests/` (run from repo root)
 - **Frontend tests**: `cd web && npm test`
+- **Agent tests**: `cd agent && pytest tests/`
+- **Lint**: `ruff check .`
+- **Format**: `ruff format .`
 - **Dev session cookie** (no OAuth): `document.cookie = "jsk=dev-jsk-juan; path=/"`
+
+---
+
+## Status
+
+| Phase | Description | Status |
+|---|---|---|
+| 0 | Scaffold | ✅ |
+| 1 | MVP: Ingest + browse jobs | ✅ |
+| 2 | Auth: Google OAuth | ✅ |
+| 3 | Onboarding: CV upload → profile | ✅ |
+| 4 | UI overhaul + job tracking + profile page | ✅ |
+| 5 | CV generation (in-app tailored .docx) | ✅ |
+| 6 | CV output quality (plan-driven, validated) | ✅ |
+| 7 | Deparameterize scoring (multi-user rubric) | ✅ |
+| 8 | Per-profile pipeline (searches, watchlist) | ✅ |
+| 9 | Per-user scoring + new-user bootstrap | ✅ |
+| 10 | Ops: persistence, health, admin | ✅ |
+| 11 | Cross-user dedup + sequential pipeline | ✅ |
+| N | Onboarding UX for new profile fields | 🔜 |
+| R | Refactor & test coverage | 🔜 |
+| F | Ship: Dockerfile, README, deploy | 🔜 |

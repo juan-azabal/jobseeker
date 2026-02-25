@@ -2,64 +2,83 @@
 
 ## Objective
 
-Autonomous, multi-user job search agent. Scrapes job boards, filters, parses with LLM, scores fit against each user's CV, and sends daily email digests. New users onboard via `python onboard.py --cv path/to/cv.docx`.
+Autonomous, multi-user job search agent. Scrapes job boards, filters, parses with LLM, scores fit against each user's CV, and sends daily email digests. New users onboard via `python onboard.py --cv path/to/cv.docx`. Part of the jobsearch monorepo (`agent/` subdirectory).
 
 ## Current State
 
-All phases through onboarding are complete and live:
-- **Scrape → Prefilter → Parse → Heuristic rank → RAG score → Email digest** — end-to-end pipeline working
-- **Scoring**: gpt-4o-mini for parsing, gpt-4o for RAG scoring. Post-parse heuristic gate skips scoring for clear misses. Relocation detection uses auto-derived regions via country-converter (ADR-007).
+All phases through cross-user dedup are complete and live:
+- **Scrape → Prefilter → Cross-user DB cache → Parse → RAG score → Email digest** — end-to-end pipeline working
+- **Scoring**: gpt-4o-mini for parsing, gpt-4o for RAG scoring (via ChromaDB knowledge base). Relocation detection uses auto-derived regions via country-converter (ADR-007).
 - **Email digest**: Gmail SMTP + Jinja2 template. `--notify` flag on main.py.
-- **GitHub Actions**: daily cron at 07:00 CET weekdays. Secrets: `OPENAI_API_KEY`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, `NOTIFY_EMAIL`.
+- **GitHub Actions**: daily cron at 07:00 CET weekdays. Sequential profile loop — each profile syncs parsed data to Railway before next starts. Secrets: `OPENAI_API_KEY`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, `RAILWAY_URL`, `INGEST_API_KEY`.
 - **Gap tracking**: gap_tracker.py persists scored job gap/strength data to data/gap_history/ (JSONL, 90-day retention).
 - **Onboarding**: `python onboard.py --cv cv.docx` — .docx → profile YAML + knowledge/cv.md in one command.
+- **Cross-user dedup**: api_cache.py checks Railway DB for jobs already parsed by other users. Subsequent profiles in the sequential pipeline skip re-parsing overlapping jobs.
 
 ## Architecture
 
 ```
-JobSpy + ATS watchlist + WTTJ → Dedup → Prefilter → LLM Parse → Heuristic gate → RAG Score → Email
-                                          (lang detect)  (gpt-4o-mini)  (cost gate)   (gpt-4o)
+Step 1:  JobSpy + ATS watchlist + WTTJ → Dedup (make_job_id)
+Step 2:  Prefilter (keywords, US-only, deal breakers, seen_ids — no API calls)
+Step 3:  Local cache split (cached vs new)
+Step 3b: Cross-user DB cache (fetch already-parsed from Railway DB)
+Step 4:  LLM Parse new jobs (gpt-4o-mini, ~$0.001/job)
+Step 5:  RAG Score (gpt-4o via ChromaDB, ~$0.04/job)
+Step 5b: Gap tracking (persist strengths/gaps to JSONL)
+Steps 6-12: Cache update, combine, auto-skip reloc, summary, save, seen_ids, email
+```
+
+### GHA Pipeline (sequential, 4 jobs)
+```
+list-profiles → digest (sequential loop per profile) → persist-seen-ids → verify-health
 ```
 
 ## Project Structure
 
 ```
-~/jobagent/
-├── main.py              # Orchestrator. --profile, --notify flags.
+~/Proyectos/jobsearch/agent/
+├── main.py              # Orchestrator. --profile, --notify, --refresh, --rescore, --no-score flags.
+├── api_cache.py         # Cross-user parsed-job cache via Railway DB (fetch_existing_parsed)
 ├── scraper.py           # JobSpy wrapper. Dedup via make_job_id().
-├── ats_scraper.py       # Greenhouse/Lever API poller.
-├── wttj_scraper.py      # WTTJ scraper (Algolia API)
-├── prefilter.py         # Keyword filter + language detection. No API calls.
+├── ats_scraper.py       # Greenhouse/Lever/Ashby API poller.
+├── wttj_scraper.py      # WTTJ scraper (Algolia API, app ID CSEKHVMS53)
+├── prefilter.py         # Keyword filter + US-only detection. No API calls.
 ├── parser.py            # gpt-4o-mini: extracts structured JSON from JD.
-├── scorer.py            # gpt-4o-mini: scores job fit against full CV text.
+├── scorer.py            # gpt-4o: scores job fit against CV via ChromaDB knowledge base.
 ├── notifier.py          # Gmail SMTP digest sender via Jinja2 template.
 ├── gap_tracker.py       # Persists gap/strength data to data/gap_history/.
 ├── onboard.py           # CV (.docx) → profile YAML + knowledge/cv.md.
 ├── user_config.py       # Profile loading + seniority weight computation.
 ├── geo.py               # Geographic region detection, timezone classification, language mapping.
+├── vectorstore.py       # ChromaDB knowledge base builder/loader for scoring.
 ├── jobcache.py          # Job caching utilities.
 ├── track.py             # Application tracking helpers.
 ├── test_email.py        # Manual email rendering test.
 ├── .claude/rules/       # Claude Code session rules (doc-sync, coding-style, prompt-editing)
-├── .github/workflows/   # daily_digest.yml — weekday cron
 ├── config/
-│   ├── profiles/        # Per-user profile YAMLs ({id}.yaml)
+│   ├── profiles/        # Per-user profile YAMLs ({id}.yaml, {id}-searches.yaml, {id}-preferences.yaml)
 │   ├── seen_ids/        # Per-user seen job ID lists ({id}.txt)
-│   ├── searches.yaml    # JobSpy search terms and locations
-│   ├── preferences.yaml # Shared deal breakers, title rules, exclusions
-│   └── watchlist.yaml   # Greenhouse/Lever company slugs
+│   ├── searches.yaml    # Default JobSpy search terms and locations
+│   ├── preferences.yaml # Default deal breakers, title rules, exclusions
+│   └── watchlist.yaml   # Default Greenhouse/Lever company slugs
 ├── knowledge/           # READ ONLY. Per-user CV files used by scorer.
 │   └── {user_id}/cv.md  # Generated by onboard.py
+├── schemas/             # JSON output contracts (parsed_job, scored_job, digest_context, gap_history_entry)
 ├── patterns/            # Interface contracts per module (read before implementing)
 ├── prompts/             # LLM prompt source of truth (read at runtime by Python modules)
-├── docs/decisions/      # ADRs — architectural trade-off reasoning
+├── docs/decisions/      # ADRs (001-007) — architectural trade-off reasoning
 ├── data/gap_history/    # Runtime JSONL gap data (gitignored)
 ├── templates/
 │   └── email_digest.html.j2  # DO NOT regenerate — design is final
 ├── scripts/
-│   └── check_active.py
+│   ├── build_ingest_payload.py  # Build JSON payload for Railway ingest
+│   ├── list_active_profiles.py  # List active profiles for GHA matrix
+│   ├── check_active.py          # Check if a profile is active
+│   ├── reparse_all.py           # Re-parse all cached jobs with current prompt
+│   └── rescore_all.py           # Re-score all cached jobs with current rubric
+├── tests/               # 113 tests (regression, parameterization, per-profile, relocation)
 ├── output/              # JSON results per run (gitignored)
-└── .env                 # OPENAI_API_KEY, GMAIL_*, NOTIFY_EMAIL
+└── .env                 # OPENAI_API_KEY, GMAIL_*, RAILWAY_URL, INGEST_API_KEY
 ```
 
 ## Key Invariants
@@ -68,9 +87,9 @@ JobSpy + ATS watchlist + WTTJ → Dedup → Prefilter → LLM Parse → Heuristi
 - **Seniority weights**: never stored in YAML. Computed at load time from `target.level` + `target.track` by `user_config.compute_seniority_weights()`.
 - **Prompts**: never inline in Python. Source of truth is `prompts/*.md`, read at runtime via cached loader.
 - **Tier thresholds**: A ≥ 50, B 30–49, C < 30. Consistent across scorer, notifier, digest.
-- **Heuristic gate**: jobs below `scoring.rag_threshold` or with salary < `scoring.salary_min` skip RAG scoring; appear in digest with heuristic score.
 - **knowledge/ is read-only**: never modify files there. onboard.py writes cv.md once at onboarding.
 - **No hardcoded geo/currency/language maps**: region detection uses country-converter, currency conversion uses CurrencyConverter (ECB rates), language mapping uses babel. All live in `geo.py` and `main.py`. See ADR-007.
+- **Cross-user dedup is graceful**: api_cache.py returns `{}` if RAILWAY_URL/INGEST_API_KEY not set or API unreachable — pipeline works identically to standalone mode.
 
 ## Known Bugs
 
@@ -108,7 +127,8 @@ No active bugs.
 
 ## Future Phases
 
-- **Phase 6+ — jobseeker**: CV tailoring, auth, onboarding, and dashboard are all live in the companion jobseeker web app.
+- **Companion web app (jobseeker)**: CV tailoring, auth, onboarding, dashboard, admin — all live in the parent monorepo.
+- **Gap analysis + recommendations**: rolling window analysis of skill/storytelling gaps across scored jobs.
 
 ## Developer Experience
 
@@ -123,7 +143,7 @@ Architectural decisions and trade-offs are in `docs/decisions/*.md`.
 ## Commands
 
 ```bash
-cd ~/Proyectos/jobagent && source venv/bin/activate
+cd ~/Proyectos/jobsearch/agent && source ../venv/bin/activate
 
 python main.py                          # full pipeline (default profile)
 python main.py --profile maria --notify # run for specific user + send email
@@ -133,6 +153,8 @@ python scraper.py       # test scraping only
 python ats_scraper.py   # test ATS polling only
 python parser.py        # test parsing with sample JD
 python test_email.py    # test email rendering
+
+pytest tests/           # run 113 agent tests
 
 ls -t output/*.json | head -1 | xargs cat   # inspect last run
 ```

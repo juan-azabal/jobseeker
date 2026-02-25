@@ -5,9 +5,9 @@
 ```python
 prefilter_jobs(
     jobs: list[dict],
-    config_path: str = "config/preferences.yaml",
-    applied_path: str = "config/applied.yaml",
-    seen_path: str = "config/seen_ids.txt",
+    config_path: str,           # path to preferences YAML (per-user or shared)
+    applied_path: str,          # path to applied YAML (per-user)
+    seen_path: str,             # path to seen_ids txt (per-user)
     home_locations: list[str] | None = None,
 ) -> tuple[list[dict], list[dict], dict]
 ```

@@ -44,7 +44,7 @@ job_id = make_job_id(title, company)  # location is optional, ignored for dedup
 |---|---|---|---|
 | `run_scraper(config_path)` | `scraper.py` | JobSpy (Indeed, Google, LinkedIn) | Working |
 | `run_watchlist_scraper(config_path)` | `ats_scraper.py` | Greenhouse, Lever, Ashby public APIs | Working |
-| `run_wttj_scraper()` | `wttj_scraper.py` | Welcome to the Jungle | BROKEN — 0 results |
+| `run_wttj_scraper()` | `wttj_scraper.py` | Welcome to the Jungle (Algolia, app ID CSEKHVMS53) | Working |
 
 ## Adding a New Scraper
 

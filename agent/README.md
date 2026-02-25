@@ -126,37 +126,42 @@ Seniority weights are auto-computed from `target.level` + `target.track` in your
 GitHub Actions runs the pipeline daily at 07:00 CET on weekdays:
 
 ```yaml
-# .github/workflows/daily_digest.yml
+# .github/workflows/jobagent_daily.yml
 on:
   schedule:
     - cron: '0 6 * * 1-5'  # 06:00 UTC = 07:00 CET
-  workflow_dispatch: {}      # Manual trigger
+  workflow_dispatch:         # Manual trigger (optional profile input)
 ```
 
-Requires repo secrets: `OPENAI_API_KEY`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, `NOTIFY_EMAIL`.
+Pipeline runs profiles sequentially — each syncs parsed data to Railway before the next starts, enabling cross-user dedup. Requires repo secrets: `OPENAI_API_KEY`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, `RAILWAY_URL`, `INGEST_API_KEY`.
 
 ## Project structure
 
 ```
-├── main.py              # Pipeline orchestrator
+├── main.py              # Pipeline orchestrator (12-step pipeline)
+├── api_cache.py         # Cross-user parsed-job cache via Railway DB
 ├── scraper.py           # Indeed/Google/LinkedIn via python-jobspy
-├── ats_scraper.py       # Greenhouse/Lever API poller
+├── ats_scraper.py       # Greenhouse/Lever/Ashby API poller
+├── wttj_scraper.py      # Welcome to the Jungle (Algolia API)
 ├── prefilter.py         # Fast keyword filtering (no API calls)
 ├── parser.py            # LLM extraction (gpt-4o-mini)
-├── scorer.py            # LLM scoring (gpt-4o, full CV context)
+├── scorer.py            # LLM scoring (gpt-4o, full CV context via ChromaDB)
+├── vectorstore.py       # ChromaDB knowledge base builder/loader
 ├── gap_tracker.py       # Persists strengths/gaps to JSONL
 ├── notifier.py          # Email digest via Gmail SMTP
 ├── geo.py               # Geographic utilities (country-converter, pytz, babel)
 ├── user_config.py       # Profile loading, seniority weight computation
-├── config/              # YAML configuration (profiles, searches, preferences)
-├── knowledge/           # Per-user CV/knowledge base for scoring
+├── config/              # YAML configuration (profiles, searches, preferences, seen_ids)
+├── knowledge/           # Per-user CV/knowledge base for scoring (read-only)
 ├── prompts/             # Versioned business logic prompts (source of truth)
 ├── patterns/            # Interface contracts for LLM developers
 ├── schemas/             # Output format contracts (JSON Schema)
-├── docs/decisions/      # Architecture Decision Records
+├── scripts/             # reparse, rescore, ingest payload, list active profiles
+├── docs/decisions/      # Architecture Decision Records (001-007)
 ├── templates/           # Jinja2 email templates
+├── tests/               # 113 tests
 ├── data/                # Runtime data (gap history, gitignored)
-└── output/              # JSON results per run
+└── output/              # JSON results per run (gitignored)
 ```
 
 ## Tech stack
@@ -170,7 +175,7 @@ Requires repo secrets: `OPENAI_API_KEY`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, 
 - Jinja2 for email templates
 - GitHub Actions for daily scheduling
 
-No database. No web framework. Intentionally simple — see the ADRs for why.
+Part of the jobsearch monorepo — the agent is the scraping/scoring engine, while the web app and API live in the parent directory. See the ADRs for architectural decisions.
 
 ## Cost
 
@@ -187,6 +192,7 @@ No database. No web framework. Intentionally simple — see the ADRs for why.
 | DX layer (ADRs, patterns, schemas, prompts) | ✅ Complete |
 | Onboarding from CV (onboard.py) | ✅ Complete |
 | Multi-user scoring + geo/currency/lang libs | ✅ Complete |
+| Cross-user dedup + sequential pipeline | ✅ Complete |
 | Gap analysis + recommendations | 🔜 Planned |
 | CV tailoring per application | 📋 Future |
 

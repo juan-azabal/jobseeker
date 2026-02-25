@@ -19,36 +19,90 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 - Run agent: `cd agent && ../venv/bin/python main.py --profile juan --notify`
 - Test backend: `pytest tests/`
 - Test frontend: `cd web && npm test`
+- Test agent: `cd agent && pytest tests/`
 - Lint: `ruff check .`
 - Format: `ruff format .`
 
 ## Structure
 - Backend: `api/`
   - `api/main.py` — FastAPI app
-  - `api/routes/` — one file per resource
-  - `api/db/` — SQLite init, migrations, queries
+  - `api/routes/` — one file per resource (auth, jobs, onboard, ingest, admin)
+  - `api/middleware/auth.py` — session auth + admin guards (`get_current_user`, `get_current_admin`)
+  - `api/db/` — SQLite init, migrations (001–010), queries
   - `api/ingest.py` — pipeline output → SQLite
   - `api/scoring.py` — per-user heuristic scoring (ported from agent)
   - `api/geo.py` — geographic region utilities (API-side copy of agent/geo.py)
   - `api/onboard_utils.py` — CV parsing + profile YAML generation (extracted from agent/onboard.py)
   - `api/prompts/` — LLM prompts for API-side features (onboard-extraction.md)
-  - `api/cv/` — CV generation pipeline
+  - `api/cv/` — CV generation pipeline (plan, prompt, llm, validator, docx_builder, ats_audit)
 - Frontend: `web/`
-  - `web/src/components/` — React components
-  - `web/src/pages/` — route-level pages
-  - `web/src/context/` — React Context providers
-  - `web/src/types/` — TypeScript types
+  - `web/src/components/` — FilterBar, JobCard, ProfileEditor, ScoreBreakdown, FileUpload, UserMenu
+  - `web/src/pages/` — Login, Onboard, Jobs, JobDetail, Profile, Admin
+  - `web/src/context/AuthContext.tsx` — auth state provider
+  - `web/src/types/job.ts` — TypeScript types
 - Agent: `agent/`
   - `agent/main.py` — pipeline orchestrator (scrape → parse → score → notify)
   - `agent/api_cache.py` — cross-user parsed-job cache via Railway DB
-  - `agent/config/profiles/*.yaml` — per-user profiles
-  - `agent/knowledge/` — CV knowledge base (per user)
+  - `agent/scraper.py` — JobSpy wrapper + `make_job_id()` dedup
+  - `agent/ats_scraper.py` — Greenhouse/Lever/Ashby API poller
+  - `agent/wttj_scraper.py` — Welcome to the Jungle (Algolia API)
+  - `agent/prefilter.py` — keyword filter + US-only detection (no API calls)
+  - `agent/parser.py` — gpt-4o-mini: structured JSON extraction from JD
+  - `agent/scorer.py` — gpt-4o: RAG scoring against full CV via ChromaDB
+  - `agent/notifier.py` — Gmail SMTP digest sender (Jinja2 template)
+  - `agent/user_config.py` — profile loading + seniority weight computation
+  - `agent/geo.py` — geographic region detection (country-converter, babel, pytz)
+  - `agent/vectorstore.py` — ChromaDB knowledge base for scoring
+  - `agent/onboard.py` — CLI onboarding: CV → profile YAML + knowledge/cv.md
+  - `agent/gap_tracker.py` — persists gap/strength data to JSONL
+  - `agent/config/profiles/*.yaml` — per-user profiles + searches/preferences/watchlist
+  - `agent/config/seen_ids/*.txt` — per-user seen job ID lists
+  - `agent/knowledge/{user_id}/cv.md` — CV knowledge base (per user, read-only)
   - `agent/output/` — job results JSON (gitignored)
-  - `agent/prompts/` — LLM prompts (parser, scoring rubric)
-  - `agent/scripts/` — utility scripts (reparse, rescore)
-- Tests: `tests/` (backend), `web/src/__tests__/` (frontend)
+  - `agent/prompts/` — LLM prompts (parser-prompt, scoring-rubric, onboard-extraction)
+  - `agent/scripts/` — reparse_all, rescore_all, build_ingest_payload, list_active_profiles, check_active
+  - `agent/schemas/` — JSON output contracts (parsed_job, scored_job, digest_context, gap_history_entry)
+  - `agent/patterns/` — interface contracts per module
+  - `agent/docs/decisions/` — ADRs (001–007)
+- Tests: `tests/` (backend, 245 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 113 tests)
 - DB: `data/jobseeker.db` (gitignored)
 - Static build: `web/dist/` (gitignored)
+- Scripts: `scripts/seed_dev.py` — dev database seeder
+
+## Environment Variables
+
+### Backend (api/)
+| Variable | Description | Default |
+|---|---|---|
+| `DB_PATH` | SQLite database path | `data/jobseeker.db` |
+| `SESSION_SECRET` | Session signing key | `dev-secret-change-in-prod` |
+| `GOOGLE_CLIENT_ID` | OAuth client ID | — |
+| `GOOGLE_CLIENT_SECRET` | OAuth client secret | — |
+| `BASE_URL` | Backend base URL for OAuth callbacks | `http://localhost:8000` |
+| `FRONTEND_URL` | Frontend URL for post-login redirect | — |
+| `JOBAGENT_DIR` | Path to agent directory | `agent` |
+| `INGEST_API_KEY` | Shared secret for ingest/batch-lookup endpoints | — |
+| `ADMIN_EMAILS` | Comma-separated admin emails (auto-promote on login) | — |
+| `GH_ACTIONS_TOKEN` | GitHub PAT (contents:write + actions:write) | — |
+| `GH_REPO` | GitHub repo `owner/repo` for workflow dispatch | — |
+| `GH_REF` | Git branch for workflow dispatch | `main` |
+
+### CV Generation (api/cv/)
+| Variable | Description | Default |
+|---|---|---|
+| `CV_LLM_PROVIDER` | LLM provider (anthropic\|openai) | `anthropic` |
+| `CV_LLM_MODEL` | Model override | provider default |
+| `ANTHROPIC_API_KEY` | Anthropic API key | — |
+| `CV_REFERENCES_DIR` | CV reference files directory | `api/cv/references/` |
+
+### Agent
+| Variable | Description | Default |
+|---|---|---|
+| `OPENAI_API_KEY` | OpenAI API key (parsing + scoring) | — |
+| `GMAIL_ADDRESS` | Gmail sender for digests | — |
+| `GMAIL_APP_PASSWORD` | Gmail app password | — |
+| `RAILWAY_URL` | Railway API base URL (cross-user cache) | — |
+| `INGEST_API_KEY` | Shared secret for Railway API | — |
 
 ## Conventions
 - Commits: conventional (`type: description`)
@@ -58,6 +112,38 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 - Frontend: functional components, React Context for global state, TypeScript strict
 - All secrets via env vars, never committed
 - Test naming: `test_*.py` (backend), `*.test.tsx` (frontend)
+
+## Architecture
+
+### Agent Pipeline (12 steps)
+```
+Step 1a-c: Scrape (JobSpy + ATS watchlist + WTTJ) → dedup via make_job_id()
+Step 2:    Prefilter (keywords, US-only, deal breakers, seen_ids — no API calls)
+Step 3:    Local cache split (cached vs new jobs)
+Step 3b:   Cross-user DB cache (fetch already-parsed from Railway DB via api_cache.py)
+Step 4:    Parse new jobs (gpt-4o-mini, ~$0.001/job)
+Step 5:    RAG score (gpt-4o via ChromaDB, ~$0.04/job)
+Step 5b:   Gap tracking (persist strengths/gaps to JSONL)
+Step 6:    Update local cache
+Step 7:    Combine cached + new results
+Step 8:    Auto-skip low-score relocation jobs
+Steps 9-12: Summary, save snapshot, mark seen, email digest (if --notify)
+```
+
+### GHA Pipeline (sequential, 4 jobs)
+```
+list-profiles → digest (sequential loop per profile) → persist-seen-ids → verify-health
+```
+Each profile runs fully (scrape→parse→score→sync to Railway) before the next starts, so subsequent profiles skip re-parsing overlapping jobs. `timeout-minutes: 60`.
+
+### Ingest Flow
+```
+Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job_scores (per-user RAG)
+```
+
+### Scoring: dual-path
+- **RAG score** (agent, gpt-4o): stored in `user_job_scores`, preferred when available
+- **Heuristic score** (api/scoring.py, no LLM): computed at query time for unscored jobs (domain 0-15, seniority 0-15, location 0-10, skills 0-30, red_flags -15)
 
 ## Project State
 
@@ -69,7 +155,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 - Phase 4 — UI overhaul + job tracking + profile page
   - Design: dark theme (zinc-950), violet-500 primary accent, semantic tier colors (emerald/amber/zinc)
   - Job tracking: `user_job_status` table (migration 003), per-user `applied_at`, `POST /jobs/{id}/apply`
-  - CV generation: single-job "Generate CV" button (copies prompt to clipboard); bulk selection + floating action bar
+  - CV generation: single-job "Generate CV" button; bulk selection + floating action bar
   - Profile page `/profile`: view/edit current profile, "Replace CV" flow to re-upload and regenerate
   - Header: sticky frosted-glass, logo links to `/jobs`, hamburger menu (Jobs / My Profile / Sign out)
   - Profile editing: add/remove domains (with weight slider), add/remove skills inline
@@ -77,51 +163,34 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - Tier C hidden by default in listing filters
 - Phase 5 — CV Generation (in-app tailored CV download)
   - LLM provider configurable via CV_LLM_PROVIDER (anthropic|openai), model via CV_LLM_MODEL
-  - .docx built with python-docx for ATS compliance (pandoc rejected: generates tables and unicode bullets in XML)
-  - CV reference files gitignored (contain personal data), loaded from CV_REFERENCES_DIR
+  - .docx built with python-docx for ATS compliance
   - ATS audit runs post-build as safety net, result in X-ATS-Audit response header
-  - LLM output follows strict structured markdown contract, docx_builder parses deterministically
-  - Post-processing auto-fixes em dashes, Oxford commas, unicode bullets as last line of defense
-  - "Generate CV" button replaces clipboard-copy: POSTs to /api/jobs/{id}/generate-cv, triggers browser download
+  - "Generate CV" button: POSTs to /api/jobs/{id}/generate-cv, triggers browser download
 - Phase 6 — CV Output Quality
-  - docx_builder rewritten for skill-quality formatting: correct font sizes (18/11/10/9pt), colors
-    (#1F4E79 blue for name+headers, #444444 title, #555555 dates/context), real bullet numPr XML,
-    tab-stop right-aligned dates, italic context lines — matches skill-generated CV spec exactly
-  - Plan-driven architecture: deterministic build_cv_plan() (api/cv/plan.py) extracts jd_context
-    (company_type, location_language_hints, key_tools), score_summary with per-dimension guidance,
-    bullet_allocation (relevance-weighted budget per company, capped at 12), source_facts (title,
-    years_experience, languages, core_skills_themes) from scored data + reference files
-  - Plan-aware prompts: build_cv_prompts(job, cv_md, plan) adds source fidelity rules (never downgrade
-    title/years), bullet allocation instruction, JD-aware tailoring (consultancy sentence, language hints),
-    extended anti-slop blacklist, and chain-of-thought <analysis> block requirement to system prompt
-  - Analysis stripping: generate_cv() auto-strips <analysis>...</analysis> so callers always get clean markdown
-  - Programmatic CV validator: validate_cv(markdown, plan) checks title_downgraded, years_downgraded,
-    slop_detected (errors) and missing_language, missing_theme, bullet_budget_violation,
-    no_consulting_mention, gerund_start (warnings); build_fix_prompt() for one-shot targeted fix call
-  - Full pipeline in endpoint: plan → plan-aware prompts → LLM → validate → fix (if errors) → re-validate
-    → docx → ATS audit. New response headers: X-CV-Validation, X-CV-Fix-Applied, X-ATS-Audit
-  - Content volume controls: 3-page hard cap, 2-page soft cap, max 12 WE bullets total with recency budget
-  - Company names / Core Skills themes / project names use COLOR_ACCENT (#1F4E79) instead of bold
+  - Plan-driven architecture: deterministic build_cv_plan() → plan-aware prompts → LLM → validate → fix → docx → ATS audit
+  - Programmatic CV validator: errors (title/years downgrade, slop) + warnings (missing language/theme, bullet budget, gerund-start)
+  - Content volume controls: 3-page hard cap, 2-page soft cap, max 12 WE bullets total
 - Phase 7 — Deparameterize Scoring (rubric role_type/geography, adjacent domains, home locations)
 - Phase 8 — Per-Profile Pipeline (searches, watchlist, prefilter per-user)
 - Phase 9 — Per-User Scoring + New-User Bootstrap
-  - DB: `jobs` table is shared (no score/tier/scored columns), `user_job_scores` table holds per-user RAG scores
-  - `api/scoring.py`: heuristic scorer (domain 0-15, seniority 0-15, location 0-10, skills 0-30, red_flags -15) runs at query time for jobs without RAG scores — no LLM, instant, free
-  - Ingest: `ingest_from_list()` accepts optional `profile_id`; common job data → `jobs`, per-user RAG scores → `user_job_scores`
-  - Jobs route: `_score_and_tier_jobs()` prefers RAG score, falls back to heuristic; tier filtering post-scoring; `total_in_db` in response
-  - Onboarding pipeline: `save_profile()` pushes profile YAML + cv.md + seen_ids.txt to GitHub via Contents API, triggers `workflow_dispatch` (fire-and-forget). Env: `GH_ACTIONS_TOKEN`, `GH_REPO`, `GH_REF`
-  - GHA: single-profile dispatch via `inputs.profile`, ingest syncs with `profile_id` in payload
-  - Frontend: empty state with "Scanning job boards" + 60s auto-poll when `totalInDb === 0`; "No matching filters" state with reset button
+  - DB: `jobs` table is shared, `user_job_scores` table holds per-user RAG scores
+  - Heuristic scorer at query time for unscored jobs (no LLM, instant, free)
+  - Ingest: `ingest_from_list()` accepts optional `profile_id`; common data → `jobs`, per-user RAG → `user_job_scores`
+  - Onboarding triggers GHA pipeline via `workflow_dispatch` (fire-and-forget)
+  - Frontend: empty state with "Scanning job boards" + 60s auto-poll when `totalInDb === 0`
 - Phase 10 — Ops: Persistence, Health Monitoring, Admin
-  - Railway volume (`/data`) holds SQLite; `cv_md` + `profile_yaml` persisted in `users` table (migrations 006, 007) so they survive ephemeral filesystem resets on redeploy
-  - Auto-prune: `cleanup_old_jobs()` deletes jobs + dependent rows older than 90 days on every ingest; called in `ingest_from_list()`
-  - `GET /api/ingest/status` (X-Ingest-Key protected): returns total_jobs, last_ingested_at, scored_profiles, total_scored, jobs_older_than_90d
-  - GHA "Verify ingest health" step prints status after every run
-  - `GET /api/onboard/profile`: opportunistic cv_md save — if DB is NULL but file exists on disk, persists to DB immediately
-  - Admin system: `is_admin INTEGER DEFAULT 0` on users (migration 008); `ADMIN_EMAILS` env var auto-promotes on login; `get_current_admin` dependency (403 if not admin); `api/routes/admin.py` with `GET /api/admin/users` + `POST /api/admin/trigger-pipeline`; React `/admin` page with pipeline trigger + users table (visible only to admins in hamburger menu)
+  - Railway volume (`/data`) holds SQLite; `cv_md` + `profile_yaml` persisted in `users` table (migrations 006, 007)
+  - Auto-prune: `cleanup_old_jobs()` deletes jobs + dependent rows older than 90 days on every ingest
+  - `GET /api/ingest/status` (X-Ingest-Key protected): pipeline health stats
+  - Admin system: auto-promote via `ADMIN_EMAILS` env; `/admin` page with pipeline trigger + users table
+- Phase 11 — Cross-User Dedup + Sequential Pipeline
+  - `POST /api/ingest/batch-lookup`: check Railway DB for already-parsed jobs (X-Ingest-Key auth, 500 id cap)
+  - `agent/api_cache.py`: fetch_existing_parsed() — graceful fallback if API unavailable
+  - GHA workflow: sequential profile loop (not parallel matrix). Each profile syncs to Railway before next starts
+  - Saves ~$0.001/job per overlapping job across users (gpt-4o-mini parse cost avoided)
 
 ### Current
-Phase 10 — Completed
+Phase 11 — Completed
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
@@ -146,23 +215,20 @@ Phase 10 — Completed
 - Validator slop blacklist: "strong track record", "proven ability", "passionate about", "results-driven", "data-driven leader", "leveraging", "utilizing" + more. Gerund-start bullet detection with regex.
 - strip_analysis() in llm.py: auto-strips <analysis>...</analysis> from LLM output so prompt.py and endpoint never see chain-of-thought content.
 - `save_profile` guard: if `user.profile_id` exists → only write `cv.md`, never regenerate YAML. First-time onboarding (no profile_id) still does full YAML generation.
-- `juan.yaml` was accidentally overwritten by onboarding flow; profile YAML lives at `agent/config/profiles/juan.yaml`
 - Hamburger menu (`HamburgerMenu` component in `App.tsx`) replaces inline nav links; dropdown closes on outside click via `mousedown` listener + `useRef`
 - ProfileEditor: `addDomain` adds with weight 10; `removeDomain` deletes key from state; `addSkill`/`removeSkill` mutate array. Enter key supported on both inputs.
 - OnboardPage must pass `isNew` to ProfileEditor so first-time save uses POST `/save-profile` (creates YAML) instead of PATCH `/profile` (requires existing profile_id).
-
-- jobagent parser v1.1 (2026-02-23): `must_have_skills` in parsed JSON is now technical-only (SQL, Python, dbt…). Soft skills / years of experience / education requirements moved to new `experience_requirements` field. `key_tools` extraction in `api/cv/plan.py` benefits automatically — no jobseeker code change needed. `experience_requirements` available in `row["parsed"]["experience_requirements"]` for future use (scoring improvements, CV generation context).
-- Per-user scoring: `jobs` table stores shared data only (no score/tier/scored). Per-user RAG scores in `user_job_scores(user_id, job_id, score, tier, scored, scored_at)`. Heuristic scores computed at query time from profile YAML + parsed JSON — never stored. Migration `005_user_scores.sql` recreates jobs table without those columns.
-- Ingest stores per-user scores only when `profile_id` is provided AND the job has a `rag_score` with a non-null `score` value. Jobs without RAG scores rely on heuristic at query time.
+- jobagent parser v1.1 (2026-02-23): `must_have_skills` is now technical-only. Soft skills / years of experience / education requirements moved to `experience_requirements` field.
+- Per-user scoring: `jobs` table stores shared data only (no score/tier/scored). Per-user RAG scores in `user_job_scores(user_id, job_id, score, tier, scored, scored_at)`. Heuristic scores computed at query time — never stored. Migration `005_user_scores.sql` recreates jobs table.
+- Ingest stores per-user scores only when `profile_id` is provided AND the job has a `rag_score` with a non-null `score` value.
 - Onboarding triggers pipeline: `save_profile()` (first-time only) pushes files to GitHub repo via Contents API and fires `workflow_dispatch`. Requires `GH_ACTIONS_TOKEN` (PAT with contents:write + actions:write), `GH_REPO`, `GH_REF`.
-- Frontend empty state: when `total_in_db === 0` (no jobs scraped yet), shows "Scanning job boards" with 60s auto-poll. When jobs exist but filters exclude all, shows "No matching jobs" with reset button.
-- cv_md persistence: saved in `users.cv_md` (migration 006) on `POST /save-profile` and opportunistically on `GET /profile` (if file on disk but DB NULL). Guard in `save_profile`: empty cv_markdown is never written to DB (prevents accidental overwrite).
-- profile_yaml persistence: saved in `users.profile_yaml` (migration 007) on first-time save and on every `PATCH /profile`. Restored from DB to disk on `GET /profile` and `PATCH /profile` if filesystem was wiped.
-- Admin access: `is_admin` column on users (migration 008, default 0). Set `ADMIN_EMAILS=email@example.com` env var in Railway; users matching that email are auto-promoted to admin on next login. `get_current_admin` dependency in `api/middleware/auth.py`. Admin link in hamburger menu only visible to admins.
-- `POST /api/admin/trigger-pipeline`: dispatches `jobagent_daily.yml` workflow via GitHub API. Optional `{"profile": "id"}` body to target a specific profile. Requires same GH_ACTIONS_TOKEN/GH_REPO/GH_REF as onboarding.
-- Job cleanup: `cleanup_old_jobs(db_path, days=90)` deletes from user_job_scores + user_job_status + jobs where last_seen < cutoff. Called automatically at end of every ingest.
-- Cross-user parsed job dedup: `agent/api_cache.py` calls `POST /api/ingest/batch-lookup` (X-Ingest-Key auth, 500 id cap) to fetch already-parsed jobs from Railway DB before parsing. Injected as Step 3b in `agent/main.py` between local cache split and parse. Graceful fallback: returns `{}` if RAILWAY_URL/INGEST_API_KEY not set or API unreachable. Uses `urllib.request` (no extra deps).
-- GHA sequential pipeline: workflow rewritten from parallel matrix to sequential loop in a single `digest` job. Each profile syncs parsed data to Railway before the next starts, so subsequent profiles skip re-parsing overlapping jobs. Jobs: `list-profiles` → `digest` (sequential loop) → `persist-seen-ids` → `verify-health`. `timeout-minutes: 60`.
+- cv_md persistence: saved in `users.cv_md` (migration 006) on `POST /save-profile` and opportunistically on `GET /profile`. Guard: empty cv_markdown is never written to DB.
+- profile_yaml persistence: saved in `users.profile_yaml` (migration 007) on first-time save and on every `PATCH /profile`. Restored from DB to disk if filesystem was wiped.
+- Admin access: `is_admin` column on users (migration 008). `ADMIN_EMAILS` env var auto-promotes on login. `get_current_admin` dependency in `api/middleware/auth.py`.
+- `POST /api/admin/trigger-pipeline`: dispatches `jobagent_daily.yml` workflow via GitHub API. Optional `{"profile": "id"}` body. Requires GH_ACTIONS_TOKEN/GH_REPO/GH_REF.
+- Job cleanup: `cleanup_old_jobs(db_path, days=90)` deletes from user_job_scores + user_job_status + jobs. Called on every ingest.
+- Cross-user dedup: `agent/api_cache.py` calls `POST /api/ingest/batch-lookup` to fetch already-parsed jobs from Railway DB. Graceful fallback if unavailable.
+- GHA sequential pipeline: single `digest` job loops profiles sequentially. Each syncs to Railway before next starts. Jobs: `list-profiles` → `digest` → `persist-seen-ids` → `verify-health`. `timeout-minutes: 60`.
 
 ### Blockers
 {none}
