@@ -86,8 +86,10 @@ export default function AdminPage() {
     try {
       const r = await fetch('/api/admin/backfill-embeddings', { method: 'POST' });
       const data = await r.json();
-      if (r.ok) {
-        setBackfillResult({ ok: true, message: `Cached ${data.cached}/${data.total} skills` });
+      if (r.status === 202) {
+        setBackfillResult({ ok: true, message: 'Backfill started — running in background. Check server logs for progress.' });
+      } else if (r.ok) {
+        setBackfillResult({ ok: true, message: `Cached ${data.cached ?? '?'}/${data.total ?? '?'} skills` });
       } else {
         setBackfillResult({ ok: false, message: data.detail || 'Backfill failed' });
       }
