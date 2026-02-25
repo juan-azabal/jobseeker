@@ -554,6 +554,7 @@ def heuristic_score(
     profile: dict, parsed: dict, job: dict, is_reloc: bool,
     db_path: str | None = None,
     skill_lookup: dict[str, SkillMatch] | None = None,
+    domain_override: str | None = None,
 ) -> int:
     """Compute heuristic fit score 0-100 from parsed job data + user profile.
 
@@ -574,6 +575,7 @@ def heuristic_score(
         is_reloc: unused — kept for API compatibility
         db_path: SQLite path for embedding cache; None → substring fallback
         skill_lookup: pre-computed batch skill matches; None → per-job matching
+        domain_override: user-provided domain correction; skips cascade when set
     """
     if not parsed:
         return 0
@@ -581,13 +583,17 @@ def heuristic_score(
     score = 0
 
     # ── Domain (0-15) ───────────────────────────────────────────────────────
-    # Cascade: enum match → keyword override → semantic fallback
-    domain = _infer_domain(parsed)
-    if domain != "other":
-        score += profile["domains"].get(domain, 0)
+    # Cascade: domain_override → enum match → keyword override → semantic fallback
+    if domain_override is not None:
+        # User-corrected domain: use directly, skip all inference
+        score += profile["domains"].get(domain_override, 0)
     else:
-        # Both enum and keyword detection failed — use semantic similarity
-        score += _semantic_domain_score(profile, parsed, job, db_path)
+        domain = _infer_domain(parsed)
+        if domain != "other":
+            score += profile["domains"].get(domain, 0)
+        else:
+            # Both enum and keyword detection failed — use semantic similarity
+            score += _semantic_domain_score(profile, parsed, job, db_path)
 
     # ── Seniority (0-15) ────────────────────────────────────────────────────
     score += profile["seniority"].get(parsed.get("seniority", "unknown"), 0)

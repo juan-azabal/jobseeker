@@ -247,6 +247,47 @@ def get_user_id_by_profile_id(db_path: str, profile_id: str) -> int | None:
 
 # ── User status ───────────────────────────────────────────────────────────
 
+def set_domain_override(db_path: str, user_id: int, job_id: str, domain: str | None) -> None:
+    """Set or clear the per-user domain override for a job.
+
+    Uses INSERT ... ON CONFLICT DO UPDATE so only domain_override is touched;
+    applied_at and dismissed_at are never overwritten.
+    """
+    con = _connect(db_path)
+    con.execute(
+        """
+        INSERT INTO user_job_status (user_id, job_id, domain_override)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id, job_id) DO UPDATE SET domain_override = excluded.domain_override
+        """,
+        (user_id, job_id, domain),
+    )
+    con.commit()
+    con.close()
+
+
+def get_domain_override(db_path: str, user_id: int, job_id: str) -> str | None:
+    """Return the user's domain override for a job, or None if not set."""
+    con = _connect(db_path)
+    row = con.execute(
+        "SELECT domain_override FROM user_job_status WHERE user_id = ? AND job_id = ?",
+        (user_id, job_id),
+    ).fetchone()
+    con.close()
+    return row["domain_override"] if row else None
+
+
+def get_all_domain_overrides(db_path: str, user_id: int) -> dict[str, str]:
+    """Return all non-null domain overrides for a user as {job_id: domain}."""
+    con = _connect(db_path)
+    rows = con.execute(
+        "SELECT job_id, domain_override FROM user_job_status WHERE user_id = ? AND domain_override IS NOT NULL",
+        (user_id,),
+    ).fetchall()
+    con.close()
+    return {row["job_id"]: row["domain_override"] for row in rows}
+
+
 def set_job_dismissed(db_path: str, user_id: int, job_id: str) -> None:
     """Mark a job as dismissed (negative example). Dismissed jobs are hidden from all lists."""
     con = _connect(db_path)

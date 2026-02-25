@@ -19,13 +19,14 @@ from api.db.queries import (
     get_user_job_score, get_total_job_count,
     set_job_applied, set_job_dismissed,
     get_user_cv_md,
+    set_domain_override, get_domain_override, get_all_domain_overrides,
 )
 from api.geo import (
     derive_home_regions, UNIVERSAL_TERMS,
     build_region_pattern, matches_region, is_pure_timezone,
 )
 from api.middleware.auth import get_current_user
-from api.scoring import compute_tier, heuristic_score, load_profile_data, precompute_skill_lookup
+from api.scoring import compute_tier, heuristic_score, load_profile_data, precompute_skill_lookup, VALID_DOMAINS
 from api.skill_matcher import match_skills
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -120,11 +121,18 @@ def _score_and_tier_jobs(
     profile: dict | None,
     home_locations: list[str],
     home_regions: list[str],
+    user_id: int | None = None,
 ) -> list[dict]:
     """Apply per-user scoring: use RAG score when available, heuristic otherwise.
 
     Also applies relocation penalty and assigns tier. Sorts by score DESC.
+    Batch-loads domain overrides from user_job_status for the current user.
     """
+    # Batch-load domain overrides for this user
+    domain_overrides: dict[str, str] = {}
+    if user_id is not None:
+        domain_overrides = get_all_domain_overrides(_db_path(), user_id)
+
     # Pre-parse all jobs and collect unique skills for batch semantic matching
     for job in jobs:
         parsed = job.get("parsed")
@@ -161,9 +169,11 @@ def _score_and_tier_jobs(
         if job.get("ujs_score") is not None:
             score = job["ujs_score"]
         elif profile:
+            job_domain_override = domain_overrides.get(job["job_id"])
             score = heuristic_score(
                 profile, job["_parsed_dict"], job, is_reloc,
                 db_path=_db_path(), skill_lookup=skill_lookup,
+                domain_override=job_domain_override,
             )
         else:
             score = 0
@@ -216,7 +226,7 @@ def list_jobs(
     profile = load_profile_data(profile_id)
     home_locations, home_regions = _load_user_geo(profile_id)
 
-    jobs = _score_and_tier_jobs(jobs, profile, home_locations, home_regions)
+    jobs = _score_and_tier_jobs(jobs, profile, home_locations, home_regions, user_id=user["id"])
 
     # Apply post-scoring filters
     if tier:
@@ -286,6 +296,9 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
     status = get_job_status_by_title(_db_path(), user["id"], row["company"], row["title"])
     row["applied_at"] = status.get("applied_at") if status else None
     row["dismissed_at"] = status.get("dismissed_at") if status else None
+
+    # Per-user domain override
+    row["domain_override"] = get_domain_override(_db_path(), user["id"], job_id)
 
     home_locations, home_regions = _load_user_geo(user.get("profile_id"))
     row["geo_restricted"] = _compute_reloc(row, home_locations, home_regions) if home_locations else False
@@ -357,6 +370,30 @@ def dismiss_job(job_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Job not found")
     set_job_dismissed(_db_path(), user["id"], job_id)
     return {"job_id": job_id, "dismissed": True}
+
+
+class DomainOverrideRequest(BaseModel):
+    domain: str | None  # None clears the override
+
+
+@router.patch("/{job_id}/domain")
+def set_job_domain_override(
+    job_id: str,
+    body: DomainOverrideRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Set or clear the per-user domain override for a job.
+
+    A valid domain value stores the override and uses it in heuristic scoring.
+    Passing null clears the override and reverts to the normal cascade.
+    """
+    row = get_job_by_id(_db_path(), job_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if body.domain is not None and body.domain not in VALID_DOMAINS:
+        raise HTTPException(status_code=422, detail=f"Invalid domain: {body.domain!r}")
+    set_domain_override(_db_path(), user["id"], job_id, body.domain)
+    return {"ok": True, "domain": body.domain}
 
 
 @router.post("/{job_id}/generate-cv")
