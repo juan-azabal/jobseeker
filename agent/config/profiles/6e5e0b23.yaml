@@ -2,7 +2,7 @@ user:
   id: 6e5e0b23
   name: Alice Martin
   email: alice@example.com
-  active: true
+  active: false
   languages:
   - en
   - fr
