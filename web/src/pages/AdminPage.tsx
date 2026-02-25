@@ -21,6 +21,7 @@ export default function AdminPage() {
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState(false);
   const [resetting, setResetting] = useState<number | null>(null);
+  const [clearingSeen, setClearingSeen] = useState<number | null>(null);
   const [impersonating, setImpersonating] = useState<number | null>(null);
   const [profile, setProfile] = useState('');
   const [triggering, setTriggering] = useState(false);
@@ -108,6 +109,24 @@ export default function AdminPage() {
       alert('Network error');
     } finally {
       setResetting(null);
+    }
+  }
+
+  async function handleClearSeen(userId: number, profileId: string) {
+    if (!confirm(`Clear seen job IDs for "${profileId}"? Jobs will be re-scraped on next run.`)) return;
+    setClearingSeen(userId);
+    try {
+      const r = await fetch('/api/admin/reset-seen-ids', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: profileId }),
+      });
+      if (r.ok) alert(`Seen IDs cleared for ${profileId}`);
+      else alert('Clear failed');
+    } catch {
+      alert('Network error');
+    } finally {
+      setClearingSeen(null);
     }
   }
 
@@ -315,6 +334,16 @@ export default function AdminPage() {
                         >
                           {resetting === u.id ? '…' : 'Reset'}
                         </button>
+                        {u.profile_id && (
+                          <button
+                            onClick={() => handleClearSeen(u.id, u.profile_id!)}
+                            disabled={clearingSeen === u.id}
+                            className="rounded px-2 py-0.5 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-amber-400 disabled:opacity-40"
+                            title="Clear seen job IDs (forces re-scrape on next run)"
+                          >
+                            {clearingSeen === u.id ? '…' : 'Clear seen'}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
