@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -20,6 +21,8 @@ from api.routes.admin import router as admin_router
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+SLOW_REQUEST_THRESHOLD_S = 2.0  # log a WARNING for any request taking longer than this
+
 # country_converter logs a WARNING for every city name it can't resolve to a country
 # (e.g. "barcelona", "madrid") — expected behaviour for city strings, not an error.
 # Silence at WARNING level so our own logs stay readable.
@@ -32,6 +35,28 @@ app.add_middleware(
     secret_key=os.environ.get("SESSION_SECRET", "dev-secret-change-in-prod"),
     session_cookie="oauth_state",  # rename to avoid clashing with our auth cookie "jsk"
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log every request with method, path, status, and duration.
+
+    Emits WARNING for requests exceeding SLOW_REQUEST_THRESHOLD_S so slow
+    endpoints are visible in logs without grepping through noise.
+    """
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed = time.perf_counter() - start
+    level = logging.WARNING if elapsed >= SLOW_REQUEST_THRESHOLD_S else logging.DEBUG
+    logger.log(
+        level,
+        "%s %s → %d  (%.3fs)",
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed,
+    )
+    return response
 
 
 @app.on_event("startup")

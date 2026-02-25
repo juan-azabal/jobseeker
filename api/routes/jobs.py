@@ -145,7 +145,9 @@ def _score_and_tier_jobs(
         if job.get("ujs_score") is not None:
             score = job["ujs_score"]
         elif profile:
-            score = heuristic_score(profile, job["_parsed_dict"], job, is_reloc, db_path=_db_path())
+            # db_path intentionally omitted → substring fallback (fast, no API calls).
+            # Semantic skill matching is reserved for the job detail endpoint only.
+            score = heuristic_score(profile, job["_parsed_dict"], job, is_reloc)
         else:
             score = 0
 
