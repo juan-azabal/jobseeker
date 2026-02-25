@@ -262,17 +262,60 @@ def backfill_embeddings(
     Runs in background — returns 202 immediately so Railway/proxies don't time out.
     Progress visible in server logs.
     """
-    from scripts.backfill_embeddings import backfill
+    from api.embeddings import get_embeddings_batch
+    from api.db.init import init_db
 
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
     email = admin["email"]
 
     def _run() -> None:
         try:
-            result = backfill(db_path)
+            import json
+            import sqlite3
+            import yaml
+
+            init_db(db_path)
+
+            # Collect skills from user profiles
+            profile_skills: set[str] = set()
+            job_skills: set[str] = set()
+
+            conn = sqlite3.connect(db_path)
+            try:
+                for (yaml_text,) in conn.execute(
+                    "SELECT profile_yaml FROM users WHERE profile_yaml IS NOT NULL"
+                ).fetchall():
+                    try:
+                        profile = yaml.safe_load(yaml_text)
+                        for s in profile.get("skills", []):
+                            if isinstance(s, str) and s.strip():
+                                profile_skills.add(s.strip().lower())
+                    except Exception:
+                        continue
+
+                for (parsed_json,) in conn.execute(
+                    "SELECT parsed FROM jobs WHERE parsed IS NOT NULL"
+                ).fetchall():
+                    try:
+                        parsed = json.loads(parsed_json)
+                        for key in ("must_have_skills", "nice_to_have_skills", "technical_stack"):
+                            for s in parsed.get(key, []) or []:
+                                if isinstance(s, str) and s.strip():
+                                    job_skills.add(s.strip().lower())
+                    except Exception:
+                        continue
+            finally:
+                conn.close()
+
+            all_skills = list(profile_skills | job_skills)
+            if not all_skills:
+                logger.info("Embedding backfill: no skills found (triggered by %s)", email)
+                return
+
+            result = get_embeddings_batch(all_skills, db_path)
             logger.info(
                 "Embedding backfill completed: %d/%d cached (triggered by %s)",
-                result["cached"], result["total"], email,
+                len(result), len(all_skills), email,
             )
         except Exception as exc:
             logger.error("Embedding backfill failed (triggered by %s): %s", email, exc)
