@@ -1,7 +1,6 @@
 import base64
 import logging
 import os
-import sys
 import tempfile
 import uuid
 from typing import Any
@@ -18,32 +17,24 @@ from api.db.queries import (
     save_user_cv_md, get_user_cv_md,
     save_user_profile_yaml, get_user_profile_yaml,
 )
+from api.onboard_utils import (
+    docx_to_markdown as _docx_to_markdown,
+    _extract_profile as _onboard_extract_profile,
+    _build_profile_yaml as _onboard_build_profile_yaml,
+)
 
 MAX_CV_BYTES = 5 * 1024 * 1024  # 5 MB
 
 router = APIRouter(prefix="/api/onboard", tags=["onboard"])
 
 
-def _load_jobagent():
-    """Add JOBAGENT_DIR to sys.path so we can import from jobagent."""
-    jobagent_dir = os.environ.get("JOBAGENT_DIR", "agent")
-    jobagent_dir = os.path.abspath(jobagent_dir)
-    if jobagent_dir not in sys.path:
-        sys.path.insert(0, jobagent_dir)
-
-
-_load_jobagent()
-
-
 def docx_to_markdown(path: str) -> str:
-    from onboard import docx_to_markdown as _dtm  # noqa: PLC0415
-    return _dtm(path)
+    return _docx_to_markdown(path)
 
 
 def _extract_profile_from_cv(cv_text: str) -> dict:
-    from onboard import _extract_profile  # noqa: PLC0415
     from openai import OpenAI  # noqa: PLC0415
-    return _extract_profile(cv_text, OpenAI())
+    return _onboard_extract_profile(cv_text, OpenAI())
 
 
 class GenerateProfileRequest(BaseModel):
@@ -60,8 +51,7 @@ async def generate_profile(body: GenerateProfileRequest):
 
 
 def _build_profile_yaml(profile: dict, profile_id: str, salary_min: int, location_preference: str) -> str:
-    from onboard import _build_profile_yaml as _bpy  # noqa: PLC0415
-    return _bpy(
+    return _onboard_build_profile_yaml(
         extracted=profile,
         profile_id=profile_id,
         email=profile.get("email") or "",

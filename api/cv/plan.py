@@ -191,13 +191,7 @@ def _location_language_hints(locations: list[str]) -> list[str]:
     Uses babel + country-converter to resolve locations to official languages.
     Skips English (assumed default) and returns unique names.
     """
-    import sys
-    from pathlib import Path
-    # Ensure agent dir is on path for geo module
-    agent_dir = str(Path(__file__).resolve().parents[2] / "agent")
-    if agent_dir not in sys.path:
-        sys.path.insert(0, agent_dir)
-    from geo import location_to_languages
+    from api.geo import location_to_languages
 
     hints: list[str] = []
     for loc in locations:

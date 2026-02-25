@@ -17,6 +17,10 @@ from api.db.queries import (
     set_job_applied, set_job_dismissed,
     get_user_cv_md,
 )
+from api.geo import (
+    derive_home_regions, UNIVERSAL_TERMS,
+    build_region_pattern, matches_region, is_pure_timezone,
+)
 from api.middleware.auth import get_current_user
 from api.scoring import compute_tier, heuristic_score, load_profile_data
 
@@ -46,13 +50,6 @@ def _load_user_geo(profile_id: str | None) -> tuple[list[str], list[str]]:
         return [], []
     jobagent_dir = os.environ.get("JOBAGENT_DIR", "agent")
 
-    import sys
-    agent_dir = str(Path(jobagent_dir).resolve())
-    if agent_dir not in sys.path:
-        sys.path.insert(0, agent_dir)
-
-    from geo import derive_home_regions
-
     profile_path = Path(jobagent_dir) / "config" / "profiles" / f"{profile_id}.yaml"
     try:
         data = yaml.safe_load(profile_path.read_text())
@@ -65,13 +62,6 @@ def _load_user_geo(profile_id: str | None) -> tuple[list[str], list[str]]:
 
 def _is_remote_requiring_reloc(job: dict, home_locations: list[str], home_regions: list[str]) -> bool:
     """Return True if a remote job pins the worker to a place outside home."""
-    import sys
-    jobagent_dir = os.environ.get("JOBAGENT_DIR", "agent")
-    agent_dir = str(Path(jobagent_dir).resolve())
-    if agent_dir not in sys.path:
-        sys.path.insert(0, agent_dir)
-    from geo import UNIVERSAL_TERMS, build_region_pattern, matches_region
-
     title_lower = (job.get("title") or "").lower()
     job_loc = (job.get("location") or "").lower()
 
@@ -106,7 +96,6 @@ def _is_remote_requiring_reloc(job: dict, home_locations: list[str], home_region
     if "(remote)" in job_loc and job_loc.replace("(remote)", "").strip():
         return True
     if restriction:
-        from geo import is_pure_timezone
         if not is_pure_timezone(restriction):
             return True
 
