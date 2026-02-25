@@ -813,6 +813,62 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
     return {"ok": True}
 
 
+class AddSkillRequest(BaseModel):
+    skill: str
+
+
+@router.post("/profile/skills")
+async def add_skill(body: AddSkillRequest, user: dict = Depends(get_current_user)):
+    """Add a single skill to the user's profile. Deduplicates, persists to YAML + DB."""
+    profile_id = user.get("profile_id")
+    if not profile_id:
+        raise HTTPException(status_code=404, detail="No profile found")
+
+    skill = body.skill.strip().lower()
+    if not skill:
+        raise HTTPException(status_code=400, detail="Skill cannot be empty")
+
+    jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "agent"))
+    yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}.yaml")
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+
+    # Restore YAML from DB if filesystem was wiped
+    if not os.path.exists(yaml_path):
+        stored_yaml = get_user_profile_yaml(db_path, user["id"])
+        if not stored_yaml:
+            raise HTTPException(status_code=404, detail="Profile file not found")
+        os.makedirs(os.path.dirname(yaml_path), exist_ok=True)
+        with open(yaml_path, "w") as f:
+            f.write(stored_yaml)
+
+    with open(yaml_path) as f:
+        raw = yaml.safe_load(f)
+
+    skills = raw.get("skills") or []
+    # Deduplicate (case-insensitive)
+    existing_lower = {s.lower() for s in skills}
+    if skill not in existing_lower:
+        skills.append(skill)
+        raw["skills"] = skills
+
+        updated_yaml = yaml.dump(raw, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        with open(yaml_path, "w") as f:
+            f.write(updated_yaml)
+
+        # Persist to DB
+        save_user_profile_yaml(db_path, user["id"], updated_yaml)
+
+    # Pre-compute embedding for the new skill (non-blocking)
+    try:
+        from api.embeddings import get_embedding, clear_memory_cache
+        get_embedding(skill, db_path)
+        clear_memory_cache()  # invalidate so subsequent requests pick up the new skill
+    except Exception:
+        pass  # best-effort, don't block response
+
+    return {"skills": skills}
+
+
 @router.post("/upload-cv", dependencies=[Depends(get_current_user)])
 async def upload_cv(file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".docx"):

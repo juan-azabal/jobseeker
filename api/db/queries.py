@@ -462,6 +462,55 @@ def get_profile_yaml_by_profile_id(db_path: str, profile_id: str) -> str | None:
     return row["profile_yaml"] if row else None
 
 
+# ── Skill embeddings cache ────────────────────────────────────────────────
+
+def get_cached_embeddings(db_path: str, skills: list[str]) -> dict[str, list[float]]:
+    """Bulk fetch cached embeddings from skill_embeddings table."""
+    import json as _json
+
+    if not skills:
+        return {}
+    con = _connect(db_path)
+    placeholders = ",".join("?" for _ in skills)
+    rows = con.execute(
+        f"SELECT skill_text, embedding FROM skill_embeddings "
+        f"WHERE skill_text IN ({placeholders}) AND model = ?",
+        skills + ["text-embedding-3-small"],
+    ).fetchall()
+    con.close()
+    return {row["skill_text"]: _json.loads(row["embedding"]) for row in rows}
+
+
+def save_embedding(db_path: str, skill_text: str, embedding: list[float], model: str) -> None:
+    """Upsert a single embedding into the cache."""
+    import json as _json
+
+    con = _connect(db_path)
+    con.execute(
+        "INSERT OR REPLACE INTO skill_embeddings (skill_text, model, embedding) "
+        "VALUES (?, ?, ?)",
+        (skill_text, model, _json.dumps(embedding)),
+    )
+    con.commit()
+    con.close()
+
+
+def save_embeddings_batch(db_path: str, items: list[tuple[str, list[float], str]]) -> None:
+    """Bulk insert embeddings. items: list of (skill_text, embedding, model)."""
+    import json as _json
+
+    if not items:
+        return
+    con = _connect(db_path)
+    con.executemany(
+        "INSERT OR REPLACE INTO skill_embeddings (skill_text, model, embedding) "
+        "VALUES (?, ?, ?)",
+        [(text, model, _json.dumps(emb)) for text, emb, model in items],
+    )
+    con.commit()
+    con.close()
+
+
 def reset_user_onboarding(db_path: str, user_id: int) -> None:
     """Clear profile_id, cv_md, and profile_yaml so a user goes through onboarding again.
 

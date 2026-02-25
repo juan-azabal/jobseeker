@@ -1,5 +1,7 @@
 """Tests for api/scoring.py: heuristic scoring, tier computation, domain inference."""
 
+from unittest.mock import patch
+
 from api.scoring import (
     _compute_seniority_weights,
     _infer_domain,
@@ -229,3 +231,49 @@ class TestHeuristicScore:
         score_match = heuristic_score(profile, parsed_match, job, False)
         score_mismatch = heuristic_score(profile, parsed_mismatch, job, False)
         assert score_match > score_mismatch
+
+    def test_semantic_skill_matching(self, tmp_path):
+        """With semantic matching, 'data analysis' should match 'analytics'."""
+        from api.db.init import init_db
+        from api.skill_matcher import SkillMatch
+
+        db_path = str(tmp_path / "test.db")
+        init_db(db_path)
+
+        profile = _make_profile(skills=["data analysis"])
+        parsed = _make_parsed(must_have_skills=["analytics"])
+        job = {"location": "Remote"}
+
+        # Mock match_skills to return semantic match
+        mock_results = [
+            SkillMatch(job_skill="analytics", status="matched", user_skill="data analysis", similarity=0.87),
+        ]
+        with patch("api.scoring.match_skills", return_value=mock_results):
+            score = heuristic_score(profile, parsed, job, False, db_path=db_path)
+
+        # Without semantic matching, "data analysis" would NOT match "analytics" (no substring overlap)
+        score_no_semantic = heuristic_score(profile, parsed, job, False)
+        assert score > score_no_semantic
+
+    def test_partial_match_gives_partial_points(self, tmp_path):
+        """Partial matches should give 2 pts for must-have skills."""
+        from api.db.init import init_db
+        from api.skill_matcher import SkillMatch
+
+        db_path = str(tmp_path / "test.db")
+        init_db(db_path)
+
+        profile = _make_profile(skills=["javascript"])
+        parsed = _make_parsed(must_have_skills=["typescript"])
+        job = {"location": "Remote"}
+
+        # Mock match_skills to return partial match
+        mock_results = [
+            SkillMatch(job_skill="typescript", status="partial", user_skill="javascript", similarity=0.73),
+        ]
+        with patch("api.scoring.match_skills", return_value=mock_results):
+            score = heuristic_score(profile, parsed, job, False, db_path=db_path)
+
+        # Without semantic matching, no substring match → 0 skill points
+        score_no_semantic = heuristic_score(profile, parsed, job, False)
+        assert score > score_no_semantic

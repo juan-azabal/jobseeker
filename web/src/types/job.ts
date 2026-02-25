@@ -63,9 +63,22 @@ export interface ParsedJob {
   key_phrases?: string[];
 }
 
+export interface SkillMatchItem {
+  skill: string;
+  status: 'matched' | 'partial' | 'none';
+  matched_to: string | null;
+  similarity: number;
+}
+
+export interface SkillMatches {
+  must_have: SkillMatchItem[];
+  nice_to_have: SkillMatchItem[];
+}
+
 export interface JobDetail extends JobSummary {
   parsed: ParsedJob | null;
   scored: ScoredResult | null;
+  skill_matches: SkillMatches | null;
   last_seen: string;
   ingested_at: string;
   applied_at: string | null;
