@@ -192,7 +192,7 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - Saves ~$0.001/job per overlapping job across users (gpt-4o-mini parse cost avoided)
 
 ### Current
-Phase 12 — Semantic Skill Matching (12.1 Embedding Infra ✓, 12.2 Skill Matcher ✓, working on 12.3 Wire into Scoring)
+Phase 12 — Semantic Skill Matching (12.1–12.3 ✓, working on 12.4 Frontend)
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
