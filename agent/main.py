@@ -26,10 +26,96 @@ from user_config import load_profile, list_profiles, is_profile_active, resolve_
 
 SEEN_IDS_PATH = "config/seen_ids/juan.txt"  # fallback only; main() always passes profile-derived path
 
-# Hard cap on gpt-4o scoring per profile per run.
-# Prevents runaway costs when a new profile has no seen_ids and encounters hundreds of unseen jobs.
-# Increase only deliberately — each additional job costs ~$0.04.
-MAX_SCORE_PER_RUN = 75
+# Hard cap on RAG scoring per profile per run (ADR-006 safety net).
+# The heuristic gate is the primary cost control; this cap is a backstop.
+MAX_SCORE_PER_RUN = 50
+
+
+def _heuristic_gate(jobs: list, profile: dict) -> tuple[list, list]:
+    """Split parsed jobs into (to_score, skipped) using a cheap heuristic.
+
+    Jobs that clearly don't fit (wrong domain, wrong seniority, no skill
+    overlap, too low salary) skip LLM scoring and remain as heuristic-only
+    results in the digest (ADR-006).
+
+    Returns (jobs_to_score, jobs_skipped).
+    """
+    scoring_cfg = profile.get("scoring", {})
+    threshold = scoring_cfg.get("rag_threshold", 0)
+    salary_min = scoring_cfg.get("salary_min", 0)
+
+    if threshold == 0:
+        return jobs, []
+
+    target = profile.get("target", {})
+    target_domains = set((target.get("domains") or {}).keys())
+    target_level = (target.get("level") or "").lower()
+    profile_skills = {s.lower().replace("-", " ") for s in (profile.get("skills") or [])}
+
+    # Seniority levels that map to senior IC / management
+    PRINCIPAL_WORDS = {"principal", "staff", "director", "vp", "head", "chief"}
+    SENIOR_WORDS = {"senior", "lead", "sr"}
+
+    to_score, skipped = [], []
+
+    for job in jobs:
+        parsed = job.get("parsed") or {}
+        score = 0
+
+        # ── Domain (0–20) ─────────────────────────────────────────────────
+        domain = (parsed.get("domain") or "").lower()
+        if not domain or domain == "other":
+            score += 10  # uncertain → partial credit
+        elif domain in target_domains:
+            score += 20
+        # else: wrong domain → 0
+
+        # ── Seniority (0–20) ──────────────────────────────────────────────
+        seniority = (parsed.get("seniority") or "").lower()
+        if not seniority:
+            score += 10  # unspecified → partial credit
+        elif target_level in ("principal", "staff"):
+            if any(w in seniority for w in PRINCIPAL_WORDS):
+                score += 20
+            elif any(w in seniority for w in SENIOR_WORDS):
+                score += 10
+        elif target_level in ("senior", "lead"):
+            if any(w in seniority for w in SENIOR_WORDS | PRINCIPAL_WORDS):
+                score += 20
+        else:
+            score += 10  # no target level → partial credit
+
+        # ── Skill overlap (0–20, 5 pts/match, cap 4) ──────────────────────
+        job_skills = [
+            s.lower().replace("-", " ")
+            for s in (parsed.get("must_have_skills") or [])
+            + (parsed.get("nice_to_have_skills") or [])
+        ]
+        matches = sum(
+            1 for js in job_skills
+            if any(ps in js or js in ps for ps in profile_skills)
+        )
+        score += min(20, matches * 5)
+
+        # ── Salary gate (hard block, applied after score) ─────────────────
+        if salary_min > 0:
+            salary_text = (parsed.get("salary_mentioned") or "").lower()
+            nums = re.findall(r"[\d,]+", salary_text)
+            if nums:
+                try:
+                    val = int(nums[0].replace(",", ""))
+                    # Treat values under 1000 as "k" (e.g. "80k")
+                    if val < 1000:
+                        val *= 1000
+                    if val < salary_min:
+                        skipped.append(job)
+                        continue
+                except ValueError:
+                    pass
+
+        (to_score if score >= threshold else skipped).append(job)
+
+    return to_score, skipped
 
 
 def _append_seen_ids(jobs, path=SEEN_IDS_PATH):
@@ -689,11 +775,19 @@ def main():
         print("   No new jobs to parse.")
     new_jobs = jobs_with_parse + jobs_needing_parse
 
+    # Step 4b: Heuristic gate — skip RAG for jobs that clearly don't fit (ADR-006).
+    # Skipped jobs are still saved and visible in the digest with heuristic tier.
+    jobs_to_score, heuristic_only = _heuristic_gate(new_jobs, profile)
+    if heuristic_only:
+        print(f"\n🔍 Heuristic gate: {len(jobs_to_score)} → RAG, {len(heuristic_only)} → heuristic-only")
+    new_jobs = jobs_to_score
+
     # Step 5: RAG score new jobs (and re-scored ones)
-    # Apply hard cap to prevent runaway costs (e.g. new profile with no seen_ids).
+    # Hard cap as a backstop — the heuristic gate should do most of the work.
     if len(new_jobs) > MAX_SCORE_PER_RUN:
-        print(f"\n⚠️  {len(new_jobs)} jobs to score — capping at {MAX_SCORE_PER_RUN} to limit cost.")
+        print(f"\n⚠️  {len(new_jobs)} jobs past gate — capping at {MAX_SCORE_PER_RUN} to limit cost.")
         print(f"   Remaining {len(new_jobs) - MAX_SCORE_PER_RUN} jobs will be scored in future runs.")
+        heuristic_only.extend(new_jobs[MAX_SCORE_PER_RUN:])
         new_jobs = new_jobs[:MAX_SCORE_PER_RUN]
 
     n_scored = 0
@@ -718,14 +812,15 @@ def main():
             except Exception as e:
                 print(f"   Gap history error (non-fatal): {e}")
 
-    # Step 6: Update cache with newly processed jobs
-    if new_jobs:
-        added = update_cache(cache, new_jobs)
+    # Step 6: Update cache with newly processed jobs (RAG-scored + heuristic-only)
+    all_new = new_jobs + heuristic_only
+    if all_new:
+        added = update_cache(cache, all_new)
         save_cache(cache)
         print(f"   Cache updated: +{added} jobs ({cache_stats(cache)})")
 
-    # Step 7: Combine cached + new for digest
-    all_parsed = cached_jobs + new_jobs
+    # Step 7: Combine cached + new for digest (RAG-scored jobs ranked first)
+    all_parsed = cached_jobs + new_jobs + heuristic_only
 
     # Step 8: Auto-skip low-score reloc jobs (score < 50 → not worth relocating for)
     # Writes their IDs to applied.yaml so the prefilter drops them in future runs.

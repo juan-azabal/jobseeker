@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-SCORE_MODEL = "gpt-4o"
+SCORE_MODEL = "gpt-4o-mini"  # ADR-003: mini scores tier correctly ~90% of the time at 17x lower cost
 
 # Scoring rubric is read from prompts/scoring-rubric.md (source of truth).
 # _build_scoring_prompt() interpolates profile-specific values at runtime.
