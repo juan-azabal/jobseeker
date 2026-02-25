@@ -83,6 +83,7 @@ export interface JobDetail extends JobSummary {
   ingested_at: string;
   applied_at: string | null;
   dismissed_at: string | null;
+  domain_override?: string | null;
 }
 
 export interface JobsResponse {

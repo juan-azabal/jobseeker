@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import ScoreBreakdown from '../components/ScoreBreakdown';
+import DomainSelector from '../components/DomainSelector';
 import { type JobDetail, type SkillMatchItem } from '../types/job';
 
 const TIER_SCORE_COLOR: Record<string, string> = {
@@ -389,9 +390,11 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
             {p?.seniority && p.seniority !== 'unknown' && (
               <span className="capitalize">{p.seniority}{expLabel ? ` · ${expLabel}` : ''}</span>
             )}
-            {p?.domain && p.domain !== 'other' && (
-              <span className="capitalize">{p.domain}</span>
-            )}
+            <DomainSelector
+              jobId={jobId}
+              parsedDomain={p?.domain}
+              domainOverride={job.domain_override}
+            />
             {p?.salary_mentioned && (
               <span className="text-zinc-500">{p.salary_mentioned}</span>
             )}
