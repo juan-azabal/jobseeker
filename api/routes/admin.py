@@ -188,6 +188,88 @@ async def reset_seen_ids(body: ResetSeenIdsRequest, admin: dict = Depends(get_cu
     )
 
 
+@router.get("/embedding-diagnostics")
+def embedding_diagnostics(admin: dict = Depends(get_current_admin)):
+    """Show similarity scores between admin's profile skills and recent job skills.
+
+    Returns sorted list of {job_skill, best_match, similarity, status} for
+    threshold tuning. Curl-only, no UI.
+    """
+    import json
+    import sqlite3
+
+    from api.scoring import load_profile_data
+    from api.skill_matcher import match_skills
+
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    profile = load_profile_data(admin.get("profile_id"))
+    if not profile or not profile.get("skills"):
+        raise HTTPException(status_code=400, detail="Admin has no profile or no skills configured")
+
+    user_skills = profile["skills"]
+
+    # Collect first 30 unique must_have_skills across recent jobs
+    conn = sqlite3.connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT parsed FROM jobs WHERE parsed IS NOT NULL ORDER BY first_seen DESC LIMIT 200"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    job_skills: list[str] = []
+    seen: set[str] = set()
+    for (parsed_json,) in rows:
+        try:
+            parsed = json.loads(parsed_json)
+            for skill in parsed.get("must_have_skills", []) or []:
+                if isinstance(skill, str) and skill.strip():
+                    norm = skill.strip().lower()
+                    if norm not in seen:
+                        seen.add(norm)
+                        job_skills.append(skill.strip())
+                        if len(job_skills) >= 30:
+                            break
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if len(job_skills) >= 30:
+            break
+
+    if not job_skills:
+        return []
+
+    results = match_skills(user_skills, job_skills, db_path)
+    output = [
+        {
+            "job_skill": r.job_skill,
+            "best_match": r.user_skill,
+            "similarity": round(r.similarity, 4),
+            "status": r.status,
+        }
+        for r in results
+    ]
+    output.sort(key=lambda x: x["similarity"], reverse=True)
+    return output
+
+
+@router.post("/backfill-embeddings")
+def backfill_embeddings(admin: dict = Depends(get_current_admin)):
+    """Compute and cache embeddings for all known skills in the database."""
+    from scripts.backfill_embeddings import backfill
+
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    try:
+        result = backfill(db_path)
+        logger.info(
+            "Embedding backfill completed: %d/%d cached (triggered by %s)",
+            result["cached"], result["total"], admin["email"],
+        )
+        return result
+    except Exception as exc:
+        logger.error("Embedding backfill failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @router.post("/trigger-pipeline")
 async def trigger_pipeline(body: TriggerRequest = TriggerRequest(), admin: dict = Depends(get_current_admin)):
     """Dispatch the GHA scraping pipeline for a specific profile or all active profiles.

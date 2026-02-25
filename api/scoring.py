@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from api.skill_matcher import match_skills
+from api.skill_matcher import SkillMatch, match_skills
 
 logger = logging.getLogger(__name__)
 
@@ -292,13 +292,30 @@ def _infer_domain(parsed: dict) -> str:
     return best_domain if best_count >= 1 else "other"
 
 
-def _score_skills(profile: dict, parsed: dict, db_path: str | None) -> int:
+def precompute_skill_lookup(
+    profile_skills: list[str],
+    all_job_skills: list[str],
+    db_path: str,
+) -> dict[str, SkillMatch]:
+    """Match user skills against all unique job skills in one call.
+
+    Returns dict keyed by normalized job skill for O(1) per-job lookup.
+    """
+    results = match_skills(profile_skills, all_job_skills, db_path)
+    return {m.job_skill.strip().lower().replace("-", " "): m for m in results}
+
+
+def _score_skills(
+    profile: dict, parsed: dict, db_path: str | None,
+    skill_lookup: dict[str, SkillMatch] | None = None,
+) -> int:
     """Score skills dimension (0-30).
 
     Must-have: 5 pts matched, 2 pts partial, cap 20.
     Nice-to-have + technical_stack: 3 pts matched, cap 10.
 
-    Uses semantic matching when db_path is provided, substring fallback otherwise.
+    Uses pre-computed skill_lookup when available, falls back to semantic
+    matching when db_path is provided, substring fallback otherwise.
     """
     profile_skills = profile.get("skills", [])
     must_have_list = parsed.get("must_have_skills") or []
@@ -307,7 +324,20 @@ def _score_skills(profile: dict, parsed: dict, db_path: str | None) -> int:
         + (parsed.get("technical_stack") or [])
     ))
 
-    if db_path and profile_skills:
+    if skill_lookup is not None:
+        # Pre-computed batch lookup — O(1) per skill
+        must_pts = sum(
+            5 if (m := skill_lookup.get(s.strip().lower().replace("-", " "))) and m.status == "matched"
+            else 2 if m and m.status == "partial"
+            else 0
+            for s in must_have_list
+        )
+        nice_pts = sum(
+            3 if (m := skill_lookup.get(s.strip().lower().replace("-", " "))) and m.status == "matched"
+            else 0
+            for s in nice_list
+        )
+    elif db_path and profile_skills:
         # Semantic matching via embeddings
         must_results = match_skills(profile_skills, must_have_list, db_path)
         must_pts = sum(
@@ -342,6 +372,7 @@ def _score_skills(profile: dict, parsed: dict, db_path: str | None) -> int:
 def heuristic_score(
     profile: dict, parsed: dict, job: dict, is_reloc: bool,
     db_path: str | None = None,
+    skill_lookup: dict[str, SkillMatch] | None = None,
 ) -> int:
     """Compute heuristic fit score 0-100 from parsed job data + user profile.
 
@@ -361,6 +392,7 @@ def heuristic_score(
         job: raw job row (for location field)
         is_reloc: unused — kept for API compatibility
         db_path: SQLite path for embedding cache; None → substring fallback
+        skill_lookup: pre-computed batch skill matches; None → per-job matching
     """
     if not parsed:
         return 0
@@ -377,7 +409,7 @@ def heuristic_score(
     # ── Skills (0-30) ───────────────────────────────────────────────────────
     # Must-have: 5 pts matched, 2 pts partial, cap 20.
     # Nice-to-have + technical_stack: 3 pts matched, cap 10.
-    score += _score_skills(profile, parsed, db_path)
+    score += _score_skills(profile, parsed, db_path, skill_lookup=skill_lookup)
 
     # ── Location (0-10) ─────────────────────────────────────────────────────
     loc_pref = profile.get("location_preference", "b")

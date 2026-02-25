@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Routes, Route, Navigate, Link, useNavigate, useParams } from 'react-router';
+import { Routes, Route, Navigate, Link, useNavigate, useParams, useLocation } from 'react-router';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 import JobsPage from './pages/JobsPage';
@@ -12,7 +12,22 @@ import AdminPage from './pages/AdminPage';
 function JobDetailRoute() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
-  return <JobDetailPage jobId={jobId!} onBack={() => navigate(-1)} />;
+  const location = useLocation();
+  const jobIds: string[] = (location.state as { jobIds?: string[] } | null)?.jobIds ?? [];
+
+  const idx = jobIds.indexOf(jobId!);
+  const prevId = idx > 0 ? jobIds[idx - 1] : undefined;
+  const nextId = idx >= 0 && idx < jobIds.length - 1 ? jobIds[idx + 1] : undefined;
+
+  return (
+    <JobDetailPage
+      jobId={jobId!}
+      onBack={() => navigate(-1)}
+      prevId={prevId}
+      nextId={nextId}
+      onNavigate={(id) => navigate(`/jobs/${id}`, { state: { jobIds }, replace: true })}
+    />
+  );
 }
 
 function HamburgerMenu() {

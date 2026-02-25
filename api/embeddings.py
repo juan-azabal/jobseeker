@@ -7,13 +7,15 @@ Falls back gracefully if OPENAI_API_KEY is missing or the API errors.
 """
 
 import logging
-import math
 import os
 import time
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
 MODEL = "text-embedding-3-small"
+DIMENSIONS = 256
 
 try:
     import openai
@@ -27,13 +29,10 @@ except ImportError:
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
-    """Cosine similarity between two vectors. Pure Python, no numpy."""
-    dot = sum(x * y for x, y in zip(a, b))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(y * y for y in b))
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return dot / (norm_a * norm_b)
+    """Cosine similarity between two vectors using numpy."""
+    va, vb = np.asarray(a), np.asarray(b)
+    norm = float(np.linalg.norm(va) * np.linalg.norm(vb))
+    return float(np.dot(va, vb) / norm) if norm > 0 else 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +140,9 @@ def get_embedding(text: str, db_path: str) -> list[float] | None:
         return None
     try:
         client = openai.OpenAI()
-        response = client.embeddings.create(model=MODEL, input=[normalized])
+        response = client.embeddings.create(
+            model=MODEL, input=[normalized], dimensions=DIMENSIONS,
+        )
         embedding = response.data[0].embedding
         _save_to_cache(db_path, normalized, embedding)
         return embedding
@@ -200,7 +201,9 @@ def get_embeddings_batch(
         return result
     try:
         client = openai.OpenAI()
-        response = client.embeddings.create(model=MODEL, input=misses)
+        response = client.embeddings.create(
+            model=MODEL, input=misses, dimensions=DIMENSIONS,
+        )
         new_embeddings = [item.embedding for item in response.data]
         to_cache = []
         for text, emb in zip(misses, new_embeddings):

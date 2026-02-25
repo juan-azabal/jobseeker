@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-const SENIORITY_OPTIONS = ['junior', 'mid', 'senior', 'staff', 'principal', 'director', 'vp'];
+const SENIORITY_OPTIONS = ['junior', 'mid', 'senior', 'staff', 'principal', 'director', 'vp', 'unknown'];
 const COMPANY_TYPE_OPTIONS = ['startup', 'scaleup', 'enterprise', 'consultancy', 'agency', 'ngo'];
 const COMMON_COUNTRIES = ['spain', 'germany', 'netherlands', 'france', 'uk', 'portugal', 'remote'];
 
@@ -186,16 +186,18 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
         </p>
         {Object.entries(seniorityWeights).map(([level, weight]) => (
           <div key={level} className="flex items-center gap-3 mb-2">
-            <span className="text-zinc-400 text-sm w-20 truncate capitalize">{level}</span>
+            <span className="text-zinc-400 text-sm w-20 truncate capitalize" title={level === 'unknown' ? 'Jobs with no seniority signal in the title' : undefined}>
+              {level === 'unknown' ? 'Unspecified' : level}
+            </span>
             <input
               type="range"
-              min={1}
+              min={-15}
               max={15}
               value={weight}
               className="flex-1"
               onChange={(e) => setSeniorityWeights({ ...seniorityWeights, [level]: Number(e.target.value) })}
             />
-            <span className="text-emerald-400 text-sm w-7 text-right">{weight}</span>
+            <span className={`text-sm w-7 text-right ${weight < 0 ? 'text-red-400' : weight > 0 ? 'text-emerald-400' : 'text-zinc-500'}`}>{weight}</span>
             <button
               onClick={() => removeSeniority(level)}
               className="text-zinc-600 hover:text-red-400 transition-colors text-sm leading-none"
@@ -209,9 +211,10 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
             <button
               key={l}
               onClick={() => addSeniority(l)}
+              title={l === 'unknown' ? 'Jobs with no seniority signal in the title' : undefined}
               className="rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-500 transition-colors hover:border-zinc-500 hover:text-zinc-300 capitalize"
             >
-              + {l}
+              + {l === 'unknown' ? 'Unspecified' : l}
             </button>
           ))}
         </div>

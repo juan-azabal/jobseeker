@@ -21,10 +21,13 @@ export default function AdminPage() {
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState(false);
   const [resetting, setResetting] = useState<number | null>(null);
+  const [clearingSeen, setClearingSeen] = useState<number | null>(null);
   const [impersonating, setImpersonating] = useState<number | null>(null);
   const [profile, setProfile] = useState('');
   const [triggering, setTriggering] = useState(false);
   const [triggerResult, setTriggerResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   // Inline profile-id edit state
   const [editingProfileId, setEditingProfileId] = useState<{ userId: number; value: string } | null>(null);
@@ -77,6 +80,24 @@ export default function AdminPage() {
     }
   }
 
+  async function handleBackfill() {
+    setBackfilling(true);
+    setBackfillResult(null);
+    try {
+      const r = await fetch('/api/admin/backfill-embeddings', { method: 'POST' });
+      const data = await r.json();
+      if (r.ok) {
+        setBackfillResult({ ok: true, message: `Cached ${data.cached}/${data.total} skills` });
+      } else {
+        setBackfillResult({ ok: false, message: data.detail || 'Backfill failed' });
+      }
+    } catch {
+      setBackfillResult({ ok: false, message: 'Network error' });
+    } finally {
+      setBackfilling(false);
+    }
+  }
+
   async function handleResetOnboarding(userId: number, userName: string) {
     if (!confirm(`Reset onboarding for "${userName}"? They will be sent back to the onboarding flow. Job history is preserved.`)) return;
     setResetting(userId);
@@ -88,6 +109,24 @@ export default function AdminPage() {
       alert('Network error');
     } finally {
       setResetting(null);
+    }
+  }
+
+  async function handleClearSeen(userId: number, profileId: string) {
+    if (!confirm(`Clear seen job IDs for "${profileId}"? Jobs will be re-scraped on next run.`)) return;
+    setClearingSeen(userId);
+    try {
+      const r = await fetch('/api/admin/reset-seen-ids', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: profileId }),
+      });
+      if (r.ok) alert(`Seen IDs cleared for ${profileId}`);
+      else alert('Clear failed');
+    } catch {
+      alert('Network error');
+    } finally {
+      setClearingSeen(null);
     }
   }
 
@@ -161,10 +200,22 @@ export default function AdminPage() {
           >
             {triggering ? 'Triggering…' : 'Run pipeline'}
           </button>
+          <button
+            onClick={handleBackfill}
+            disabled={backfilling}
+            className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:border-zinc-500 disabled:opacity-50"
+          >
+            {backfilling ? 'Computing embeddings…' : 'Backfill embeddings'}
+          </button>
         </div>
         {triggerResult && (
           <p className={`mt-3 text-sm ${triggerResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
             {triggerResult.message}
+          </p>
+        )}
+        {backfillResult && (
+          <p className={`mt-3 text-sm ${backfillResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+            {backfillResult.message}
           </p>
         )}
       </section>
@@ -283,6 +334,16 @@ export default function AdminPage() {
                         >
                           {resetting === u.id ? '…' : 'Reset'}
                         </button>
+                        {u.profile_id && (
+                          <button
+                            onClick={() => handleClearSeen(u.id, u.profile_id!)}
+                            disabled={clearingSeen === u.id}
+                            className="rounded px-2 py-0.5 text-xs text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-amber-400 disabled:opacity-40"
+                            title="Clear seen job IDs (forces re-scrape on next run)"
+                          >
+                            {clearingSeen === u.id ? '…' : 'Clear seen'}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -7,6 +7,7 @@ from api.scoring import (
     _infer_domain,
     compute_tier,
     heuristic_score,
+    precompute_skill_lookup,
 )
 
 
@@ -277,3 +278,60 @@ class TestHeuristicScore:
         # Without semantic matching, no substring match → 0 skill points
         score_no_semantic = heuristic_score(profile, parsed, job, False)
         assert score > score_no_semantic
+
+    def test_precompute_skill_lookup_returns_correct_dict(self, tmp_path):
+        """precompute_skill_lookup returns dict keyed by normalized job skill."""
+        from api.db.init import init_db
+        from api.skill_matcher import SkillMatch
+
+        db_path = str(tmp_path / "test.db")
+        init_db(db_path)
+
+        mock_results = [
+            SkillMatch(job_skill="Python", status="matched", user_skill="python", similarity=1.0),
+            SkillMatch(job_skill="SQL Server", status="partial", user_skill="sql", similarity=0.75),
+        ]
+        with patch("api.scoring.match_skills", return_value=mock_results):
+            lookup = precompute_skill_lookup(["python", "sql"], ["Python", "SQL Server"], db_path)
+
+        assert "python" in lookup
+        assert "sql server" in lookup
+        assert lookup["python"].status == "matched"
+        assert lookup["sql server"].status == "partial"
+
+    def test_score_skills_with_lookup_matches_without(self, tmp_path):
+        """_score_skills with skill_lookup gives same result as semantic matching."""
+        from api.db.init import init_db
+        from api.skill_matcher import SkillMatch
+
+        db_path = str(tmp_path / "test.db")
+        init_db(db_path)
+
+        profile = _make_profile(skills=["python", "sql"])
+        parsed = _make_parsed(must_have_skills=["python", "analytics"])
+        job = {"location": "Remote"}
+
+        # Create a lookup that matches "python" and partially matches "analytics"
+        lookup = {
+            "python": SkillMatch(job_skill="python", status="matched", user_skill="python", similarity=1.0),
+            "analytics": SkillMatch(job_skill="analytics", status="partial", user_skill="sql", similarity=0.72),
+        }
+
+        # With lookup
+        score_with_lookup = heuristic_score(profile, parsed, job, False, db_path=db_path, skill_lookup=lookup)
+
+        # With direct semantic matching (mocked to return correct results per call)
+        must_results = [
+            SkillMatch(job_skill="python", status="matched", user_skill="python", similarity=1.0),
+            SkillMatch(job_skill="analytics", status="partial", user_skill="sql", similarity=0.72),
+        ]
+
+        def mock_match(user_skills, job_skills, db):
+            if not job_skills:
+                return []
+            return [r for r in must_results if r.job_skill in [s.lower() for s in job_skills]]
+
+        with patch("api.scoring.match_skills", side_effect=mock_match):
+            score_semantic = heuristic_score(profile, parsed, job, False, db_path=db_path)
+
+        assert score_with_lookup == score_semantic

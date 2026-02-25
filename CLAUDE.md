@@ -28,7 +28,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `api/main.py` — FastAPI app
   - `api/routes/` — one file per resource (auth, jobs, onboard, ingest, admin)
   - `api/middleware/auth.py` — session auth + admin guards (`get_current_user`, `get_current_admin`)
-  - `api/db/` — SQLite init, migrations (001–011), queries
+  - `api/db/` — SQLite init, migrations (001–012), queries
   - `api/ingest.py` — pipeline output → SQLite
   - `api/scoring.py` — per-user heuristic scoring (ported from agent)
   - `api/embeddings.py` — OpenAI embedding service with SQLite cache (text-embedding-3-small)
@@ -66,7 +66,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `agent/schemas/` — JSON output contracts (parsed_job, scored_job, digest_context, gap_history_entry)
   - `agent/patterns/` — interface contracts per module
   - `agent/docs/decisions/` — ADRs (001–007)
-- Tests: `tests/` (backend, 297 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 113 tests)
+- Tests: `tests/` (backend, 299 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 113 tests)
 - DB: `data/jobseeker.db` (gitignored)
 - Static build: `web/dist/` (gitignored)
 - Scripts: `scripts/seed_dev.py` — dev database seeder, `scripts/backfill_embeddings.py` — one-time skill embedding backfill
@@ -191,14 +191,17 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - GHA workflow: sequential profile loop (not parallel matrix). Each profile syncs to Railway before next starts
   - Saves ~$0.001/job per overlapping job across users (gpt-4o-mini parse cost avoided)
 - Phase 12 — Semantic Skill Matching
-  - Embeddings: OpenAI text-embedding-3-small, cached in SQLite (skill_embeddings table, migration 011)
-  - Matching: cosine similarity ≥0.80 = match, ≥0.68 = partial. Fallback to exact substring if no API key.
+  - Embeddings: OpenAI text-embedding-3-small, 256 dims (via `dimensions` param), cached in SQLite (skill_embeddings table, migration 011; migration 012 clears stale 1536-dim cache)
+  - Matching: cosine similarity (numpy) ≥0.80 = match, ≥0.68 = partial. Fallback to exact substring if no API key.
   - Scoring: heuristic_score() uses semantic matching for skills dimension (partial match = 2pts, full = 5pts)
+  - Job list: batch pre-computation via `precompute_skill_lookup()`. One `match_skills` call for all unique job skills, O(1) per-job lookup.
   - Job detail: GET /api/jobs/{id} returns skill_matches with match status per skill
   - Add skill: POST /api/onboard/profile/skills — one-click add from job detail
-  - Frontend: skill chips colored by match status (green/amber/default), click unmatched to add
-  - Backfill: scripts/backfill_embeddings.py for existing data; auto-embed on ingest
-  - Performance: in-process LRU cache, 500-pair ceiling for semantic matching
+  - Frontend: skill chips colored by match status (green/amber/default); unmatched AND partial chips clickable to add exact skill; partial tooltip shows similarity % and prompt to add; skip button on detail; select all toggle on list
+  - Backfill: scripts/backfill_embeddings.py for existing data; auto-embed on ingest; POST /api/admin/backfill-embeddings
+  - Diagnostics: GET /api/admin/embedding-diagnostics — curl-only, shows similarity scores for threshold tuning
+  - Admin: "Backfill embeddings" button + "Clear seen" button per user
+  - Performance: in-process LRU cache, numpy cosine similarity (~1000x faster than pure Python)
 
 ### Current
 Phase 12 — Completed
@@ -240,10 +243,18 @@ Phase 12 — Completed
 - Job cleanup: `cleanup_old_jobs(db_path, days=90)` deletes from user_job_scores + user_job_status + jobs. Called on every ingest.
 - Cross-user dedup: `agent/api_cache.py` calls `POST /api/ingest/batch-lookup` to fetch already-parsed jobs from Railway DB. Graceful fallback if unavailable.
 - GHA sequential pipeline: single `digest` job loops profiles sequentially. Each syncs to Railway before next starts. Jobs: `list-profiles` → `digest` → `persist-seen-ids` → `verify-health`. `timeout-minutes: 60`.
-- Embedding model: text-embedding-3-small (1536 dims). Cache key: lowercase trimmed skill text.
-- Embedding storage: JSON-serialized list[float] in BLOB column. No numpy dependency.
+- Embeddings: 256 dims (was 1536). `dimensions=256` param in OpenAI API. Migration 012 clears stale cache.
+- Embedding storage: JSON-serialized list[float] in BLOB column. Cache key: lowercase trimmed skill text.
 - Semantic thresholds: 0.80 match, 0.68 partial. Tuned on skill synonym pairs (analytics↔data analysis, ML↔machine learning).
-- Cosine similarity: pure Python (no numpy). Acceptable for ≤500 pairwise comparisons per request.
+- Cosine similarity: numpy (was pure Python). ~1000x faster for batch operations.
+- Semantic matching in job list: batch pre-computation via `precompute_skill_lookup()`. One `match_skills` call for all unique job skills, O(1) per-job lookup. Detail view unchanged.
+- Embedding backfill: POST /api/admin/backfill-embeddings. Required after deploy.
+- Embedding diagnostics: GET /api/admin/embedding-diagnostics. Curl-only, shows similarity scores for threshold tuning.
+- Seniority weights: -15 to 15 range, consistent with other sliders.
+- Seniority "unknown" key: jobs where parser detects no seniority signal emit `seniority: "unknown"`. Exposed in ProfileEditor as "Unspecified" quick-add button (maps to key `"unknown"` in seniority_weights). Backend already supported it via `.get("unknown", 0)`.
+- Partial-match skills clickable in job detail: `isClickable = (status === 'none' || status === 'partial') && !!onClick`. Tooltip shows similarity % for partial. Clicking adds the exact job skill (not the matched user skill) to profile. `onClick` passed for `status !== 'matched'`.
+- Prev/next job navigation: `JobsPage` passes `{ state: { jobIds: [...] } }` on navigate. `JobDetailRoute` reads `location.state.jobIds`, computes prevId/nextId, passes to `JobDetailPage`. `onNavigate` uses `replace: true` to avoid stacking history entries (preserves "Back to jobs" behavior).
+- `.claude/launch.json` in worktrees: use `bash -c "cd /absolute/path && exec venv/bin/uvicorn ..."` for backend so it runs from the correct CWD (finds DB and config). Frontend: `npm run dev --prefix /absolute/path/web`. Avoids broken relative paths when CWD is a worktree subdirectory.
 - POST /api/onboard/profile/skills in onboard router (not separate profile router) — consistent with existing PATCH /profile.
 
 ### Blockers

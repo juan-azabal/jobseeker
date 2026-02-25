@@ -179,6 +179,22 @@ export default function JobsPage() {
           </div>
         ) : (
           <div className="space-y-8">
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  if (selected.size < jobs.length) {
+                    setSelected(new Set(jobs.map((j) => j.job_id)));
+                  } else {
+                    setSelected(new Set());
+                  }
+                }}
+                className="text-xs text-zinc-500 hover:text-zinc-300 cursor-pointer"
+              >
+                {selected.size < jobs.length
+                  ? `Select all (${jobs.length})`
+                  : 'Deselect all'}
+              </button>
+            </div>
             {grouped.map(({ tier, jobs: tierJobs }) =>
               tierJobs.length > 0 ? (
                 <section key={tier}>
@@ -198,7 +214,7 @@ export default function JobsPage() {
                         job={job}
                         selected={selected.has(job.job_id)}
                         onSelect={(sel) => toggleSelect(job.job_id, sel)}
-                        onClick={() => navigate(`/jobs/${job.job_id}`)}
+                        onClick={() => navigate(`/jobs/${job.job_id}`, { state: { jobIds: jobs.map((j) => j.job_id) } })}
                       />
                     ))}
                   </div>
