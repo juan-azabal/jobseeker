@@ -202,25 +202,18 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - Diagnostics: GET /api/admin/embedding-diagnostics — curl-only, shows similarity scores for threshold tuning
   - Admin: "Backfill embeddings" button + "Clear seen" button per user
   - Performance: in-process LRU cache, numpy cosine similarity (~1000x faster than pure Python)
-- Phase 13 — Domain Scoring Fix
-  - B1 (RAG): `_build_scoring_prompt()` injects PENALTY clause for negative-weight domains into scoring rubric; LLM caps domain_fit at 4 for deprioritized domains
-  - B2 (parser): domain enum expanded from 8 to 21 values (added game|edtech|climate|marketplace|platform|growth|devtools|infra|media|security|logistics|hr_tech|legal_tech); parser-prompt.md v1.2 includes domain guide
-  - B2 (heuristic): `_DOMAIN_KEYWORDS` extended with keyword lists for all new domains; `_DOMAIN_ALIASES` extended with gaming→game, cybersecurity→security, etc.
-  - B3: heuristic scorer already correct (`score += domains.get(domain, 0)` handles negatives); verified via tests
-  - B4 (gate): `_heuristic_gate()` changed from set to dict for target_domains; negative-weight domains get 0 gate credit (not +20)
-  - Semantic fallback: `_semantic_domain_score()` in api/scoring.py fires when enum and keyword detection both fail; cosine similarity ≥ 0.75 threshold; score clamped to [-15, 15]
-  - Regression suite: `tests/test_scoring_integration.py` verifies ranking order with mixed positive/negative weights
-  - Audit script: `scripts/audit_domain_scoring.py` — shows per-job domain path (enum/keyword/semantic) from DB
-- Phase 13.5 — Domain Admin Tools
-  - Keyword reparse: `POST /api/admin/reparse-domains` re-classifies jobs with domain='other' using `_infer_domain()`; writes to `jobs.domain` only, never mutates `parsed.domain`, never deletes RAG scores
-  - Reparse preview: `GET /api/admin/reparse-domains/preview` — shows count + up to 5 samples that would change, read-only
-  - Domain corrections analytics: `GET /api/admin/domain-corrections` — aggregates user `domain_override` corrections by (from, to) with counts
-  - DB queries: `get_other_domain_jobs()`, `update_job_domain()`, `get_domain_corrections()` in `api/db/queries.py`
-  - Frontend: Domain Classification section in AdminPage with Preview + Reparse buttons and corrections table (loads on mount)
-  - Tests: `tests/test_admin_reparse.py` (14 tests) — idempotency, parsed.domain immutability, auth guard, DB isolation
+- Phase 13 — Domain Scoring Fix (v2)
+  - 13.1 (B1/RAG): `_build_scoring_prompt()` injects graduated PENALTY clause; strong (≤-15) caps domain_fit at 3, mild (<0 >-15) caps at 10; omitted when no negative domains
+  - 13.2 (B2/parser): domain enum expanded to 30 canonical values; parser-prompt.md v1.3 includes `_domain_guide` definitions; `ml→ai_ml`, `game→gaming`, `healthcare→healthtech` renames; DB migration 013 normalizes existing data
+  - 13.2 (B2/heuristic): `_DOMAIN_KEYWORDS` in both `api/scoring.py` + `agent/main.py` covers 29 domains (≥2-word rule; brand exceptions: databricks, snowflake, kubernetes, terraform); `_DOMAIN_ALIASES` full 30-domain mapping
+  - 13.3 (B4/gate): `_heuristic_gate()` uses dict for target_domains; negative weight → 0 gate credit; not in dict → 0
+  - 13.4a: `PATCH /api/jobs/{id}/domain` stores per-user domain override; `heuristic_score()` gets `domain_override` param; cascade: user_override → _infer_domain() → parsed.domain; RAG scores NOT invalidated; DB migration 014
+  - 13.4b: `DomainSelector` grouped dropdown in JobDetailPage; amber border for "other" domain; pencil icon for active override; 6 category groups + search filter
+  - 13.5: `POST /api/admin/reparse-domains` re-classifies domain='other' jobs with keywords (synchronous, writes jobs.domain only); `GET /api/admin/reparse-domains/preview`; `GET /api/admin/domain-corrections` aggregated analytics; AdminPage domain section
+  - 13.6: Keyword collision regression tests (fintech vs data, hr_tech vs other); keyword fixes: `financial institution`/`financial services` → fintech, `training management`/`learning and development` → hr_tech, `analytics platform` → `data analytics platform` (data); audit script column fix; 415 backend + 194 agent tests passing
 
 ### Current
-Phase 13.5 — Completed
+Phase 13 — Completed
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
@@ -274,10 +267,12 @@ Phase 13.5 — Completed
 - POST /api/onboard/profile/skills in onboard router (not separate profile router) — consistent with existing PATCH /profile.
 - Domain scoring cascade (Phase 13): enum match → `_infer_domain()` keyword override → `_semantic_domain_score()` embedding fallback. Semantic only fires when both prior stages return 'other'. Threshold: 0.75 cosine similarity. Score clamped [-15, 15].
 - Domain enum (Phase 13): 21 values total. parser-prompt.md v1.2 includes `_domain_guide` field (not in output schema — for LLM guidance only). `_DOMAIN_ALIASES` in api/scoring.py normalizes profile domain names to canonical enum values.
-- RAG penalty clause (Phase 13): `{penalty_clause}` placeholder in scoring-rubric.md v1.1; `_build_scoring_prompt()` substitutes it with negative-domain names or empty string. Requires no parser change.
+- RAG penalty clause (Phase 13): graduated tiers in scoring-rubric.md v1.2; strong (≤-15) → cap domain_fit at 3, mild (<0>-15) → cap at 10; injected via `{penalty_clause}` placeholder by `_build_scoring_prompt()`.
 - Heuristic gate (Phase 13): `target_domains` changed from set to dict in `_heuristic_gate()`. Domain weight > 0 → +20 gate credit; weight < 0 → 0 credit; not in dict → 0.
-- Domain reparse (Phase 13.5): `POST /api/admin/reparse-domains` is synchronous — keyword matching is pure Python, <1s even for 500 jobs. Writes `jobs.domain` only; `parsed.domain` is immutable post-ingest.
-- Domain corrections query (Phase 13.5): `GET /api/admin/domain-corrections` uses SQL `COALESCE(json_extract(j.parsed, '$.domain'), 'other')` as the "from" value; excludes overrides that match the parsed domain.
+- Domain override cascade (Phase 13): `user_override → _infer_domain() → parsed.domain`. RAG scores NOT invalidated on override. Override stored in `user_job_status.domain_override` (migration 014).
+- Domain reparse (Phase 13): `POST /api/admin/reparse-domains` is synchronous — keyword matching is pure Python, <1s even for 500 jobs. Writes `jobs.domain` only; `parsed.domain` is immutable post-ingest.
+- Domain corrections query (Phase 13): `GET /api/admin/domain-corrections` uses SQL `COALESCE(json_extract(j.parsed, '$.domain'), 'other')` as the "from" value; excludes overrides that match the parsed domain.
+- Domain keyword quality (Phase 13): Every keyword ≥2 words to prevent cross-domain collisions across 29 lists. Exceptions: databricks, snowflake, clickhouse, shopify, woocommerce, kubernetes, terraform (unambiguous brand names). `data` uses `data analytics platform` (not bare `analytics platform`) to avoid fintech false positives.
 
 ### Blockers
 {none}
