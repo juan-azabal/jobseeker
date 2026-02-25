@@ -2,7 +2,7 @@ import logging
 import os
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from api.db.queries import get_all_users, reset_user_onboarding, set_session_impersonation, set_user_profile_id, get_user_by_id
@@ -252,22 +252,34 @@ def embedding_diagnostics(admin: dict = Depends(get_current_admin)):
     return output
 
 
-@router.post("/backfill-embeddings")
-def backfill_embeddings(admin: dict = Depends(get_current_admin)):
-    """Compute and cache embeddings for all known skills in the database."""
+@router.post("/backfill-embeddings", status_code=202)
+def backfill_embeddings(
+    background_tasks: BackgroundTasks,
+    admin: dict = Depends(get_current_admin),
+):
+    """Compute and cache embeddings for all known skills.
+
+    Runs in background — returns 202 immediately so Railway/proxies don't time out.
+    Progress visible in server logs.
+    """
     from scripts.backfill_embeddings import backfill
 
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
-    try:
-        result = backfill(db_path)
-        logger.info(
-            "Embedding backfill completed: %d/%d cached (triggered by %s)",
-            result["cached"], result["total"], admin["email"],
-        )
-        return result
-    except Exception as exc:
-        logger.error("Embedding backfill failed: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+    email = admin["email"]
+
+    def _run() -> None:
+        try:
+            result = backfill(db_path)
+            logger.info(
+                "Embedding backfill completed: %d/%d cached (triggered by %s)",
+                result["cached"], result["total"], email,
+            )
+        except Exception as exc:
+            logger.error("Embedding backfill failed (triggered by %s): %s", email, exc)
+
+    background_tasks.add_task(_run)
+    logger.info("Embedding backfill started in background (triggered by %s)", email)
+    return {"status": "started", "message": "Backfill running in background — check server logs for progress"}
 
 
 @router.post("/trigger-pipeline")
