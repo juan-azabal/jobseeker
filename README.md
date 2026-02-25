@@ -16,7 +16,8 @@ A personal job search platform. Web CRM + autonomous scraping/scoring engine in 
 - **Self-service onboarding** — upload CV, review extracted profile, save → pipeline fires automatically
 - **Cross-user dedup** — jobs parsed by one user are reused by subsequent users (saves LLM costs)
 - **Semantic skill matching** — cosine similarity matching between profile skills and job requirements; skill chips colored by match status in job detail
-- **Admin panel** — trigger pipeline, view users, manage system
+- **Domain scoring** — 30-domain canonical system with per-user weights (positive/negative); editable per-job with grouped dropdown; keyword reparse and correction analytics in admin
+- **Admin panel** — trigger pipeline, view users, keyword reparse, domain corrections, manage system
 
 ---
 
@@ -115,7 +116,7 @@ jobsearch/
 │   ├── routes/             # auth, jobs, onboard, ingest, admin
 │   ├── middleware/          # session auth, admin guards
 │   ├── cv/                 # CV generation pipeline (plan → prompt → LLM → validate → docx)
-│   ├── db/                 # SQLite init, migrations (001–012), queries
+│   ├── db/                 # SQLite init, migrations (001–014), queries
 │   ├── ingest.py           # agent output → SQLite
 │   ├── scoring.py          # per-user heuristic scoring (no LLM)
 │   ├── embeddings.py       # OpenAI embedding service with SQLite cache
@@ -125,7 +126,7 @@ jobsearch/
 ├── web/                    # React frontend
 │   └── src/
 │       ├── pages/          # Login, Onboard, Jobs, JobDetail, Profile, Admin
-│       ├── components/     # FilterBar, JobCard, ProfileEditor, ScoreBreakdown, etc.
+│       ├── components/     # FilterBar, JobCard, ProfileEditor, ScoreBreakdown, DomainSelector, etc.
 │       ├── context/        # AuthContext
 │       └── types/          # TypeScript types
 ├── agent/                  # Scraping/scoring engine
@@ -145,9 +146,9 @@ jobsearch/
 │   ├── scripts/            # reparse, rescore, ingest payload builder
 │   ├── schemas/            # JSON output contracts
 │   └── patterns/           # Module interface contracts
-├── tests/                  # Backend tests (299)
+├── tests/                  # Backend tests (415)
 ├── data/                   # jobseeker.db (gitignored)
-├── scripts/                # seed_dev.py, backfill_embeddings.py
+├── scripts/                # seed_dev.py, backfill_embeddings.py, audit_domain_scoring.py
 └── requirements.txt        # Merged deps
 ```
 
@@ -186,6 +187,7 @@ jobsearch/
 | 10 | Ops: persistence, health, admin | ✅ |
 | 11 | Cross-user dedup + sequential pipeline | ✅ |
 | 12 | Semantic skill matching | ✅ |
+| 13 | Domain scoring fix (30-domain enum, per-user overrides, admin reparse) | ✅ |
 | N | Onboarding UX for new profile fields | 🔜 |
 | R | Refactor & test coverage | 🔜 |
 | F | Ship: Dockerfile, README, deploy | 🔜 |

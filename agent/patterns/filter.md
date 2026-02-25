@@ -64,3 +64,18 @@ Every rejected job gets `job["reject_reason"]` set to a human-readable string be
 - No API calls — this runs before any LLM step
 - `prefilter_stats` (the returned `stats`) is passed through to `notifier.py` for the email footer
 - Adding a new filter: insert at the appropriate position in the chain, add a new stat key, document it here
+
+## Heuristic Gate (main.py)
+
+`_heuristic_gate(jobs, profile)` runs after prefilter to split jobs into `(to_score, skipped)` — jobs below threshold bypass the expensive RAG scorer and receive a heuristic score only.
+
+Gate score dimensions mirror `heuristic_score()`: domain, seniority, location, skills, red flags. Jobs scoring below `profile.scoring.rag_threshold` are skipped.
+
+**Domain weights in gate (Phase 13):** `target.domains` is a dict mapping domain → weight (may be negative).
+
+| Domain weight | Gate credit |
+|---|---|
+| > 0 (positive) | +20 |
+| < 0 (negative) | 0 — prevents LLM budget waste on deprioritized domains |
+| Not in dict | 0 |
+| `'other'` domain | 10 (partial, unchanged) |
