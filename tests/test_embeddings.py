@@ -16,12 +16,14 @@ from api.db.init import init_db
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-def _clear_embedding_cache():
-    """Clear the in-memory embedding cache before each test."""
-    from api.embeddings import clear_memory_cache
-    clear_memory_cache()
+def _clear_embedding_state():
+    """Clear the in-memory embedding cache and circuit breaker before each test."""
+    import api.embeddings as _emb
+    _emb.clear_memory_cache()
+    _emb._api_unavailable_until = 0.0
     yield
-    clear_memory_cache()
+    _emb.clear_memory_cache()
+    _emb._api_unavailable_until = 0.0
 
 
 @pytest.fixture
@@ -133,7 +135,7 @@ class TestGetEmbedding:
     def test_cache_miss_calls_api_then_caches(self, db_path):
         from api.embeddings import get_embedding
 
-        mock_embedding = [0.1] * 1536
+        mock_embedding = [0.1] * 256
         mock_response = MagicMock()
         mock_response.data = [MagicMock(embedding=mock_embedding)]
 
