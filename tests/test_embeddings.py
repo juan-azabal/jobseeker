@@ -275,3 +275,134 @@ class TestGetEmbeddingsBatch:
             # python from cache, sql missing
             assert result["python"] == cached_emb
             assert "sql" not in result
+
+
+# ---------------------------------------------------------------------------
+# 12.3 — Skill matcher
+# ---------------------------------------------------------------------------
+
+
+class TestSkillMatcher:
+    """Tests for api/skill_matcher.py using mocked embeddings."""
+
+    def _make_embeddings(self, mapping: dict[str, list[float]]):
+        """Helper to mock get_embeddings_batch with known vectors."""
+        def mock_batch(texts, db_path):
+            result = {}
+            for t in texts:
+                key = t.strip().lower()
+                if key in mapping:
+                    result[key] = mapping[key]
+            return result
+        return mock_batch
+
+    def test_identical_strings_matched(self, db_path):
+        from api.skill_matcher import match_skills
+
+        # Use vectors that are identical → cosine=1.0
+        embs = {
+            "python": [1.0, 0.0, 0.0],
+        }
+        with patch("api.skill_matcher.get_embeddings_batch", self._make_embeddings(embs)):
+            results = match_skills(["python"], ["python"], db_path)
+        assert len(results) == 1
+        assert results[0].status == "matched"
+        assert results[0].similarity == pytest.approx(1.0, abs=0.01)
+
+    def test_similar_concepts_matched(self, db_path):
+        from api.skill_matcher import match_skills
+
+        # "data analysis" and "analytics" with high similarity
+        embs = {
+            "data analysis": [0.9, 0.1, 0.0],
+            "analytics": [0.85, 0.15, 0.05],
+        }
+        with patch("api.skill_matcher.get_embeddings_batch", self._make_embeddings(embs)):
+            results = match_skills(["data analysis"], ["analytics"], db_path)
+        assert len(results) == 1
+        assert results[0].status == "matched"  # cosine ≈ 0.99
+        assert results[0].user_skill == "data analysis"
+
+    def test_unrelated_skills_none(self, db_path):
+        from api.skill_matcher import match_skills
+
+        # Orthogonal vectors → cosine=0.0
+        embs = {
+            "python": [1.0, 0.0],
+            "cooking": [0.0, 1.0],
+        }
+        with patch("api.skill_matcher.get_embeddings_batch", self._make_embeddings(embs)):
+            results = match_skills(["python"], ["cooking"], db_path)
+        assert len(results) == 1
+        assert results[0].status == "none"
+        assert results[0].similarity == pytest.approx(0.0, abs=0.01)
+
+    def test_partial_match(self, db_path):
+        from api.skill_matcher import match_skills, MATCH_THRESHOLD, PARTIAL_THRESHOLD
+
+        # Construct vectors with cosine similarity between thresholds
+        # cos(a,b) = 0.73 (between 0.68 and 0.80)
+        import math
+        angle = math.acos(0.73)
+        embs = {
+            "javascript": [1.0, 0.0],
+            "typescript": [math.cos(angle), math.sin(angle)],
+        }
+        with patch("api.skill_matcher.get_embeddings_batch", self._make_embeddings(embs)):
+            results = match_skills(["javascript"], ["typescript"], db_path)
+        assert len(results) == 1
+        assert results[0].status == "partial"
+        assert 0.68 <= results[0].similarity <= 0.80
+
+    def test_fallback_substring_match(self, db_path):
+        """When embeddings unavailable, fall back to substring matching."""
+        from api.skill_matcher import match_skills
+
+        # Return empty dict → no embeddings available
+        with patch("api.skill_matcher.get_embeddings_batch", return_value={}):
+            results = match_skills(["sql"], ["sql server"], db_path)
+        assert len(results) == 1
+        assert results[0].status == "matched"
+        assert results[0].user_skill == "sql"
+
+    def test_fallback_no_match(self, db_path):
+        """Fallback substring: unrelated strings don't match."""
+        from api.skill_matcher import match_skills
+
+        with patch("api.skill_matcher.get_embeddings_batch", return_value={}):
+            results = match_skills(["python"], ["cooking"], db_path)
+        assert len(results) == 1
+        assert results[0].status == "none"
+
+    def test_multiple_job_skills(self, db_path):
+        from api.skill_matcher import match_skills
+
+        embs = {
+            "python": [1.0, 0.0],
+            "sql": [0.0, 1.0],
+            "java": [0.5, 0.5],
+        }
+        with patch("api.skill_matcher.get_embeddings_batch", self._make_embeddings(embs)):
+            results = match_skills(["python", "sql"], ["python", "java", "sql"], db_path)
+        assert len(results) == 3
+        statuses = {r.job_skill: r.status for r in results}
+        assert statuses["python"] == "matched"
+        assert statuses["sql"] == "matched"
+        # java (0.5, 0.5) vs python (1,0) → cos ≈ 0.707 → partial or none
+        # java vs sql (0,1) → cos ≈ 0.707 → same
+        assert statuses["java"] in ("partial", "none")
+
+    def test_empty_user_skills_all_none(self, db_path):
+        from api.skill_matcher import match_skills
+
+        with patch("api.skill_matcher.get_embeddings_batch", return_value={}):
+            results = match_skills([], ["python"], db_path)
+        assert len(results) == 1
+        assert results[0].status == "none"
+
+    def test_empty_job_skills_returns_empty(self, db_path):
+        from api.skill_matcher import match_skills
+
+        with patch("api.skill_matcher.get_embeddings_batch", return_value={}):
+            results = match_skills(["python"], [], db_path)
+        assert results == []
