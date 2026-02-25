@@ -40,6 +40,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `web/src/types/` — TypeScript types
 - Agent: `agent/`
   - `agent/main.py` — pipeline orchestrator (scrape → parse → score → notify)
+  - `agent/api_cache.py` — cross-user parsed-job cache via Railway DB
   - `agent/config/profiles/*.yaml` — per-user profiles
   - `agent/knowledge/` — CV knowledge base (per user)
   - `agent/output/` — job results JSON (gitignored)
@@ -160,6 +161,8 @@ Phase 10 — Completed
 - Admin access: `is_admin` column on users (migration 008, default 0). Set `ADMIN_EMAILS=email@example.com` env var in Railway; users matching that email are auto-promoted to admin on next login. `get_current_admin` dependency in `api/middleware/auth.py`. Admin link in hamburger menu only visible to admins.
 - `POST /api/admin/trigger-pipeline`: dispatches `jobagent_daily.yml` workflow via GitHub API. Optional `{"profile": "id"}` body to target a specific profile. Requires same GH_ACTIONS_TOKEN/GH_REPO/GH_REF as onboarding.
 - Job cleanup: `cleanup_old_jobs(db_path, days=90)` deletes from user_job_scores + user_job_status + jobs where last_seen < cutoff. Called automatically at end of every ingest.
+- Cross-user parsed job dedup: `agent/api_cache.py` calls `POST /api/ingest/batch-lookup` (X-Ingest-Key auth, 500 id cap) to fetch already-parsed jobs from Railway DB before parsing. Injected as Step 3b in `agent/main.py` between local cache split and parse. Graceful fallback: returns `{}` if RAILWAY_URL/INGEST_API_KEY not set or API unreachable. Uses `urllib.request` (no extra deps).
+- GHA sequential pipeline: workflow rewritten from parallel matrix to sequential loop in a single `digest` job. Each profile syncs parsed data to Railway before the next starts, so subsequent profiles skip re-parsing overlapping jobs. Jobs: `list-profiles` → `digest` (sequential loop) → `persist-seen-ids` → `verify-health`. `timeout-minutes: 60`.
 
 ### Blockers
 {none}
