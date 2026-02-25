@@ -29,6 +29,19 @@ export default function AdminPage() {
   const [backfilling, setBackfilling] = useState(false);
   const [backfillResult, setBackfillResult] = useState<{ ok: boolean; message: string } | null>(null);
 
+  // Domain reparse state
+  const [reparsePreviewing, setReparsePreviewing] = useState(false);
+  const [reparsePreviewResult, setReparsePreviewResult] = useState<{
+    domain_other_count: number;
+    sample: { job_id: string; company: string; title: string; inferred: string }[];
+  } | null>(null);
+  const [reparseRunning, setReparseRunning] = useState(false);
+  const [reparseResult, setReparseResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // Domain corrections state
+  const [corrections, setCorrections] = useState<{ from: string; to: string; count: number }[] | null>(null);
+  const [correctionsError, setCorrectionsError] = useState(false);
+
   // Inline profile-id edit state
   const [editingProfileId, setEditingProfileId] = useState<{ userId: number; value: string } | null>(null);
   const [savingProfileId, setSavingProfileId] = useState(false);
@@ -48,8 +61,24 @@ export default function AdminPage() {
       .finally(() => setUsersLoading(false));
   };
 
-  // Fetch users — must be before early returns to satisfy Rules of Hooks
-  useEffect(() => { loadUsers(); }, []);
+  const loadCorrections = () => {
+    fetch('/api/admin/domain-corrections')
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        setCorrections(data.corrections);
+        setCorrectionsError(false);
+      })
+      .catch(() => setCorrectionsError(true));
+  };
+
+  // Fetch users and corrections — must be before early returns to satisfy Rules of Hooks
+  useEffect(() => {
+    loadUsers();
+    loadCorrections();
+  }, []);
 
   // Redirect non-admins (after hooks)
   if (!isLoading && (!user || !user.is_admin)) {
@@ -97,6 +126,44 @@ export default function AdminPage() {
       setBackfillResult({ ok: false, message: 'Network error' });
     } finally {
       setBackfilling(false);
+    }
+  }
+
+  async function handleReparsePreview() {
+    setReparsePreviewing(true);
+    setReparsePreviewResult(null);
+    setReparseResult(null);
+    try {
+      const r = await fetch('/api/admin/reparse-domains/preview');
+      if (r.ok) {
+        setReparsePreviewResult(await r.json());
+      } else {
+        const data = await r.json();
+        setReparseResult({ ok: false, message: data.detail || 'Preview failed' });
+      }
+    } catch {
+      setReparseResult({ ok: false, message: 'Network error' });
+    } finally {
+      setReparsePreviewing(false);
+    }
+  }
+
+  async function handleReparse() {
+    setReparseRunning(true);
+    setReparseResult(null);
+    setReparsePreviewResult(null);
+    try {
+      const r = await fetch('/api/admin/reparse-domains', { method: 'POST' });
+      const data = await r.json();
+      if (r.ok) {
+        setReparseResult({ ok: true, message: `Reclassified ${data.reclassified}/${data.total_other} jobs` });
+      } else {
+        setReparseResult({ ok: false, message: data.detail || 'Reparse failed' });
+      }
+    } catch {
+      setReparseResult({ ok: false, message: 'Network error' });
+    } finally {
+      setReparseRunning(false);
     }
   }
 
@@ -220,6 +287,94 @@ export default function AdminPage() {
             {backfillResult.message}
           </p>
         )}
+      </section>
+
+      {/* Domain Classification */}
+      <section className="mb-10 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-zinc-400">
+          Domain Classification
+        </h2>
+        <p className="mb-4 text-sm text-zinc-500">
+          Re-classify jobs where domain is &quot;other&quot; using expanded keyword rules.
+          Does not touch parsed data or RAG scores.
+        </p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleReparsePreview}
+            disabled={reparsePreviewing || reparseRunning}
+            className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:border-zinc-500 disabled:opacity-50"
+          >
+            {reparsePreviewing ? 'Loading…' : 'Preview'}
+          </button>
+          <button
+            onClick={handleReparse}
+            disabled={reparseRunning || reparsePreviewing}
+            className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:border-zinc-500 disabled:opacity-50"
+          >
+            {reparseRunning ? 'Reclassifying…' : "Reparse 'other' domains"}
+          </button>
+        </div>
+        {reparsePreviewResult && (
+          <div className="mt-3 text-sm text-zinc-300">
+            <p className="mb-1">
+              <span className="text-zinc-400">{reparsePreviewResult.domain_other_count}</span> jobs with domain=&quot;other&quot;.
+              {reparsePreviewResult.sample.length > 0
+                ? ` ${reparsePreviewResult.sample.length} would be reclassified:`
+                : ' None would be reclassified.'}
+            </p>
+            {reparsePreviewResult.sample.length > 0 && (
+              <ul className="ml-4 list-disc space-y-0.5 text-zinc-400">
+                {reparsePreviewResult.sample.map((s) => (
+                  <li key={s.job_id}>
+                    <span className="text-zinc-300">{s.title}</span>
+                    {' '}at {s.company}{' '}
+                    <span className="text-violet-400">→ {s.inferred}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {reparseResult && (
+          <p className={`mt-3 text-sm ${reparseResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+            {reparseResult.message}
+          </p>
+        )}
+
+        {/* Domain Corrections */}
+        <div className="mt-6 border-t border-zinc-800 pt-5">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            User Domain Corrections
+          </h3>
+          {correctionsError ? (
+            <p className="text-sm text-red-400">Failed to load corrections.</p>
+          ) : corrections === null ? (
+            <p className="text-sm text-zinc-500">Loading…</p>
+          ) : corrections.length === 0 ? (
+            <p className="text-sm text-zinc-500">No corrections recorded yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-800 text-left text-xs uppercase tracking-wider text-zinc-500">
+                    <th className="pb-2 pr-6">From</th>
+                    <th className="pb-2 pr-6">To</th>
+                    <th className="pb-2">Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {corrections.map((c, i) => (
+                    <tr key={i} className="border-b border-zinc-800/50 last:border-0">
+                      <td className="py-2 pr-6 font-mono text-zinc-400">{c.from}</td>
+                      <td className="py-2 pr-6 font-mono text-violet-400">{c.to}</td>
+                      <td className="py-2 text-zinc-300">{c.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Users table */}

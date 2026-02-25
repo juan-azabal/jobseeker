@@ -136,7 +136,41 @@ class TestInferDomain:
             "must_have_skills": [],
             "technical_stack": ["tensorflow"],
         }
-        assert _infer_domain(p) == "ml"
+        assert _infer_domain(p) == "ai_ml"
+
+    def test_fintech_not_data_for_financial_compliance(self):
+        """'compliance analytics platform for financial institutions' → fintech, not data.
+
+        Regression for keyword collision: 'analytics platform' (data keyword) must not
+        win over 'financial institution' (fintech keyword) for clearly fintech JDs.
+        """
+        p = {
+            "domain": "other",
+            "responsibilities_summary": "compliance analytics platform for financial institutions",
+            "must_have_skills": [],
+            "technical_stack": [],
+        }
+        result = _infer_domain(p)
+        assert result == "fintech", (
+            f"Expected 'fintech' for financial compliance JD, got '{result}'"
+        )
+
+    def test_hr_tech_for_corporate_training(self):
+        """'corporate training management system' → hr_tech.
+
+        Regression for keyword gap: training management systems are HR/L&D tools,
+        not AI/ML or edtech (which covers student-facing education).
+        """
+        p = {
+            "domain": "other",
+            "responsibilities_summary": "corporate training management system",
+            "must_have_skills": [],
+            "technical_stack": [],
+        }
+        result = _infer_domain(p)
+        assert result == "hr_tech", (
+            f"Expected 'hr_tech' for corporate training JD, got '{result}'"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +197,7 @@ class TestHeuristicScore:
     def test_domain_mismatch_scores_lower(self):
         profile = _make_profile()
         parsed_good = _make_parsed()
-        parsed_bad = _make_parsed(domain="healthcare")
+        parsed_bad = _make_parsed(domain="healthtech")
         job = {"location": "Remote"}
         score_good = heuristic_score(profile, parsed_good, job, False)
         score_bad = heuristic_score(profile, parsed_bad, job, False)
@@ -194,7 +228,7 @@ class TestHeuristicScore:
         # Many red flags to push negative
         parsed = _make_parsed(
             red_flags=["a", "b", "c", "d", "e", "f"],
-            domain="healthcare",
+            domain="healthtech",
             seniority="mid",
         )
         job = {"location": "Remote"}

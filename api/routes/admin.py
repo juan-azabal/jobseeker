@@ -5,7 +5,11 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from api.db.queries import get_all_users, reset_user_onboarding, set_session_impersonation, set_user_profile_id, get_user_by_id
+from api.db.queries import (
+    get_all_users, reset_user_onboarding, set_session_impersonation,
+    set_user_profile_id, get_user_by_id,
+    get_other_domain_jobs, update_job_domain, get_domain_corrections,
+)
 from api.middleware.auth import get_current_admin, SESSION_COOKIE
 
 logger = logging.getLogger(__name__)
@@ -323,6 +327,87 @@ def backfill_embeddings(
     background_tasks.add_task(_run)
     logger.info("Embedding backfill started in background (triggered by %s)", email)
     return {"status": "started", "message": "Backfill running in background — check server logs for progress"}
+
+
+@router.get("/reparse-domains/preview")
+def reparse_domains_preview(admin: dict = Depends(get_current_admin)):
+    """Preview what would be reclassified without making any changes.
+
+    Returns the count of jobs with domain='other' and up to 5 samples that
+    WOULD be reclassified (i.e. _infer_domain returns something other than 'other').
+    """
+    import json
+
+    from api.scoring import _infer_domain
+
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    rows = get_other_domain_jobs(db_path)
+    total_other = len(rows)
+
+    samples: list[dict] = []
+    for row in rows:
+        try:
+            parsed = json.loads(row["parsed"])
+        except (json.JSONDecodeError, TypeError):
+            continue
+        inferred = _infer_domain(parsed)
+        if inferred != "other":
+            samples.append({
+                "job_id": row["job_id"],
+                "company": row["company"],
+                "title": row["title"],
+                "inferred": inferred,
+            })
+        if len(samples) >= 5:
+            break
+
+    return {"domain_other_count": total_other, "sample": samples}
+
+
+@router.post("/reparse-domains")
+def reparse_domains(admin: dict = Depends(get_current_admin)):
+    """Re-classify jobs where domain='other' using expanded _DOMAIN_KEYWORDS.
+
+    Runs synchronously (keyword matching is pure Python, fast for any realistic DB size).
+    Writes to jobs.domain column only — never mutates parsed.domain.
+    Does NOT delete RAG scores.
+    Returns {"reclassified": N, "total_other": M}
+    """
+    import json
+
+    from api.scoring import _infer_domain
+
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    rows = get_other_domain_jobs(db_path)
+    total_other = len(rows)
+    reclassified = 0
+
+    for row in rows:
+        try:
+            parsed = json.loads(row["parsed"])
+        except (json.JSONDecodeError, TypeError):
+            continue
+        inferred = _infer_domain(parsed)
+        if inferred != "other":
+            update_job_domain(db_path, row["job_id"], inferred)
+            reclassified += 1
+
+    logger.info(
+        "Domain reparse: reclassified %d/%d 'other' jobs (triggered by %s)",
+        reclassified, total_other, admin["email"],
+    )
+    return {"reclassified": reclassified, "total_other": total_other}
+
+
+@router.get("/domain-corrections")
+def domain_corrections(admin: dict = Depends(get_current_admin)):
+    """Return aggregated user domain corrections (override != parsed domain).
+
+    Returns corrections ordered by frequency (most corrected first).
+    """
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    corrections = get_domain_corrections(db_path)
+    return {"corrections": corrections}
 
 
 @router.post("/trigger-pipeline")
