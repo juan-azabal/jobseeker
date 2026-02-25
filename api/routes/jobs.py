@@ -144,7 +144,7 @@ def _score_and_tier_jobs(
         if job.get("ujs_score") is not None:
             score = job["ujs_score"]
         elif profile:
-            score = heuristic_score(profile, job["_parsed_dict"], job, is_reloc)
+            score = heuristic_score(profile, job["_parsed_dict"], job, is_reloc, db_path=_db_path())
         else:
             score = 0
 
@@ -251,7 +251,7 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
         home_locations, home_regions = _load_user_geo(user.get("profile_id"))
         is_reloc = _compute_reloc(row, home_locations, home_regions) if home_locations else False
         if profile:
-            score = heuristic_score(profile, row["parsed"] or {}, row, is_reloc)
+            score = heuristic_score(profile, row["parsed"] or {}, row, is_reloc, db_path=_db_path())
             if is_reloc and score > 0:
                 loc_type = row.get("location_type") or (row.get("parsed") or {}).get("location_type") or ""
                 penalty = 5 if loc_type == "remote" else 15

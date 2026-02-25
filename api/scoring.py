@@ -11,6 +11,8 @@ from pathlib import Path
 
 import yaml
 
+from api.skill_matcher import match_skills
+
 logger = logging.getLogger(__name__)
 
 # Maps profile domain names → parser-emitted domain names.
@@ -290,7 +292,57 @@ def _infer_domain(parsed: dict) -> str:
     return best_domain if best_count >= 1 else "other"
 
 
-def heuristic_score(profile: dict, parsed: dict, job: dict, is_reloc: bool) -> int:
+def _score_skills(profile: dict, parsed: dict, db_path: str | None) -> int:
+    """Score skills dimension (0-30).
+
+    Must-have: 5 pts matched, 2 pts partial, cap 20.
+    Nice-to-have + technical_stack: 3 pts matched, cap 10.
+
+    Uses semantic matching when db_path is provided, substring fallback otherwise.
+    """
+    profile_skills = profile.get("skills", [])
+    must_have_list = parsed.get("must_have_skills") or []
+    nice_list = list(set(
+        (parsed.get("nice_to_have_skills") or [])
+        + (parsed.get("technical_stack") or [])
+    ))
+
+    if db_path and profile_skills:
+        # Semantic matching via embeddings
+        must_results = match_skills(profile_skills, must_have_list, db_path)
+        must_pts = sum(
+            5 if m.status == "matched" else 2 if m.status == "partial" else 0
+            for m in must_results
+        )
+
+        nice_results = match_skills(profile_skills, nice_list, db_path)
+        nice_pts = sum(
+            3 if m.status == "matched" else 0
+            for m in nice_results
+        )
+    else:
+        # Substring fallback (current behavior, also used when no db_path)
+        norm_must = [s.lower().replace("-", " ") for s in must_have_list]
+        nice_text = " ".join(
+            [s.lower() for s in (parsed.get("nice_to_have_skills") or [])]
+            + [s.lower() for s in (parsed.get("technical_stack") or [])]
+            + [parsed.get("responsibilities_summary", "").lower()]
+        ).replace("-", " ")
+        norm_profile = [s.replace("-", " ") for s in profile_skills]
+
+        must_pts = sum(5 for skill in norm_profile if skill in norm_must)
+        nice_pts = sum(
+            3 for skill in norm_profile
+            if skill in nice_text and skill not in norm_must
+        )
+
+    return min(20, must_pts) + min(10, nice_pts)
+
+
+def heuristic_score(
+    profile: dict, parsed: dict, job: dict, is_reloc: bool,
+    db_path: str | None = None,
+) -> int:
     """Compute heuristic fit score 0-100 from parsed job data + user profile.
 
     Score budget:
@@ -308,6 +360,7 @@ def heuristic_score(profile: dict, parsed: dict, job: dict, is_reloc: bool) -> i
         parsed: job's parsed JSON blob (dict)
         job: raw job row (for location field)
         is_reloc: unused — kept for API compatibility
+        db_path: SQLite path for embedding cache; None → substring fallback
     """
     if not parsed:
         return 0
@@ -322,22 +375,9 @@ def heuristic_score(profile: dict, parsed: dict, job: dict, is_reloc: bool) -> i
     score += profile["seniority"].get(parsed.get("seniority", "unknown"), 0)
 
     # ── Skills (0-30) ───────────────────────────────────────────────────────
-    # Must-have skills (technical-only since parser v1.1): 5 pts each, cap 20.
-    # Nice-to-have + technical stack text bag: 3 pts each, cap 10.
-    # Normalise hyphens → spaces so "stakeholder-management" matches "stakeholder management".
-    must_have_list = [s.lower().replace("-", " ") for s in (parsed.get("must_have_skills") or [])]
-    nice_text = " ".join(
-        [s.lower() for s in (parsed.get("nice_to_have_skills") or [])]
-        + [s.lower() for s in (parsed.get("technical_stack") or [])]
-        + [parsed.get("responsibilities_summary", "").lower()]
-    ).replace("-", " ")
-    profile_skills = [s.replace("-", " ") for s in profile["skills"]]
-    must_matches = sum(1 for skill in profile_skills if skill in must_have_list)
-    nice_matches = sum(
-        1 for skill in profile_skills
-        if skill in nice_text and skill not in must_have_list
-    )
-    score += min(20, must_matches * 5) + min(10, nice_matches * 3)
+    # Must-have: 5 pts matched, 2 pts partial, cap 20.
+    # Nice-to-have + technical_stack: 3 pts matched, cap 10.
+    score += _score_skills(profile, parsed, db_path)
 
     # ── Location (0-10) ─────────────────────────────────────────────────────
     loc_pref = profile.get("location_preference", "b")
