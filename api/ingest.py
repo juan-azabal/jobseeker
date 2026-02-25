@@ -97,7 +97,33 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None 
     # Prune jobs not seen in the last 90 days to keep the DB bounded
     deleted = cleanup_old_jobs(db_path)
 
+    # Pre-compute embeddings for new job skills (best-effort, non-blocking)
+    try:
+        _precompute_skill_embeddings(db_path, raw_jobs)
+    except Exception as exc:
+        logger.warning("Embedding pre-computation failed (non-fatal): %s", exc)
+
     return {"inserted": inserted, "updated": updated, "skipped": skipped, "scored": scored, "deleted": deleted}
+
+
+def _precompute_skill_embeddings(db_path: str, raw_jobs: list[dict]) -> None:
+    """Extract unique skills from ingested jobs and cache their embeddings."""
+    try:
+        from api.embeddings import get_embeddings_batch
+
+        skills: set[str] = set()
+        for raw in raw_jobs:
+            parsed = raw.get("parsed") or {}
+            for key in ("must_have_skills", "nice_to_have_skills", "technical_stack"):
+                for s in parsed.get(key, []) or []:
+                    if isinstance(s, str) and s.strip():
+                        skills.add(s.strip().lower())
+
+        if skills:
+            get_embeddings_batch(list(skills), db_path)
+            logger.info("Pre-computed embeddings for %d job skills", len(skills))
+    except Exception as exc:
+        logger.warning("Embedding pre-computation failed (non-fatal): %s", exc)
 
 
 def ingest(db_path: str, jobagent_dir: str, profile_id: str | None = None) -> dict:
