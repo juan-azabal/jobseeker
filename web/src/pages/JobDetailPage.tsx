@@ -70,6 +70,8 @@ interface Props {
 
 export default function JobDetailPage({ jobId, onBack }: Props) {
   const [job, setJob] = useState<JobDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isApplied, setIsApplied] = useState(false);
   const [applyLoading, setApplyLoading] = useState(false);
   const [cvLoading, setCvLoading] = useState(false);
@@ -77,15 +79,89 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
   const [cvError, setCvError] = useState<string | null>(null);
 
   useEffect(() => {
+    setLoading(true);
+    setError(null);
     fetch(`/api/jobs/${jobId}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (r.status === 404) throw new Error('not_found');
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then((data: JobDetail) => {
         setJob(data);
         setIsApplied(!!data.applied_at);
-      });
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'unknown';
+        if (msg === 'not_found') {
+          setError('not_found');
+        } else {
+          setError('Failed to load job details');
+        }
+      })
+      .finally(() => setLoading(false));
   }, [jobId]);
 
-  if (!job) return <div className="min-h-screen bg-zinc-950" />;
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
+        <div className="flex flex-col items-center gap-3">
+          <svg className="h-6 w-6 animate-spin text-violet-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <span className="text-sm text-zinc-500">Loading job…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error === 'not_found') {
+    return (
+      <div className="min-h-screen bg-zinc-950 px-4 py-6">
+        <div className="mx-auto max-w-2xl">
+          <button
+            onClick={onBack}
+            className="mb-8 flex items-center gap-1.5 text-xs font-medium text-zinc-600 transition-colors hover:text-zinc-200"
+          >
+            <span>←</span>
+            <span>Back to jobs</span>
+          </button>
+          <div className="flex flex-col items-center gap-3 py-20">
+            <span className="text-3xl">🔍</span>
+            <p className="text-sm text-zinc-400">Job not found</p>
+            <p className="text-xs text-zinc-600">It may have been removed or the link is invalid.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !job) {
+    return (
+      <div className="min-h-screen bg-zinc-950 px-4 py-6">
+        <div className="mx-auto max-w-2xl">
+          <button
+            onClick={onBack}
+            className="mb-8 flex items-center gap-1.5 text-xs font-medium text-zinc-600 transition-colors hover:text-zinc-200"
+          >
+            <span>←</span>
+            <span>Back to jobs</span>
+          </button>
+          <div className="flex flex-col items-center gap-3 py-20">
+            <span className="text-3xl">⚠️</span>
+            <p className="text-sm text-zinc-400">{error || 'Something went wrong'}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-2 rounded-lg border border-zinc-700 px-4 py-2 text-xs text-zinc-400 transition-colors hover:border-zinc-500 hover:text-white"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const scored = job.scored;
   const p = job.parsed;

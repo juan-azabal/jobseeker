@@ -1,10 +1,13 @@
 import json
+import logging
 import os
 import re
 import tempfile
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated
+
+logger = logging.getLogger(__name__)
 
 import yaml
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -227,14 +230,22 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
     if row is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    row["parsed"] = json.loads(row["parsed"]) if row.get("parsed") else None
+    try:
+        row["parsed"] = json.loads(row["parsed"]) if row.get("parsed") else None
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Malformed parsed JSON for job_id=%s", job_id)
+        row["parsed"] = None
 
     # Per-user score
     ujs = get_user_job_score(_db_path(), user["id"], job_id)
     if ujs:
         row["score"] = ujs["score"]
         row["tier"] = ujs["tier"]
-        row["scored"] = json.loads(ujs["scored"]) if ujs.get("scored") else None
+        try:
+            row["scored"] = json.loads(ujs["scored"]) if ujs.get("scored") else None
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Malformed scored JSON for job_id=%s user_id=%s", job_id, user["id"])
+            row["scored"] = None
     else:
         profile = load_profile_data(user.get("profile_id"))
         home_locations, home_regions = _load_user_geo(user.get("profile_id"))
