@@ -99,12 +99,15 @@ class TestHeuristicScoreBaseline:
         self.profile = _load_juan_profile()
 
     def test_strong_fit_score(self):
-        assert _heuristic_score(JOB_STRONG_FIT) == 70
+        # domain(data)=15 + seniority(principal)=15 + location(remote)=10 + skills=16
+        assert _heuristic_score(JOB_STRONG_FIT) == 56
 
     def test_medium_fit_score(self):
-        assert _heuristic_score(JOB_MEDIUM_FIT) == 37
+        # domain(saas)=10 + seniority(senior)=8 + location(hybrid,barcelona)=8 + skills=4
+        assert _heuristic_score(JOB_MEDIUM_FIT) == 30
 
     def test_low_fit_score(self):
+        # domain(healthcare)=0 + seniority(mid)=0 + location(onsite,NYC)=0 + skills=0 - red_flags=5 → clamped to 0
         assert _heuristic_score(JOB_LOW_FIT) == 0
 
 
@@ -123,14 +126,15 @@ class TestRubricPromptBaseline:
         assert "Juan Azabal" in self.rubric
 
     def test_rubric_contains_core_domains(self):
-        assert "adtech, data, ml" in self.rubric
+        assert "data, adtech" in self.rubric
 
     def test_rubric_contains_adjacent_domains(self):
-        # Juan's saas domain (weight 8) is the only adjacent (6 <= w < 12)
-        assert "Adjacent domains (saas)" in self.rubric
+        # Juan's adjacent domains (6 <= weight < 12): saas, martech, ia, llm (all weight 10)
+        assert "Adjacent domains (saas, martech, ia, llm)" in self.rubric
 
     def test_rubric_contains_target_levels(self):
-        assert "principal/staff/director" in self.rubric
+        # Juan's seniority_weights: principal=15, staff=12 (both >= 10)
+        assert "principal/staff" in self.rubric
 
     def test_rubric_no_hardcoded_saas_b2b_fallback(self):
         # With Juan's profile, adjacent_str resolves to "saas" (not the fallback "SaaS, B2B")

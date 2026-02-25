@@ -31,10 +31,13 @@ class TestPreferencesLoading:
         assert "prefilter" in prefs
         assert "title_must_contain_one_of" in prefs["prefilter"]
 
-    def test_juan_per_user_matches_shared(self):
+    def test_juan_per_user_has_same_structure_as_shared(self):
         shared = load_preferences("config/preferences.yaml")
         per_user = load_preferences("config/profiles/juan-preferences.yaml")
-        assert shared == per_user
+        # Per-user preferences may diverge in values (salary, deal_breakers, etc.)
+        # but must have the same top-level structure.
+        assert set(shared.keys()) == set(per_user.keys())
+        assert set(shared["prefilter"].keys()) == set(per_user["prefilter"].keys())
 
 
 class TestCustomPreferencesPrefilter:

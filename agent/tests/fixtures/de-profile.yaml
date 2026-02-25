@@ -11,7 +11,7 @@ user:
 target:
   role_type: "Data Engineer"
   geography: "US, remote-preferred"
-  seniority:
+  seniority_weights:
     senior: 15
     staff: 12
     mid: 0

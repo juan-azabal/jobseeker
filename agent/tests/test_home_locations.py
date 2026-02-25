@@ -152,6 +152,6 @@ class TestJuanHomeLocations:
         assert score == 36
 
     def test_baseline_regression_strong_fit(self):
-        """Same job as baseline test — must still score 70."""
+        """Same job as baseline test — must still score 56 (after seniority fix)."""
         from tests.test_scoring_baseline import JOB_STRONG_FIT
-        assert _heuristic_score(JOB_STRONG_FIT) == 70
+        assert _heuristic_score(JOB_STRONG_FIT) == 56

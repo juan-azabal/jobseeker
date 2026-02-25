@@ -43,7 +43,15 @@ def _build_scoring_prompt(profile: dict) -> str:
     target = profile.get("target", {})
     name = user.get("name", "the candidate")
     domains = target.get("domains", {})
-    seniority = target.get("seniority", {})
+    # 3-tier fallback: seniority_weights (current) > seniority (legacy) > derive from level+track
+    stored_sw = target.get("seniority_weights") or target.get("seniority")
+    if stored_sw:
+        seniority = {k.lower(): int(v) for k, v in stored_sw.items()}
+    else:
+        from user_config import compute_seniority_weights
+        seniority = compute_seniority_weights(
+            target.get("level", ""), target.get("track", "ic")
+        )
 
     # Role type from profile; fallback to generic "professional"
     role_type = target.get("role_type", "professional")
@@ -69,7 +77,7 @@ def _build_scoring_prompt(profile: dict) -> str:
         adjacent_clause = "Tangentially related domains"
 
     top_levels = sorted(seniority.items(), key=lambda x: -x[1])
-    target_levels = [l for l, s in top_levels if s >= 10]
+    target_levels = [lvl for lvl, s in top_levels if s >= 10]
     target_str = "/".join(target_levels) if target_levels else "Senior"
 
     # Substitute only the known placeholders; leave JSON braces in the rubric untouched.

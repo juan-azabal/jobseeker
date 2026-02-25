@@ -328,8 +328,8 @@ class TestHeuristicScoreRelocPenalty:
     def test_global_remote_gets_bonus(self):
         job = _make_remote_job("Senior PM - Data Platform", restriction="")
         score = _heuristic_score(job)
-        # domain data=15 + seniority senior=5 + remote=10 = 30
-        assert score == 30
+        # domain data=15 + seniority senior=8 + remote=10 = 33
+        assert score == 33
 
     def test_pinned_remote_no_bonus(self):
         job = _make_remote_job(
@@ -337,8 +337,8 @@ class TestHeuristicScoreRelocPenalty:
             restriction="CET timezone hours",
         )
         score = _heuristic_score(job)
-        # domain data=15 + seniority senior=5 + remote=0 (pinned) = 20
-        assert score == 20
+        # domain data=15 + seniority senior=8 + remote=0 (pinned) = 23
+        assert score == 23
 
     def test_score_difference_is_10(self):
         """The only difference between global and pinned remote is the +10 bonus."""

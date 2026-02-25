@@ -21,6 +21,41 @@ import yaml
 
 PROFILES_DIR = "config/profiles"
 
+# Seniority levels ordered from most junior to most senior
+_SENIORITY_LEVELS = ["junior", "mid", "senior", "staff", "principal", "director", "vp"]
+_LEVEL_IDX = {lvl: i for i, lvl in enumerate(_SENIORITY_LEVELS)}
+
+
+def compute_seniority_weights(level: str, track: str) -> dict[str, int]:
+    """Compute seniority match weights from target.level + target.track.
+
+    Mirrors api/scoring.py:_compute_seniority_weights() — agent-side single
+    source of truth.  Per CLAUDE.md: seniority weights are computed at load
+    time from level+track, never stored in YAML.
+
+    Scoring:
+      - Exact match: 15
+      - 1 level off: 10
+      - 2 levels off: 6
+      - 3+ levels off: 0
+      - director/vp capped at 4 for IC track (different career path)
+    """
+    level = (level or "senior").lower()
+    track = (track or "ic").lower()
+    target_idx = _LEVEL_IDX.get(level, 2)  # default to "senior" if unknown
+
+    weights: dict[str, int] = {}
+    for seniority, idx in _LEVEL_IDX.items():
+        delta = abs(idx - target_idx)
+        weights[seniority] = {0: 15, 1: 10, 2: 6}.get(delta, 0)
+
+    # Management roles score poorly for IC track
+    if track == "ic":
+        weights["director"] = min(weights.get("director", 0), 4)
+        weights["vp"] = min(weights.get("vp", 0), 4)
+
+    return weights
+
 
 @functools.lru_cache(maxsize=None)
 def load_profile(profile_id: str, profiles_dir: str = PROFILES_DIR) -> dict:

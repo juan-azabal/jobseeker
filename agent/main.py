@@ -21,7 +21,7 @@ from wttj_scraper import run_wttj_scraper
 from prefilter import prefilter_jobs
 from parser import parse_all
 from jobcache import load_cache, save_cache, split_by_cache, update_cache, cache_stats
-from user_config import load_profile, list_profiles, is_profile_active, resolve_profile_paths
+from user_config import load_profile, list_profiles, is_profile_active, resolve_profile_paths, compute_seniority_weights
 
 
 SEEN_IDS_PATH = "config/seen_ids/juan.txt"  # fallback only; main() always passes profile-derived path
@@ -47,8 +47,13 @@ def _append_seen_ids(jobs, path=SEEN_IDS_PATH):
     print(f"   Seen IDs: +{len(new_ids)} appended to {path} ({len(existing) + len(new_ids)} total)")
 
 
-def save_results(jobs, folder="output"):
-    """Save results to JSON for later phases."""
+def save_results(jobs, folder="output", profile_id=None):
+    """Save results to JSON for later phases.
+
+    Output format v2: ``{"_metadata": {...}, "jobs": [...]}``
+    The metadata envelope embeds profile_id so the GHA sync step can
+    attribute results to the correct user during cron (all-profiles) runs.
+    """
     os.makedirs(folder, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filepath = os.path.join(folder, f"jobs_{timestamp}.json")
@@ -69,8 +74,17 @@ def save_results(jobs, folder="output"):
             clean["fit_score"] = job["_fit_score"]
         clean_jobs.append(clean)
 
+    output = {
+        "_metadata": {
+            "profile_id": profile_id,
+            "timestamp": timestamp,
+            "version": "2",
+        },
+        "jobs": clean_jobs,
+    }
+
     with open(filepath, "w") as f:
-        json.dump(clean_jobs, f, indent=2, default=str)
+        json.dump(output, f, indent=2, default=str)
 
     print(f"\n>> Results saved to {filepath}")
     return filepath
@@ -95,7 +109,15 @@ def _load_heuristic_config(profile: dict):
     global _SALARY_THRESHOLD, _HOME_LOCATIONS, _HOME_REGIONS, _HOME_REGION_RE
     _PROFILE_SKILLS   = [s.lower() for s in (profile.get("skills") or [])]
     _DOMAIN_SCORES    = {k.lower(): v for k, v in (profile.get("target", {}).get("domains") or {}).items()}
-    _SENIORITY_SCORES = {k.lower(): v for k, v in (profile.get("target", {}).get("seniority") or {}).items()}
+    # 3-tier fallback: seniority_weights (current) > seniority (legacy) > compute from level+track
+    target = profile.get("target", {})
+    stored_sw = target.get("seniority_weights") or target.get("seniority")
+    if stored_sw:
+        _SENIORITY_SCORES = {k.lower(): int(v) for k, v in stored_sw.items()}
+    else:
+        _SENIORITY_SCORES = compute_seniority_weights(
+            target.get("level", ""), target.get("track", "ic")
+        )
     _SALARY_THRESHOLD = profile.get("target", {}).get("salary_display_threshold", 130000)
     _HOME_LOCATIONS   = [loc.lower() for loc in (profile.get("user", {}).get("home_locations") or [])]
     _HOME_REGIONS     = derive_home_regions(_HOME_LOCATIONS)
@@ -690,10 +712,10 @@ def main():
     print_summary(all_parsed)
 
     # Step 10: Save snapshot
-    save_results(all_parsed)
+    save_results(all_parsed, profile_id=profile_id)
 
     if rejected:
-        save_results(rejected, folder="output/rejected")
+        save_results(rejected, folder="output/rejected", profile_id=profile_id)
 
     # seen_ids persisted only after confirmed email delivery — see Step 11 below
 

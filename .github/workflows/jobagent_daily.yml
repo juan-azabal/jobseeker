@@ -78,10 +78,23 @@ jobs:
           for f in agent/output/jobs_*.json; do
             [ -f "$f" ] || continue
             echo "Syncing $(basename $f)..."
-            if [ -n "$TARGET_PROFILE" ]; then
-              payload="{\"jobs\": $(cat "$f"), \"profile_id\": \"$TARGET_PROFILE\"}"
+            # v2 output has {"_metadata": {"profile_id": ...}, "jobs": [...]}
+            # v1 legacy is a bare JSON array.  Extract profile_id + jobs for both.
+            file_profile=$(python3 -c "
+import json
+d = json.load(open('$f'))
+print(d.get('_metadata',{}).get('profile_id','') if isinstance(d,dict) else '')
+" 2>/dev/null || echo "")
+            effective_profile="${TARGET_PROFILE:-$file_profile}"
+            jobs_payload=$(python3 -c "
+import json
+d = json.load(open('$f'))
+print(json.dumps(d['jobs'] if isinstance(d,dict) and 'jobs' in d else d))
+")
+            if [ -n "$effective_profile" ]; then
+              payload="{\"jobs\": $jobs_payload, \"profile_id\": \"$effective_profile\"}"
             else
-              payload="{\"jobs\": $(cat "$f")}"
+              payload="{\"jobs\": $jobs_payload}"
             fi
             # Capture both body and HTTP status code; fail loudly on non-2xx
             response=$(curl -s -w "\n%{http_code}" -X POST "$RAILWAY_URL/api/ingest" \
@@ -90,7 +103,7 @@ jobs:
               -d "$payload")
             http_code=$(echo "$response" | tail -1)
             body=$(echo "$response" | head -1)
-            echo "  HTTP $http_code: $body"
+            echo "  HTTP $http_code (profile=${effective_profile:-none}): $body"
             if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
               echo "ERROR: Ingest failed with HTTP $http_code"
               exit 1
