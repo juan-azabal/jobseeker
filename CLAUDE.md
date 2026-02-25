@@ -202,9 +202,18 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - Diagnostics: GET /api/admin/embedding-diagnostics — curl-only, shows similarity scores for threshold tuning
   - Admin: "Backfill embeddings" button + "Clear seen" button per user
   - Performance: in-process LRU cache, numpy cosine similarity (~1000x faster than pure Python)
+- Phase 13 — Domain Scoring Fix
+  - B1 (RAG): `_build_scoring_prompt()` injects PENALTY clause for negative-weight domains into scoring rubric; LLM caps domain_fit at 4 for deprioritized domains
+  - B2 (parser): domain enum expanded from 8 to 21 values (added game|edtech|climate|marketplace|platform|growth|devtools|infra|media|security|logistics|hr_tech|legal_tech); parser-prompt.md v1.2 includes domain guide
+  - B2 (heuristic): `_DOMAIN_KEYWORDS` extended with keyword lists for all new domains; `_DOMAIN_ALIASES` extended with gaming→game, cybersecurity→security, etc.
+  - B3: heuristic scorer already correct (`score += domains.get(domain, 0)` handles negatives); verified via tests
+  - B4 (gate): `_heuristic_gate()` changed from set to dict for target_domains; negative-weight domains get 0 gate credit (not +20)
+  - Semantic fallback: `_semantic_domain_score()` in api/scoring.py fires when enum and keyword detection both fail; cosine similarity ≥ 0.75 threshold; score clamped to [-15, 15]
+  - Regression suite: `tests/test_scoring_integration.py` verifies ranking order with mixed positive/negative weights
+  - Audit script: `scripts/audit_domain_scoring.py` — shows per-job domain path (enum/keyword/semantic) from DB
 
 ### Current
-Phase 12 — Completed
+Phase 13 — Completed
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
@@ -256,6 +265,10 @@ Phase 12 — Completed
 - Prev/next job navigation: `JobsPage` passes `{ state: { jobIds: [...] } }` on navigate. `JobDetailRoute` reads `location.state.jobIds`, computes prevId/nextId, passes to `JobDetailPage`. `onNavigate` uses `replace: true` to avoid stacking history entries (preserves "Back to jobs" behavior).
 - `.claude/launch.json` in worktrees: use `bash -c "cd /absolute/path && exec venv/bin/uvicorn ..."` for backend so it runs from the correct CWD (finds DB and config). Frontend: `npm run dev --prefix /absolute/path/web`. Avoids broken relative paths when CWD is a worktree subdirectory.
 - POST /api/onboard/profile/skills in onboard router (not separate profile router) — consistent with existing PATCH /profile.
+- Domain scoring cascade (Phase 13): enum match → `_infer_domain()` keyword override → `_semantic_domain_score()` embedding fallback. Semantic only fires when both prior stages return 'other'. Threshold: 0.75 cosine similarity. Score clamped [-15, 15].
+- Domain enum (Phase 13): 21 values total. parser-prompt.md v1.2 includes `_domain_guide` field (not in output schema — for LLM guidance only). `_DOMAIN_ALIASES` in api/scoring.py normalizes profile domain names to canonical enum values.
+- RAG penalty clause (Phase 13): `{penalty_clause}` placeholder in scoring-rubric.md v1.1; `_build_scoring_prompt()` substitutes it with negative-domain names or empty string. Requires no parser change.
+- Heuristic gate (Phase 13): `target_domains` changed from set to dict in `_heuristic_gate()`. Domain weight > 0 → +20 gate credit; weight < 0 → 0 credit; not in dict → 0.
 
 ### Blockers
 {none}
