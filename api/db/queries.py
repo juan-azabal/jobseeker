@@ -564,3 +564,64 @@ def reset_user_onboarding(db_path: str, user_id: int) -> None:
     )
     con.commit()
     con.close()
+
+
+# ── Domain reparse ────────────────────────────────────────────────────────
+
+def get_other_domain_jobs(db_path: str) -> list[dict]:
+    """Return all jobs where the parsed domain is 'other' or NULL.
+
+    Returns minimal rows: job_id, company, title, parsed.
+    """
+    con = _connect(db_path)
+    rows = con.execute(
+        """
+        SELECT job_id, company, title, parsed
+        FROM jobs
+        WHERE parsed IS NOT NULL
+          AND (
+            json_extract(parsed, '$.domain') = 'other'
+            OR json_extract(parsed, '$.domain') IS NULL
+            OR domain = 'other'
+          )
+        """
+    ).fetchall()
+    con.close()
+    return [dict(r) for r in rows]
+
+
+def update_job_domain(db_path: str, job_id: str, domain: str) -> None:
+    """Update the jobs.domain column for a single job."""
+    con = _connect(db_path)
+    con.execute("UPDATE jobs SET domain = ? WHERE job_id = ?", (domain, job_id))
+    con.commit()
+    con.close()
+
+
+# ── Domain correction analytics ───────────────────────────────────────────
+
+def get_domain_corrections(db_path: str) -> list[dict]:
+    """Aggregate user domain corrections: cases where user override != parsed domain.
+
+    Returns list of {from_domain, to_domain, count} ordered by count DESC.
+    """
+    con = _connect(db_path)
+    rows = con.execute(
+        """
+        SELECT
+            COALESCE(json_extract(j.parsed, '$.domain'), 'other') AS parsed_domain,
+            us.domain_override,
+            COUNT(*) AS cnt
+        FROM user_job_status us
+        JOIN jobs j ON j.job_id = us.job_id
+        WHERE us.domain_override IS NOT NULL
+          AND us.domain_override != COALESCE(json_extract(j.parsed, '$.domain'), 'other')
+        GROUP BY parsed_domain, domain_override
+        ORDER BY cnt DESC
+        """
+    ).fetchall()
+    con.close()
+    return [
+        {"from": row["parsed_domain"], "to": row["domain_override"], "count": row["cnt"]}
+        for row in rows
+    ]

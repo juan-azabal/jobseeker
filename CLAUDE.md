@@ -211,9 +211,16 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - Semantic fallback: `_semantic_domain_score()` in api/scoring.py fires when enum and keyword detection both fail; cosine similarity ≥ 0.75 threshold; score clamped to [-15, 15]
   - Regression suite: `tests/test_scoring_integration.py` verifies ranking order with mixed positive/negative weights
   - Audit script: `scripts/audit_domain_scoring.py` — shows per-job domain path (enum/keyword/semantic) from DB
+- Phase 13.5 — Domain Admin Tools
+  - Keyword reparse: `POST /api/admin/reparse-domains` re-classifies jobs with domain='other' using `_infer_domain()`; writes to `jobs.domain` only, never mutates `parsed.domain`, never deletes RAG scores
+  - Reparse preview: `GET /api/admin/reparse-domains/preview` — shows count + up to 5 samples that would change, read-only
+  - Domain corrections analytics: `GET /api/admin/domain-corrections` — aggregates user `domain_override` corrections by (from, to) with counts
+  - DB queries: `get_other_domain_jobs()`, `update_job_domain()`, `get_domain_corrections()` in `api/db/queries.py`
+  - Frontend: Domain Classification section in AdminPage with Preview + Reparse buttons and corrections table (loads on mount)
+  - Tests: `tests/test_admin_reparse.py` (14 tests) — idempotency, parsed.domain immutability, auth guard, DB isolation
 
 ### Current
-Phase 13 — Completed
+Phase 13.5 — Completed
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
@@ -269,6 +276,8 @@ Phase 13 — Completed
 - Domain enum (Phase 13): 21 values total. parser-prompt.md v1.2 includes `_domain_guide` field (not in output schema — for LLM guidance only). `_DOMAIN_ALIASES` in api/scoring.py normalizes profile domain names to canonical enum values.
 - RAG penalty clause (Phase 13): `{penalty_clause}` placeholder in scoring-rubric.md v1.1; `_build_scoring_prompt()` substitutes it with negative-domain names or empty string. Requires no parser change.
 - Heuristic gate (Phase 13): `target_domains` changed from set to dict in `_heuristic_gate()`. Domain weight > 0 → +20 gate credit; weight < 0 → 0 credit; not in dict → 0.
+- Domain reparse (Phase 13.5): `POST /api/admin/reparse-domains` is synchronous — keyword matching is pure Python, <1s even for 500 jobs. Writes `jobs.domain` only; `parsed.domain` is immutable post-ingest.
+- Domain corrections query (Phase 13.5): `GET /api/admin/domain-corrections` uses SQL `COALESCE(json_extract(j.parsed, '$.domain'), 'other')` as the "from" value; excludes overrides that match the parsed domain.
 
 ### Blockers
 {none}
