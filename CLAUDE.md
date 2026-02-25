@@ -31,6 +31,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `api/db/` — SQLite init, migrations (001–010), queries
   - `api/ingest.py` — pipeline output → SQLite
   - `api/scoring.py` — per-user heuristic scoring (ported from agent)
+  - `api/embeddings.py` — OpenAI embedding service with SQLite cache (text-embedding-3-small)
   - `api/geo.py` — geographic region utilities (API-side copy of agent/geo.py)
   - `api/onboard_utils.py` — CV parsing + profile YAML generation (extracted from agent/onboard.py)
   - `api/prompts/` — LLM prompts for API-side features (onboard-extraction.md)
@@ -190,7 +191,7 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - Saves ~$0.001/job per overlapping job across users (gpt-4o-mini parse cost avoided)
 
 ### Current
-Phase 11 — Completed
+Phase 12 — Semantic Skill Matching (Phase 12.1 Embedding Infrastructure ✓, working on 12.2 Semantic Skill Matcher)
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
