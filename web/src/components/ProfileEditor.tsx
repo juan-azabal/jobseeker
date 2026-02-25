@@ -189,13 +189,13 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
             <span className="text-zinc-400 text-sm w-20 truncate capitalize">{level}</span>
             <input
               type="range"
-              min={1}
+              min={-15}
               max={15}
               value={weight}
               className="flex-1"
               onChange={(e) => setSeniorityWeights({ ...seniorityWeights, [level]: Number(e.target.value) })}
             />
-            <span className="text-emerald-400 text-sm w-7 text-right">{weight}</span>
+            <span className={`text-sm w-7 text-right ${weight < 0 ? 'text-red-400' : weight > 0 ? 'text-emerald-400' : 'text-zinc-500'}`}>{weight}</span>
             <button
               onClick={() => removeSeniority(level)}
               className="text-zinc-600 hover:text-red-400 transition-colors text-sm leading-none"
