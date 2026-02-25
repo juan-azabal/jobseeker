@@ -188,6 +188,24 @@ async def reset_seen_ids(body: ResetSeenIdsRequest, admin: dict = Depends(get_cu
     )
 
 
+@router.post("/backfill-embeddings")
+def backfill_embeddings(admin: dict = Depends(get_current_admin)):
+    """Compute and cache embeddings for all known skills in the database."""
+    from scripts.backfill_embeddings import backfill
+
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    try:
+        result = backfill(db_path)
+        logger.info(
+            "Embedding backfill completed: %d/%d cached (triggered by %s)",
+            result["cached"], result["total"], admin["email"],
+        )
+        return result
+    except Exception as exc:
+        logger.error("Embedding backfill failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @router.post("/trigger-pipeline")
 async def trigger_pipeline(body: TriggerRequest = TriggerRequest(), admin: dict = Depends(get_current_admin)):
     """Dispatch the GHA scraping pipeline for a specific profile or all active profiles.
