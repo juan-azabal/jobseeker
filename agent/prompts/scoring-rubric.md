@@ -1,4 +1,4 @@
-# Scoring Rubric v1.0 — 2026-02-21
+# Scoring Rubric v1.1 — 2026-02-25
 <!-- Source of truth for the static sections of scorer.py _build_scoring_prompt(). -->
 <!-- scorer.py interpolates profile-specific values (name, role_type, core_str, adjacent_str, target_str, geography) -->
 <!-- into this rubric at runtime. Edit here first, then sync the f-string in scorer.py. -->
@@ -22,7 +22,7 @@ Target: {target_str} {role_type}, {core_str} roles, {geography}.
 - 12-19: {adjacent_clause}
 - 5-11: Generic tech {role_type}, peripheral domains
 - 0-4: Unrelated domains — low relevance
-
+{penalty_clause}
 **Seniority fit (0-20)**: Does the scope match their experience level?
 - 16-20: {target_str}, owns platform strategy, cross-team influence
 - 8-15: Senior with significant technical depth and ownership
