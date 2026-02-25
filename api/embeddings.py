@@ -6,11 +6,9 @@ in the skill_embeddings table (migration 011) to avoid redundant API calls.
 Falls back gracefully if OPENAI_API_KEY is missing or the API errors.
 """
 
-import json
 import logging
 import math
 import os
-import sqlite3
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +36,7 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Cache helpers (direct SQLite — will be refactored to db/queries in 12.4)
+# Cache helpers (delegated to db/queries.py)
 # ---------------------------------------------------------------------------
 
 
@@ -49,52 +47,31 @@ def _normalize(text: str) -> str:
 def _load_from_cache(db_path: str, skill_text: str) -> list[float] | None:
     """Read embedding from SQLite cache. Returns None on miss."""
     try:
-        con = sqlite3.connect(db_path)
-        row = con.execute(
-            "SELECT embedding FROM skill_embeddings WHERE skill_text = ? AND model = ?",
-            (_normalize(skill_text), MODEL),
-        ).fetchone()
-        con.close()
-        if row:
-            return json.loads(row[0])
+        from api.db.queries import get_cached_embeddings
+        result = get_cached_embeddings(db_path, [_normalize(skill_text)])
+        return result.get(_normalize(skill_text))
     except Exception as exc:
         logger.warning("Cache read failed for %r: %s", skill_text, exc)
     return None
 
 
 def _load_batch_from_cache(db_path: str, skills: list[str]) -> dict[str, list[float]]:
-    """Bulk-read embeddings from cache. Returns dict of normalized_text → embedding."""
-    result: dict[str, list[float]] = {}
+    """Bulk-read embeddings from cache."""
     if not skills:
-        return result
+        return {}
     try:
-        normalized = [_normalize(s) for s in skills]
-        con = sqlite3.connect(db_path)
-        placeholders = ",".join("?" for _ in normalized)
-        rows = con.execute(
-            f"SELECT skill_text, embedding FROM skill_embeddings "
-            f"WHERE skill_text IN ({placeholders}) AND model = ?",
-            normalized + [MODEL],
-        ).fetchall()
-        con.close()
-        for row in rows:
-            result[row[0]] = json.loads(row[1])
+        from api.db.queries import get_cached_embeddings
+        return get_cached_embeddings(db_path, [_normalize(s) for s in skills])
     except Exception as exc:
         logger.warning("Batch cache read failed: %s", exc)
-    return result
+    return {}
 
 
 def _save_to_cache(db_path: str, skill_text: str, embedding: list[float]) -> None:
     """Store embedding in SQLite cache."""
     try:
-        con = sqlite3.connect(db_path)
-        con.execute(
-            "INSERT OR REPLACE INTO skill_embeddings (skill_text, model, embedding) "
-            "VALUES (?, ?, ?)",
-            (_normalize(skill_text), MODEL, json.dumps(embedding)),
-        )
-        con.commit()
-        con.close()
+        from api.db.queries import save_embedding
+        save_embedding(db_path, _normalize(skill_text), embedding, MODEL)
     except Exception as exc:
         logger.warning("Cache write failed for %r: %s", skill_text, exc)
 
@@ -106,41 +83,13 @@ def _save_batch_to_cache(
     if not items:
         return
     try:
-        con = sqlite3.connect(db_path)
-        con.executemany(
-            "INSERT OR REPLACE INTO skill_embeddings (skill_text, model, embedding) "
-            "VALUES (?, ?, ?)",
-            [(_normalize(text), MODEL, json.dumps(emb)) for text, emb in items],
+        from api.db.queries import save_embeddings_batch
+        save_embeddings_batch(
+            db_path,
+            [(_normalize(text), emb, MODEL) for text, emb in items],
         )
-        con.commit()
-        con.close()
     except Exception as exc:
         logger.warning("Batch cache write failed: %s", exc)
-
-
-# ---------------------------------------------------------------------------
-# OpenAI API calls
-# ---------------------------------------------------------------------------
-
-
-def _call_openai(texts: list[str]) -> list[list[float]] | None:
-    """Call OpenAI embeddings API. Returns None on any failure."""
-    if openai is None:
-        logger.info("openai package not installed — skipping embedding")
-        return None
-
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        logger.info("OPENAI_API_KEY not set — skipping embedding")
-        return None
-
-    try:
-        client = openai.OpenAI(api_key=api_key)
-        response = client.embeddings.create(model=MODEL, input=texts)
-        return [item.embedding for item in response.data]
-    except Exception as exc:
-        logger.warning("OpenAI embeddings API call failed: %s", exc)
-        return None
 
 
 # ---------------------------------------------------------------------------

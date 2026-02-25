@@ -406,3 +406,54 @@ class TestSkillMatcher:
         with patch("api.skill_matcher.get_embeddings_batch", return_value={}):
             results = match_skills(["python"], [], db_path)
         assert results == []
+
+
+# ---------------------------------------------------------------------------
+# 12.4 — DB query helpers for embeddings
+# ---------------------------------------------------------------------------
+
+
+class TestEmbeddingQueryHelpers:
+    def test_round_trip_save_and_get(self, db_path):
+        from api.db.queries import save_embedding, get_cached_embeddings
+
+        emb = [0.1, 0.2, 0.3]
+        save_embedding(db_path, "python", emb, "text-embedding-3-small")
+        result = get_cached_embeddings(db_path, ["python"])
+        assert result["python"] == emb
+
+    def test_get_multiple(self, db_path):
+        from api.db.queries import save_embedding, get_cached_embeddings
+
+        save_embedding(db_path, "python", [0.1], "text-embedding-3-small")
+        save_embedding(db_path, "sql", [0.2], "text-embedding-3-small")
+        result = get_cached_embeddings(db_path, ["python", "sql", "java"])
+        assert "python" in result
+        assert "sql" in result
+        assert "java" not in result
+
+    def test_batch_save(self, db_path):
+        from api.db.queries import save_embeddings_batch, get_cached_embeddings
+
+        items = [
+            ("python", [0.1], "text-embedding-3-small"),
+            ("sql", [0.2], "text-embedding-3-small"),
+        ]
+        save_embeddings_batch(db_path, items)
+        result = get_cached_embeddings(db_path, ["python", "sql"])
+        assert result["python"] == [0.1]
+        assert result["sql"] == [0.2]
+
+    def test_upsert_overwrites(self, db_path):
+        from api.db.queries import save_embedding, get_cached_embeddings
+
+        save_embedding(db_path, "python", [0.1], "text-embedding-3-small")
+        save_embedding(db_path, "python", [0.9], "text-embedding-3-small")
+        result = get_cached_embeddings(db_path, ["python"])
+        assert result["python"] == [0.9]
+
+    def test_empty_list_returns_empty(self, db_path):
+        from api.db.queries import get_cached_embeddings
+
+        result = get_cached_embeddings(db_path, [])
+        assert result == {}
