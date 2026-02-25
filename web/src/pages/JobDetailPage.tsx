@@ -112,6 +112,7 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isApplied, setIsApplied] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
   const [applyLoading, setApplyLoading] = useState(false);
   const [cvLoading, setCvLoading] = useState(false);
   const [cvSuccess, setCvSuccess] = useState(false);
@@ -130,6 +131,7 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
       .then((data: JobDetail) => {
         setJob(data);
         setIsApplied(!!data.applied_at);
+        setIsDismissed(!!data.dismissed_at);
       })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : 'unknown';
@@ -217,6 +219,11 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
     });
     setIsApplied(next);
     setApplyLoading(false);
+  };
+
+  const handleDismiss = async () => {
+    await fetch(`/api/jobs/${jobId}/dismiss`, { method: 'POST' });
+    setIsDismissed((prev) => !prev);
   };
 
   const handleGenerateCV = async () => {
@@ -611,6 +618,17 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
                   }`}
               >
                 {isApplied ? <><span>✓</span>Applied</> : 'Mark as applied'}
+              </button>
+
+              <button
+                onClick={handleDismiss}
+                className={`inline-flex items-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-semibold transition-all duration-150
+                  ${isDismissed
+                    ? 'border-red-500/40 bg-red-500/10 text-red-400'
+                    : 'border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'
+                  }`}
+              >
+                {isDismissed ? 'Skipped ✓' : 'Skip'}
               </button>
             </div>
 
