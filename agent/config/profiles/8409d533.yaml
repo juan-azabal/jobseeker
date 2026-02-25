@@ -1,0 +1,54 @@
+user:
+  id: 8409d533
+  name: Juan Azabal
+  email: j.azabal@gmail.com
+  active: true
+  languages:
+  - es
+  - en
+  home_locations:
+  - barcelona
+  - spain
+  location_preference: b
+target:
+  level: principal
+  track: ic
+  domains:
+    data: 15
+    adtech: 12
+    saas: 10
+  seniority_weights:
+    principal: 15
+    senior: 10
+scoring:
+  rag_threshold: 25
+  salary_min: 60000
+skills:
+- snowplow
+- kafka
+- flink
+- s3
+- snowflake
+- dbt
+- data-governance
+- gdpr
+- a/b-testing
+- stakeholder-management
+- analytics
+- personalization
+- monetization
+knowledge:
+  dir: knowledge/8409d533
+  profile_files:
+  - cv.md
+  collection_name: 8409d533_profile
+stories: {}
+preferences: config/profiles/8409d533-preferences.yaml
+searches: config/profiles/8409d533-searches.yaml
+watchlist: config/watchlist.yaml
+seen_ids: config/seen_ids/8409d533.txt
+exclude_companies:
+- Gartner Digital Markets
+- Softonic
+- Marfeel
+- LaVanguardia
