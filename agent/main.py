@@ -48,7 +48,7 @@ def _heuristic_gate(jobs: list, profile: dict) -> tuple[list, list]:
         return jobs, []
 
     target = profile.get("target", {})
-    target_domains = set((target.get("domains") or {}).keys())
+    target_domains = target.get("domains") or {}  # dict: domain → weight (may be negative)
     target_level = (target.get("level") or "").lower()
     profile_skills = {s.lower().replace("-", " ") for s in (profile.get("skills") or [])}
 
@@ -66,9 +66,13 @@ def _heuristic_gate(jobs: list, profile: dict) -> tuple[list, list]:
         domain = (parsed.get("domain") or "").lower()
         if not domain or domain == "other":
             score += 10  # uncertain → partial credit
-        elif domain in target_domains:
-            score += 20
-        # else: wrong domain → 0
+        else:
+            domain_weight = target_domains.get(domain, 0)
+            if domain_weight > 0:
+                score += 20  # desired domain → full credit
+            elif domain_weight < 0:
+                score += 0   # explicitly deprioritized → no credit in gate
+            # else: domain not in target_domains → 0 (unchanged)
 
         # ── Seniority (0–20) ──────────────────────────────────────────────
         seniority = (parsed.get("seniority") or "").lower()
