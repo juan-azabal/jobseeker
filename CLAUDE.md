@@ -28,7 +28,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `api/main.py` — FastAPI app
   - `api/routes/` — one file per resource (auth, jobs, onboard, ingest, admin)
   - `api/middleware/auth.py` — session auth + admin guards (`get_current_user`, `get_current_admin`)
-  - `api/db/` — SQLite init, migrations (001–010), queries
+  - `api/db/` — SQLite init, migrations (001–011), queries
   - `api/ingest.py` — pipeline output → SQLite
   - `api/scoring.py` — per-user heuristic scoring (ported from agent)
   - `api/embeddings.py` — OpenAI embedding service with SQLite cache (text-embedding-3-small)
@@ -66,10 +66,10 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `agent/schemas/` — JSON output contracts (parsed_job, scored_job, digest_context, gap_history_entry)
   - `agent/patterns/` — interface contracts per module
   - `agent/docs/decisions/` — ADRs (001–007)
-- Tests: `tests/` (backend, 245 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 113 tests)
+- Tests: `tests/` (backend, 297 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 113 tests)
 - DB: `data/jobseeker.db` (gitignored)
 - Static build: `web/dist/` (gitignored)
-- Scripts: `scripts/seed_dev.py` — dev database seeder
+- Scripts: `scripts/seed_dev.py` — dev database seeder, `scripts/backfill_embeddings.py` — one-time skill embedding backfill
 
 ## Environment Variables
 
@@ -190,9 +190,18 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - `agent/api_cache.py`: fetch_existing_parsed() — graceful fallback if API unavailable
   - GHA workflow: sequential profile loop (not parallel matrix). Each profile syncs to Railway before next starts
   - Saves ~$0.001/job per overlapping job across users (gpt-4o-mini parse cost avoided)
+- Phase 12 — Semantic Skill Matching
+  - Embeddings: OpenAI text-embedding-3-small, cached in SQLite (skill_embeddings table, migration 011)
+  - Matching: cosine similarity ≥0.80 = match, ≥0.68 = partial. Fallback to exact substring if no API key.
+  - Scoring: heuristic_score() uses semantic matching for skills dimension (partial match = 2pts, full = 5pts)
+  - Job detail: GET /api/jobs/{id} returns skill_matches with match status per skill
+  - Add skill: POST /api/onboard/profile/skills — one-click add from job detail
+  - Frontend: skill chips colored by match status (green/amber/default), click unmatched to add
+  - Backfill: scripts/backfill_embeddings.py for existing data; auto-embed on ingest
+  - Performance: in-process LRU cache, 500-pair ceiling for semantic matching
 
 ### Current
-Phase 12 — Semantic Skill Matching (12.1–12.3 ✓, working on 12.4 Frontend)
+Phase 12 — Completed
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
@@ -231,6 +240,11 @@ Phase 12 — Semantic Skill Matching (12.1–12.3 ✓, working on 12.4 Frontend)
 - Job cleanup: `cleanup_old_jobs(db_path, days=90)` deletes from user_job_scores + user_job_status + jobs. Called on every ingest.
 - Cross-user dedup: `agent/api_cache.py` calls `POST /api/ingest/batch-lookup` to fetch already-parsed jobs from Railway DB. Graceful fallback if unavailable.
 - GHA sequential pipeline: single `digest` job loops profiles sequentially. Each syncs to Railway before next starts. Jobs: `list-profiles` → `digest` → `persist-seen-ids` → `verify-health`. `timeout-minutes: 60`.
+- Embedding model: text-embedding-3-small (1536 dims). Cache key: lowercase trimmed skill text.
+- Embedding storage: JSON-serialized list[float] in BLOB column. No numpy dependency.
+- Semantic thresholds: 0.80 match, 0.68 partial. Tuned on skill synonym pairs (analytics↔data analysis, ML↔machine learning).
+- Cosine similarity: pure Python (no numpy). Acceptable for ≤500 pairwise comparisons per request.
+- POST /api/onboard/profile/skills in onboard router (not separate profile router) — consistent with existing PATCH /profile.
 
 ### Blockers
 {none}
