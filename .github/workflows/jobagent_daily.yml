@@ -10,15 +10,46 @@ on:
         default: ''
 
 jobs:
-  digest:
+  # ── Job 1: Resolve active profiles → JSON array for matrix ──────────────────
+  list-profiles:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: write  # needed to push seen_ids back to repo
+    outputs:
+      profiles: ${{ steps.set-profiles.outputs.profiles }}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Resolve active profiles
+        id: set-profiles
+        env:
+          TARGET_PROFILE: ${{ github.event.inputs.profile }}
+        run: |
+          if [ -n "$TARGET_PROFILE" ]; then
+            echo "Single-profile run: $TARGET_PROFILE"
+            echo "profiles=[\"$TARGET_PROFILE\"]" >> "$GITHUB_OUTPUT"
+          else
+            profiles=$(python agent/scripts/list_active_profiles.py)
+            echo "Active profiles: $profiles"
+            echo "profiles=$profiles" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── Job 2: Run each profile in parallel ─────────────────────────────────────
+  digest:
+    needs: list-profiles
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        profile: ${{ fromJson(needs.list-profiles.outputs.profiles) }}
+      fail-fast: false  # don't cancel sibling profiles if one fails
+    steps:
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
@@ -34,39 +65,13 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          TARGET_PROFILE: ${{ github.event.inputs.profile }}
-        run: |
-          if [ -n "$TARGET_PROFILE" ]; then
-            echo "=== Running JobAgent for profile: $TARGET_PROFILE ==="
-            python main.py --notify --profile "$TARGET_PROFILE"
-          else
-            # Sub-configs (e.g. juanAza-preferences.yaml) contain a hyphen — skip them.
-            overall_exit=0
-            for profile_file in config/profiles/*.yaml; do
-              profile_id=$(basename "$profile_file" .yaml)
-              case "$profile_id" in *-*) continue ;; esac  # skip sub-configs
-              active=$(python scripts/check_active.py "$profile_file")
-              if [ "$active" = "false" ]; then
-                echo "=== Skipping inactive profile: $profile_id ==="
-                continue
-              fi
-              echo "=== Running JobAgent for profile: $profile_id ==="
-              if python main.py --notify --profile "$profile_id"; then
-                echo "=== Done: $profile_id ==="
-              else
-                echo "=== FAILED: $profile_id (exit $?) — continuing with remaining profiles ===" >&2
-                overall_exit=1
-              fi
-            done
-            exit $overall_exit
-          fi
+        run: python main.py --notify --profile "${{ matrix.profile }}"
 
       - name: Sync results to Railway
         if: success()
         env:
           RAILWAY_URL: ${{ secrets.RAILWAY_URL }}
           INGEST_API_KEY: ${{ secrets.INGEST_API_KEY }}
-          TARGET_PROFILE: ${{ github.event.inputs.profile }}
         run: |
           if [ -z "$RAILWAY_URL" ] || [ -z "$INGEST_API_KEY" ]; then
             echo "Railway secrets not set — skipping sync"
@@ -79,7 +84,7 @@ jobs:
             [ -f "$f" ] || continue
             echo "Syncing $(basename $f)..."
             tmpfile=$(mktemp --suffix=.json)
-            effective_profile=$(python3 agent/scripts/build_ingest_payload.py "$f" "$tmpfile" "${TARGET_PROFILE:-}")
+            effective_profile=$(python3 agent/scripts/build_ingest_payload.py "$f" "$tmpfile" "${{ matrix.profile }}")
             response=$(curl -s -w "\n%{http_code}" -X POST "$RAILWAY_URL/api/ingest" \
               -H "Content-Type: application/json" \
               -H "X-Ingest-Key: $INGEST_API_KEY" \
@@ -94,16 +99,84 @@ jobs:
             fi
           done
 
-      - name: Persist seen jobs
+      - name: Collect seen IDs changes
+        if: always()
+        run: |
+          mkdir -p /tmp/seen-ids-staging
+          # Copy only files that were modified or created during this run
+          git -C "$GITHUB_WORKSPACE" status --short agent/config/seen_ids/ \
+            | awk '{print $2}' \
+            | while read -r f; do
+                [ -f "$GITHUB_WORKSPACE/$f" ] && cp "$GITHUB_WORKSPACE/$f" /tmp/seen-ids-staging/
+              done
+          count=$(ls /tmp/seen-ids-staging/ 2>/dev/null | wc -l)
+          echo "Staged $count seen_ids file(s) for ${{ matrix.profile }}"
+
+      - name: Upload seen IDs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seen-ids-${{ matrix.profile }}
+          path: /tmp/seen-ids-staging/
+          if-no-files-found: ignore
+
+      - name: Upload results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.profile }}-${{ github.run_id }}
+          path: agent/output/
+          retention-days: 30
+          if-no-files-found: ignore
+
+  # ── Job 3: Serialised seen_ids commit (runs after all matrix jobs) ───────────
+  persist-seen-ids:
+    needs: digest
+    runs-on: ubuntu-latest
+    if: always()
+    permissions:
+      contents: write  # needed to push seen_ids back to repo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download all seen-ids artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: seen-ids-*
+          path: /tmp/seen-ids-download
+          merge-multiple: true  # flatten all artifacts into one directory
+
+      - name: Apply seen IDs to repo
+        run: |
+          find /tmp/seen-ids-download -name "*.txt" | while read -r f; do
+            cp "$f" agent/config/seen_ids/
+            echo "Applied: $(basename $f)"
+          done
+          count=$(find /tmp/seen-ids-download -name "*.txt" | wc -l)
+          echo "Total: $count seen_ids file(s) applied"
+
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add agent/config/seen_ids/
-          git diff --cached --quiet || git commit -m "update seen jobs [skip ci]"
+          if git diff --cached --quiet; then
+            echo "No changes to seen_ids — nothing to commit"
+            exit 0
+          fi
+          git commit -m "update seen jobs [skip ci]"
+          git pull --rebase origin "${{ github.ref_name }}"
           git push
 
+  # ── Job 4: Health check (runs after everything) ──────────────────────────────
+  verify-health:
+    needs: [digest, persist-seen-ids]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
       - name: Verify ingest health
-        if: always()
         env:
           RAILWAY_URL: ${{ secrets.RAILWAY_URL }}
           INGEST_API_KEY: ${{ secrets.INGEST_API_KEY }}
@@ -120,12 +193,3 @@ jobs:
           body=$(echo "$response" | head -1)
           echo "HTTP $http_code"
           echo "$body" | python3 -m json.tool || echo "$body"
-
-      - name: Upload results artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: digest-${{ github.run_id }}
-          path: agent/output/
-          retention-days: 30
-          if-no-files-found: ignore
