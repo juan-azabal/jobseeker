@@ -116,6 +116,78 @@ def env_check(admin: dict = Depends(get_current_admin)):
     }
 
 
+class ResetSeenIdsRequest(BaseModel):
+    profile_id: str  # profile_id used for seen_ids filename (e.g. "juan", not "juanAza")
+
+
+@router.post("/reset-seen-ids")
+async def reset_seen_ids(body: ResetSeenIdsRequest, admin: dict = Depends(get_current_admin)):
+    """Clear a profile's seen_ids file on GitHub so all jobs are re-scraped on next run.
+
+    The seen_ids file tracks which jobs have already been processed. Clearing it
+    forces a full re-scrape, useful when previous syncs failed and jobs were
+    marked as seen without reaching Railway.
+
+    Requires env vars: GH_ACTIONS_TOKEN, GH_REPO, GH_REF.
+    """
+    import base64
+
+    gh_token = os.environ.get("GH_ACTIONS_TOKEN", "")
+    gh_repo = os.environ.get("GH_REPO", "")
+    gh_ref = os.environ.get("GH_REF", "main")
+
+    if not gh_token or not gh_repo:
+        raise HTTPException(
+            status_code=503,
+            detail="GH_ACTIONS_TOKEN / GH_REPO not configured",
+        )
+
+    headers = {
+        "Authorization": f"Bearer {gh_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    file_path = f"agent/config/seen_ids/{body.profile_id}.txt"
+    api_url = f"https://api.github.com/repos/{gh_repo}/contents/{file_path}"
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        # Get current file SHA (required for update)
+        get_resp = await client.get(api_url, headers=headers, params={"ref": gh_ref})
+        if get_resp.status_code == 404:
+            logger.info("No seen_ids file for %s — nothing to reset", body.profile_id)
+            return {"status": "not_found", "profile_id": body.profile_id}
+
+        if get_resp.status_code != 200:
+            raise HTTPException(
+                status_code=502,
+                detail=f"GitHub API GET returned {get_resp.status_code}: {get_resp.text[:200]}",
+            )
+
+        current_sha = get_resp.json()["sha"]
+
+        # Overwrite with empty content
+        put_resp = await client.put(
+            api_url,
+            json={
+                "message": f"chore: reset seen_ids for {body.profile_id} [skip ci]",
+                "content": base64.b64encode(b"").decode(),
+                "sha": current_sha,
+                "branch": gh_ref,
+            },
+            headers=headers,
+        )
+
+    if put_resp.status_code in (200, 201):
+        logger.info("seen_ids reset for %s by admin %s", body.profile_id, admin["email"])
+        return {"status": "reset", "profile_id": body.profile_id}
+
+    raise HTTPException(
+        status_code=502,
+        detail=f"GitHub API PUT returned {put_resp.status_code}: {put_resp.text[:200]}",
+    )
+
+
 @router.post("/trigger-pipeline")
 async def trigger_pipeline(body: TriggerRequest = TriggerRequest(), admin: dict = Depends(get_current_admin)):
     """Dispatch the GHA scraping pipeline for a specific profile or all active profiles.

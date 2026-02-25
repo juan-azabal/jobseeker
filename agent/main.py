@@ -717,7 +717,10 @@ def main():
     if rejected:
         save_results(rejected, folder="output/rejected", profile_id=profile_id)
 
-    # seen_ids persisted only after confirmed email delivery — see Step 11 below
+    # Mark jobs as seen immediately after saving results.
+    # Actual persistence to git only happens in GHA *after* successful Railway sync,
+    # so if sync fails the seen_ids file is not pushed and jobs will reappear next run.
+    _append_seen_ids(all_parsed, path=seen_ids_path)
 
     duration_s = int(time.time() - start_time)
     # Rough cost estimate: gpt-4o-mini parse ~$0.001/job, gpt-4o RAG score ~$0.04/job
@@ -755,14 +758,10 @@ def main():
                 "date": datetime.now().strftime("%d %b %Y"),
             }
             email_sent = send_digest(all_parsed, prefilter_stats, run_meta, profile=profile)
-            if email_sent:
-                # Only mark jobs as seen once the user has actually received the email
-                _append_seen_ids(all_parsed, path=seen_ids_path)
-            else:
-                print("⚠  Email not sent — seen_ids NOT updated (jobs will reappear next run)")
+            if not email_sent:
+                print("⚠  Email not sent (seen_ids already updated — sync will persist them)")
         except Exception as e:
             print(f"⚠  Email notify error (pipeline succeeded): {e}")
-            print("   seen_ids NOT updated — jobs will reappear next run")
 
 
 if __name__ == "__main__":
