@@ -197,7 +197,7 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - Job list: batch pre-computation via `precompute_skill_lookup()`. One `match_skills` call for all unique job skills, O(1) per-job lookup.
   - Job detail: GET /api/jobs/{id} returns skill_matches with match status per skill
   - Add skill: POST /api/onboard/profile/skills — one-click add from job detail
-  - Frontend: skill chips colored by match status (green/amber/default), click unmatched to add; skip button on detail; select all toggle on list
+  - Frontend: skill chips colored by match status (green/amber/default); unmatched AND partial chips clickable to add exact skill; partial tooltip shows similarity % and prompt to add; skip button on detail; select all toggle on list
   - Backfill: scripts/backfill_embeddings.py for existing data; auto-embed on ingest; POST /api/admin/backfill-embeddings
   - Diagnostics: GET /api/admin/embedding-diagnostics — curl-only, shows similarity scores for threshold tuning
   - Admin: "Backfill embeddings" button + "Clear seen" button per user
@@ -251,6 +251,10 @@ Phase 12 — Completed
 - Embedding backfill: POST /api/admin/backfill-embeddings. Required after deploy.
 - Embedding diagnostics: GET /api/admin/embedding-diagnostics. Curl-only, shows similarity scores for threshold tuning.
 - Seniority weights: -15 to 15 range, consistent with other sliders.
+- Seniority "unknown" key: jobs where parser detects no seniority signal emit `seniority: "unknown"`. Exposed in ProfileEditor as "Unspecified" quick-add button (maps to key `"unknown"` in seniority_weights). Backend already supported it via `.get("unknown", 0)`.
+- Partial-match skills clickable in job detail: `isClickable = (status === 'none' || status === 'partial') && !!onClick`. Tooltip shows similarity % for partial. Clicking adds the exact job skill (not the matched user skill) to profile. `onClick` passed for `status !== 'matched'`.
+- Prev/next job navigation: `JobsPage` passes `{ state: { jobIds: [...] } }` on navigate. `JobDetailRoute` reads `location.state.jobIds`, computes prevId/nextId, passes to `JobDetailPage`. `onNavigate` uses `replace: true` to avoid stacking history entries (preserves "Back to jobs" behavior).
+- `.claude/launch.json` in worktrees: use `bash -c "cd /absolute/path && exec venv/bin/uvicorn ..."` for backend so it runs from the correct CWD (finds DB and config). Frontend: `npm run dev --prefix /absolute/path/web`. Avoids broken relative paths when CWD is a worktree subdirectory.
 - POST /api/onboard/profile/skills in onboard router (not separate profile router) — consistent with existing PATCH /profile.
 
 ### Blockers
