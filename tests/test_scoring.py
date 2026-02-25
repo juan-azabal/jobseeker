@@ -138,6 +138,40 @@ class TestInferDomain:
         }
         assert _infer_domain(p) == "ai_ml"
 
+    def test_fintech_not_data_for_financial_compliance(self):
+        """'compliance analytics platform for financial institutions' → fintech, not data.
+
+        Regression for keyword collision: 'analytics platform' (data keyword) must not
+        win over 'financial institution' (fintech keyword) for clearly fintech JDs.
+        """
+        p = {
+            "domain": "other",
+            "responsibilities_summary": "compliance analytics platform for financial institutions",
+            "must_have_skills": [],
+            "technical_stack": [],
+        }
+        result = _infer_domain(p)
+        assert result == "fintech", (
+            f"Expected 'fintech' for financial compliance JD, got '{result}'"
+        )
+
+    def test_hr_tech_for_corporate_training(self):
+        """'corporate training management system' → hr_tech.
+
+        Regression for keyword gap: training management systems are HR/L&D tools,
+        not AI/ML or edtech (which covers student-facing education).
+        """
+        p = {
+            "domain": "other",
+            "responsibilities_summary": "corporate training management system",
+            "must_have_skills": [],
+            "technical_stack": [],
+        }
+        result = _infer_domain(p)
+        assert result == "hr_tech", (
+            f"Expected 'hr_tech' for corporate training JD, got '{result}'"
+        )
+
 
 # ---------------------------------------------------------------------------
 # heuristic_score
