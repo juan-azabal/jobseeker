@@ -112,6 +112,20 @@ def get_jobs(
     return [dict(r) for r in rows]
 
 
+def batch_get_parsed(db_path: str, job_ids: list[str]) -> list[tuple[str, str]]:
+    """Return (job_id, parsed) for jobs that exist with non-null parsed data."""
+    if not job_ids:
+        return []
+    con = _connect(db_path)
+    placeholders = ",".join("?" for _ in job_ids)
+    rows = con.execute(
+        f"SELECT job_id, parsed FROM jobs WHERE job_id IN ({placeholders}) AND parsed IS NOT NULL",
+        job_ids,
+    ).fetchall()
+    con.close()
+    return [(r["job_id"], r["parsed"]) for r in rows]
+
+
 def get_job_by_id(db_path: str, job_id: str) -> dict | None:
     con = _connect(db_path)
     row = con.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()

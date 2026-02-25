@@ -15,7 +15,7 @@ on:
         default: false
 
 jobs:
-  # ── Job 1: Resolve active profiles → JSON array for matrix ──────────────────
+  # ── Job 1: Resolve active profiles ─────────────────────────────────────────
   list-profiles:
     runs-on: ubuntu-latest
     outputs:
@@ -44,15 +44,20 @@ jobs:
             echo "profiles=$profiles" >> "$GITHUB_OUTPUT"
           fi
 
-  # ── Job 2: Run each profile in parallel ─────────────────────────────────────
+  # ── Job 2: Run profiles sequentially ───────────────────────────────────────
+  #    Each profile syncs parsed data to Railway before the next one starts,
+  #    so subsequent profiles can skip re-parsing jobs already in the DB.
   digest:
     needs: list-profiles
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      matrix:
-        profile: ${{ fromJson(needs.list-profiles.outputs.profiles) }}
-      fail-fast: false  # don't cancel sibling profiles if one fails
+    timeout-minutes: 60
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+      GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+      RAILWAY_URL: ${{ secrets.RAILWAY_URL }}
+      INGEST_API_KEY: ${{ secrets.INGEST_API_KEY }}
+      SHOULD_NOTIFY: ${{ github.event_name == 'schedule' || github.event.inputs.notify == 'true' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -64,15 +69,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run JobAgent
-        working-directory: agent
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          # Scheduled runs always notify; manual dispatch only if notify input is true
-          SHOULD_NOTIFY: ${{ github.event_name == 'schedule' || github.event.inputs.notify == 'true' }}
+      - name: Run profiles sequentially (each benefits from previous)
         run: |
+          set +e  # don't abort on individual profile failure
+          profiles='${{ needs.list-profiles.outputs.profiles }}'
           notify_flag=""
           if [ "$SHOULD_NOTIFY" = "true" ]; then
             notify_flag="--notify"
@@ -80,58 +80,81 @@ jobs:
           else
             echo "Email notifications: OFF (manual run)"
           fi
-          python main.py $notify_flag --profile "${{ matrix.profile }}"
 
-      - name: Sync results to Railway
-        if: success()
-        env:
-          RAILWAY_URL: ${{ secrets.RAILWAY_URL }}
-          INGEST_API_KEY: ${{ secrets.INGEST_API_KEY }}
-        run: |
-          if [ -z "$RAILWAY_URL" ] || [ -z "$INGEST_API_KEY" ]; then
-            echo "Railway secrets not set — skipping sync"
-            exit 0
+          # Ensure HTTPS for Railway sync
+          if [ -n "$RAILWAY_URL" ]; then
+            case "$RAILWAY_URL" in http://*) RAILWAY_URL="https://${RAILWAY_URL#http://}";; esac
           fi
-          # Ensure HTTPS — Railway redirects HTTP→HTTPS and curl won't re-send POST body
-          case "$RAILWAY_URL" in http://*) RAILWAY_URL="https://${RAILWAY_URL#http://}";; esac
-          echo "Target: $RAILWAY_URL"
-          for f in agent/output/jobs_*.json; do
-            [ -f "$f" ] || continue
-            echo "Syncing $(basename $f)..."
-            tmpfile=$(mktemp --suffix=.json)
-            effective_profile=$(python3 agent/scripts/build_ingest_payload.py "$f" "$tmpfile" "${{ matrix.profile }}")
-            response=$(curl -s -w "\n%{http_code}" -X POST "$RAILWAY_URL/api/ingest" \
-              -H "Content-Type: application/json" \
-              -H "X-Ingest-Key: $INGEST_API_KEY" \
-              --data-binary "@$tmpfile")
-            rm -f "$tmpfile"
-            http_code=$(echo "$response" | tail -1)
-            body=$(echo "$response" | head -1)
-            echo "  HTTP $http_code (profile=${effective_profile:-none}): $body"
-            if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
-              echo "ERROR: Ingest failed with HTTP $http_code"
-              exit 1
+
+          any_failed=false
+          for profile in $(echo "$profiles" | python3 -c "import json,sys; [print(p) for p in json.load(sys.stdin)]"); do
+            echo ""
+            echo "╔══════════════════════════════════════════════════════════════╗"
+            echo "║  Profile: $profile"
+            echo "╚══════════════════════════════════════════════════════════════╝"
+
+            # --- Run agent ---
+            cd "$GITHUB_WORKSPACE/agent"
+            if python main.py $notify_flag --profile "$profile"; then
+              echo "✅ Agent completed for $profile"
+            else
+              echo "❌ Agent failed for $profile — skipping sync"
+              rm -f output/jobs_*.json
+              any_failed=true
+              continue
             fi
+
+            # --- Sync to Railway (so next profile benefits from parsed data) ---
+            if [ -n "$RAILWAY_URL" ] && [ -n "$INGEST_API_KEY" ]; then
+              for f in output/jobs_*.json; do
+                [ -f "$f" ] || continue
+                echo "Syncing $(basename $f)..."
+                tmpfile=$(mktemp --suffix=.json)
+                effective_profile=$(python3 scripts/build_ingest_payload.py "$f" "$tmpfile" "$profile")
+                response=$(curl -s -w "\n%{http_code}" -X POST "$RAILWAY_URL/api/ingest" \
+                  -H "Content-Type: application/json" \
+                  -H "X-Ingest-Key: $INGEST_API_KEY" \
+                  --data-binary "@$tmpfile")
+                rm -f "$tmpfile"
+                http_code=$(echo "$response" | tail -1)
+                body=$(echo "$response" | head -1)
+                echo "  HTTP $http_code (profile=${effective_profile:-none}): $body"
+                if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+                  echo "⚠  Sync failed for $profile (HTTP $http_code) — continuing"
+                  any_failed=true
+                fi
+              done
+            else
+              echo "Railway secrets not set — skipping sync"
+            fi
+
+            # Clean output for next profile (seen_ids stay on disk)
+            rm -f output/jobs_*.json
           done
 
-      - name: Collect seen IDs changes
-        if: success()  # only persist seen_ids after successful sync — failed syncs must re-scrape
-        run: |
-          mkdir -p /tmp/seen-ids-staging
-          # Copy only files that were modified or created during this run
-          git -C "$GITHUB_WORKSPACE" status --short agent/config/seen_ids/ \
-            | awk '{print $2}' \
-            | while read -r f; do
-                [ -f "$GITHUB_WORKSPACE/$f" ] && cp "$GITHUB_WORKSPACE/$f" /tmp/seen-ids-staging/
-              done
-          count=$(ls /tmp/seen-ids-staging/ 2>/dev/null | wc -l)
-          echo "Staged $count seen_ids file(s) for ${{ matrix.profile }}"
+          if [ "$any_failed" = "true" ]; then
+            echo ""
+            echo "⚠  One or more profiles had errors (see above)"
+            exit 1
+          fi
 
       - name: Upload seen IDs
-        if: success()
+        if: always()
+        run: |
+          mkdir -p /tmp/seen-ids-staging
+          git status --short agent/config/seen_ids/ \
+            | awk '{print $2}' \
+            | while read -r f; do
+                [ -f "$f" ] && cp "$f" /tmp/seen-ids-staging/
+              done
+          count=$(ls /tmp/seen-ids-staging/ 2>/dev/null | wc -l)
+          echo "Staged $count seen_ids file(s)"
+
+      - name: Upload seen IDs artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: seen-ids-${{ matrix.profile }}
+          name: seen-ids
           path: /tmp/seen-ids-staging/
           if-no-files-found: ignore
 
@@ -139,32 +162,36 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: digest-${{ matrix.profile }}-${{ github.run_id }}
+          name: digest-${{ github.run_id }}
           path: agent/output/
           retention-days: 30
           if-no-files-found: ignore
 
-  # ── Job 3: Serialised seen_ids commit (runs after all matrix jobs) ───────────
+  # ── Job 3: Persist seen_ids to repo ────────────────────────────────────────
   persist-seen-ids:
     needs: digest
     runs-on: ubuntu-latest
     if: always()
     permissions:
-      contents: write  # needed to push seen_ids back to repo
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download all seen-ids artifacts
+      - name: Download seen-ids artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: seen-ids-*
+          name: seen-ids
           path: /tmp/seen-ids-download
-          merge-multiple: true  # flatten all artifacts into one directory
+        continue-on-error: true  # artifact may not exist if all profiles failed
 
       - name: Apply seen IDs to repo
         run: |
+          if [ ! -d /tmp/seen-ids-download ]; then
+            echo "No seen-ids artifact — nothing to apply"
+            exit 0
+          fi
           find /tmp/seen-ids-download -name "*.txt" | while read -r f; do
             cp "$f" agent/config/seen_ids/
             echo "Applied: $(basename $f)"
@@ -185,7 +212,7 @@ jobs:
           git pull --rebase origin "${{ github.ref_name }}"
           git push
 
-  # ── Job 4: Health check (runs after everything) ──────────────────────────────
+  # ── Job 4: Health check ────────────────────────────────────────────────────
   verify-health:
     needs: [digest, persist-seen-ids]
     runs-on: ubuntu-latest

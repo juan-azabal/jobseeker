@@ -653,6 +653,18 @@ def main():
     cached_jobs, new_jobs = split_by_cache(passed, cache)
     print(f"\n📦 Cache: {cache_stats(cache)} | {len(cached_jobs)} hits, {len(new_jobs)} new this run")
 
+    # Step 3b: Cross-user dedup — check Railway DB for jobs already parsed by another user
+    if new_jobs:
+        from api_cache import fetch_existing_parsed
+        db_parsed = fetch_existing_parsed([j["id"] for j in new_jobs])
+        if db_parsed:
+            n_restored = 0
+            for job in new_jobs:
+                if job["id"] in db_parsed and not job.get("parsed"):
+                    job["parsed"] = db_parsed[job["id"]]
+                    n_restored += 1
+            print(f"   ♻  {n_restored} jobs restored from DB (cross-user cache)")
+
     # --rescore: move cached jobs back to new_jobs but keep their parsed data
     if rescore_only and cached_jobs:
         print(f"   --rescore: re-scoring {len(cached_jobs)} cached jobs")

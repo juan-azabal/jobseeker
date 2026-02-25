@@ -34,6 +34,39 @@ def ingest_status():
     return get_ingest_status(db_path)
 
 
+class BatchLookupPayload(BaseModel):
+    job_ids: list[str]
+
+
+@router.post("/batch-lookup", dependencies=[Depends(_verify_ingest_key)])
+def batch_lookup(payload: BatchLookupPayload):
+    """Return parsed data for jobs already in the DB.
+
+    Used by the agent to skip re-parsing jobs that another user's pipeline
+    already processed. Only returns jobs with non-null parsed data.
+    """
+    import json
+    from api.db.queries import batch_get_parsed
+
+    if not payload.job_ids:
+        return {"jobs": {}}
+
+    # Safety cap — avoid huge IN clauses
+    ids = payload.job_ids[:500]
+
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    rows = batch_get_parsed(db_path, ids)
+    result: dict[str, dict] = {}
+    for job_id, parsed_str in rows:
+        try:
+            result[job_id] = json.loads(parsed_str)
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+    logger.info("batch-lookup: requested=%d, found=%d", len(ids), len(result))
+    return {"jobs": result}
+
+
 @router.post("", dependencies=[Depends(_verify_ingest_key)])
 def ingest_jobs(payload: IngestPayload):
     """Receive job data from GitHub Actions and ingest into the database.
