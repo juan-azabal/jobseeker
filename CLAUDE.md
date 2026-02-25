@@ -28,7 +28,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `api/main.py` — FastAPI app
   - `api/routes/` — one file per resource (auth, jobs, onboard, ingest, admin)
   - `api/middleware/auth.py` — session auth + admin guards (`get_current_user`, `get_current_admin`)
-  - `api/db/` — SQLite init, migrations (001–012), queries
+  - `api/db/` — SQLite init, migrations (001–014), queries
   - `api/ingest.py` — pipeline output → SQLite
   - `api/scoring.py` — per-user heuristic scoring (ported from agent)
   - `api/embeddings.py` — OpenAI embedding service with SQLite cache (text-embedding-3-small)
@@ -38,10 +38,11 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `api/prompts/` — LLM prompts for API-side features (onboard-extraction.md)
   - `api/cv/` — CV generation pipeline (plan, prompt, llm, validator, docx_builder, ats_audit)
 - Frontend: `web/`
-  - `web/src/components/` — FilterBar, JobCard, ProfileEditor, ScoreBreakdown, FileUpload, UserMenu
+  - `web/src/components/` — FilterBar, JobCard, ProfileEditor, ScoreBreakdown, FileUpload, UserMenu, DomainSelector
   - `web/src/pages/` — Login, Onboard, Jobs, JobDetail, Profile, Admin
   - `web/src/context/AuthContext.tsx` — auth state provider
   - `web/src/types/job.ts` — TypeScript types
+  - `web/src/constants/domains.ts` — 30-domain canonical enum, display labels, grouped categories
 - Agent: `agent/`
   - `agent/main.py` — pipeline orchestrator (scrape → parse → score → notify)
   - `agent/api_cache.py` — cross-user parsed-job cache via Railway DB
@@ -66,7 +67,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `agent/schemas/` — JSON output contracts (parsed_job, scored_job, digest_context, gap_history_entry)
   - `agent/patterns/` — interface contracts per module
   - `agent/docs/decisions/` — ADRs (001–007)
-- Tests: `tests/` (backend, 299 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 113 tests)
+- Tests: `tests/` (backend, 415 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 194 tests)
 - DB: `data/jobseeker.db` (gitignored)
 - Static build: `web/dist/` (gitignored)
 - Scripts: `scripts/seed_dev.py` — dev database seeder, `scripts/backfill_embeddings.py` — one-time skill embedding backfill
@@ -266,7 +267,7 @@ Phase 13 — Completed
 - `.claude/launch.json` in worktrees: use `bash -c "cd /absolute/path && exec venv/bin/uvicorn ..."` for backend so it runs from the correct CWD (finds DB and config). Frontend: `npm run dev --prefix /absolute/path/web`. Avoids broken relative paths when CWD is a worktree subdirectory.
 - POST /api/onboard/profile/skills in onboard router (not separate profile router) — consistent with existing PATCH /profile.
 - Domain scoring cascade (Phase 13): enum match → `_infer_domain()` keyword override → `_semantic_domain_score()` embedding fallback. Semantic only fires when both prior stages return 'other'. Threshold: 0.75 cosine similarity. Score clamped [-15, 15].
-- Domain enum (Phase 13): 21 values total. parser-prompt.md v1.2 includes `_domain_guide` field (not in output schema — for LLM guidance only). `_DOMAIN_ALIASES` in api/scoring.py normalizes profile domain names to canonical enum values.
+- Domain enum (Phase 13): 30 canonical values (adtech|ai_ml|automotive|biotech|climate|construction|cybersecurity|data|defense|devtools|ecommerce|edtech|energy|fintech|food_bev|gaming|govtech|healthtech|hr_tech|infra|legal_tech|logistics|manufacturing|marketplace|media|retail|saas|telecom|travel|other). parser-prompt.md v1.3 includes `_domain_guide` field (not in output schema — for LLM guidance only). `_DOMAIN_ALIASES` in both `api/scoring.py` and `agent/main.py` normalize profile domain names to canonical enum values.
 - RAG penalty clause (Phase 13): graduated tiers in scoring-rubric.md v1.2; strong (≤-15) → cap domain_fit at 3, mild (<0>-15) → cap at 10; injected via `{penalty_clause}` placeholder by `_build_scoring_prompt()`.
 - Heuristic gate (Phase 13): `target_domains` changed from set to dict in `_heuristic_gate()`. Domain weight > 0 → +20 gate credit; weight < 0 → 0 credit; not in dict → 0.
 - Domain override cascade (Phase 13): `user_override → _infer_domain() → parsed.domain`. RAG scores NOT invalidated on override. Override stored in `user_job_status.domain_override` (migration 014).
