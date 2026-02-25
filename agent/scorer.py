@@ -77,14 +77,25 @@ def _build_scoring_prompt(profile: dict) -> str:
     else:
         adjacent_clause = "Tangentially related domains"
 
-    # Penalty clause: if negative-weight domains exist, inject a cap instruction
-    if penalty_domains:
-        penalty_domains_str = ", ".join(sorted(penalty_domains))
-        penalty_clause = (
-            f"- PENALTY: If the role's domain is primarily {penalty_domains_str}, "
-            "cap domain_fit at 4 regardless of other signals. "
-            "The candidate has explicitly deprioritized these domains."
-        )
+    # Graduated penalty clause: two tiers based on weight magnitude.
+    # strong (≤ -15): cap domain_fit at 3 — candidate strongly avoids these.
+    # mild  (< 0, > -15): cap domain_fit at 10 — candidate deprioritizes but doesn't reject.
+    strong_domains = sorted(d for d, s in top_domains if s <= -15)
+    mild_domains = sorted(d for d, s in top_domains if -15 < s < 0)
+
+    if strong_domains or mild_domains:
+        lines = ["PENALTY — domains the candidate has explicitly deprioritized:"]
+        if strong_domains:
+            lines.append(
+                f"- If the role's PRIMARY domain is {', '.join(strong_domains)}: "
+                "cap domain_fit at 3. The candidate strongly avoids these domains."
+            )
+        if mild_domains:
+            lines.append(
+                f"- If the role's PRIMARY domain is {', '.join(mild_domains)}: "
+                "cap domain_fit at 10. The candidate deprioritizes but does not reject these domains."
+            )
+        penalty_clause = "\n".join(lines) + "\n"
     else:
         penalty_clause = ""
 
