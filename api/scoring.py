@@ -15,26 +15,57 @@ from api.skill_matcher import SkillMatch, match_skills
 
 logger = logging.getLogger(__name__)
 
-# Maps profile domain names → parser-emitted domain names.
-# Parser enum: adtech|data|ml|fintech|saas|ecommerce|healthcare|game|edtech|climate|
-#              marketplace|platform|growth|devtools|infra|media|security|logistics|
-#              hr_tech|legal_tech|other
+# Maps profile domain names → parser-emitted domain names (canonical v1.3 enum).
+# Parser enum (30 values): adtech|ai_ml|automotive|biotech|climate|construction|
+#   cybersecurity|data|defense|devtools|ecommerce|edtech|energy|fintech|food_bev|
+#   gaming|govtech|healthtech|hr_tech|infra|legal_tech|logistics|manufacturing|
+#   marketplace|media|retail|saas|telecom|travel|other
 _DOMAIN_ALIASES: dict[str, str] = {
-    "ia": "ml",
-    "ai": "ml",
-    "llm": "ml",
+    # AI/ML consolidation
+    "ia": "ai_ml", "ai": "ai_ml", "llm": "ai_ml", "ml": "ai_ml",
+    # Adtech
     "martech": "adtech",
-    # New aliases for expanded enum
-    "gaming": "game",
-    "ed-tech": "edtech",
-    "greentech": "climate",
-    "cleantech": "climate",
+    # Automotive
+    "mobility": "automotive", "ev": "automotive",
+    # Biotech
+    "pharma": "biotech", "life_sciences": "biotech",
+    # Climate
+    "greentech": "climate", "cleantech": "climate",
+    # Construction
+    "proptech": "construction",
+    # Cybersecurity
+    "security": "cybersecurity", "infosec": "cybersecurity", "devsecops": "cybersecurity",
+    "cybersecurity": "cybersecurity",
+    # Devtools
     "developer-tools": "devtools",
-    "devsecops": "security",
-    "cybersecurity": "security",
+    # Edtech
+    "ed-tech": "edtech",
+    # Fintech
+    "insurtech": "fintech",
+    # Food & bev
+    "agritech": "food_bev", "foodtech": "food_bev",
+    # Gaming
+    "game": "gaming", "esports": "gaming", "gaming": "gaming",
+    # Healthcare (legacy parser value)
+    "healthcare": "healthtech",
+    # HR tech
     "hrtech": "hr_tech",
+    # Legal tech
     "legaltech": "legal_tech",
+    # Platform (old enum value not in v2 list)
+    "platform": "infra",
+    # Growth (old enum value not in v2 list)
+    "growth": "saas",
 }
+
+# Frozenset of all valid canonical domain values (v1.3 — 30 entries).
+VALID_DOMAINS: frozenset[str] = frozenset({
+    "adtech", "ai_ml", "automotive", "biotech", "climate", "construction",
+    "cybersecurity", "data", "defense", "devtools", "ecommerce", "edtech",
+    "energy", "fintech", "food_bev", "gaming", "govtech", "healthtech",
+    "hr_tech", "infra", "legal_tech", "logistics", "manufacturing",
+    "marketplace", "media", "retail", "saas", "telecom", "travel", "other",
+})
 
 # Seniority levels ordered from most junior to most senior
 _SENIORITY_LEVELS = ["junior", "mid", "senior", "staff", "principal", "director", "vp"]
@@ -78,82 +109,101 @@ def _compute_seniority_weights(level: str, track: str) -> dict[str, int]:
     return weights
 
 
-# Domain override keywords (mirrors agent/main.py _DOMAIN_KEYWORDS)
+# Domain override keywords — mirrors agent/main.py _DOMAIN_KEYWORDS (dual-copy rule).
+# All keywords are ≥2 words or known brand/product names to avoid false-match substrings.
 _DOMAIN_KEYWORDS = {
-    "data": [
-        "data platform", "data pipeline", "data warehouse", "data lake",
-        "lakehouse", "databricks", "snowflake", "clickhouse", "etl",
-        "data product", "data governance", "data quality", "data model",
-    ],
-    "ml": [
-        "machine learning", "ml model", "ai agent", "llm", "nlp",
-        "inference", "training", "deep learning", "neural",
-    ],
-    "adtech": [
-        "advertising", "ad tech", "programmatic", "dsp", "ssp",
-        "header bidding", "rtb", "publisher monetization",
-    ],
-    "saas": [
-        "saas", "subscription", "b2b platform", "developer tool",
-        "devops", "observability", "monitoring", "cloud platform",
-    ],
-    # Expanded enum (Phase 13.2)
-    "game": [
-        "video game", "gaming", "game engine", "game studio", "mobile game",
-        "multiplayer", "esports", "player engagement", "game development",
-    ],
-    "edtech": [
-        "education technology", "e-learning", "online course", "learning platform",
-        "ed tech", "curriculum", "lms", "learning management",
-    ],
-    "climate": [
-        "carbon", "sustainability", "renewable energy", "clean energy",
-        "climate tech", "green tech", "carbon offset", "net zero",
-        "carbon footprint", "emissions",
-    ],
-    "marketplace": [
-        "marketplace", "two-sided marketplace", "buyer seller",
-        "vendor management", "listings platform", "seller platform",
-    ],
-    "platform": [
-        "platform engineering", "infrastructure platform", "developer platform",
-        "platform team", "internal platform",
-    ],
-    "growth": [
-        "user acquisition", "product-led growth", "plg", "monetization",
-        "conversion rate", "retention", "growth hacking", "funnel optimization",
-    ],
-    "devtools": [
-        "developer tools", "developer experience", "devex", "sdk",
-        "api platform", "cli tools", "developer productivity", "ide",
-    ],
-    "infra": [
-        "infrastructure", "infrastructure as code", "kubernetes",
-        "cloud infrastructure", "reliability", "sre", "site reliability",
-        "devops platform", "platform infrastructure",
-    ],
-    "media": [
-        "media", "content platform", "publishing", "streaming",
-        "broadcast", "editorial", "digital media",
-    ],
-    "security": [
-        "cybersecurity", "security platform", "identity management",
-        "authentication", "authorization", "threat detection",
-        "zero trust", "siem", "vulnerability management",
-    ],
-    "logistics": [
-        "logistics", "supply chain", "last mile", "shipping",
-        "fulfillment", "warehouse management", "fleet management",
-    ],
-    "hr_tech": [
-        "human resources", "talent management", "recruitment platform",
-        "applicant tracking", "hris", "payroll", "people ops",
-        "workforce management",
-    ],
-    "legal_tech": [
-        "legal tech", "legal ops", "contract management",
-        "compliance platform", "legal automation", "e-discovery",
-    ],
+    "adtech": ["ad tech", "programmatic advertising", "demand-side platform",
+               "supply-side platform", "header bidding", "real-time bidding",
+               "publisher monetization", "ad network", "ad exchange",
+               "display advertising"],
+    "ai_ml": ["machine learning", "ml model", "ai agent", "large language model",
+              "natural language processing", "computer vision", "deep learning",
+              "neural network", "generative ai", "ml platform",
+              "model training", "model inference"],
+    "automotive": ["autonomous driving", "electric vehicle", "ev charging",
+                   "connected car", "fleet management", "mobility platform",
+                   "adas system", "vehicle software"],
+    "biotech": ["drug discovery", "clinical trial", "life sciences",
+                "genomics platform", "molecular biology", "bioinformatics pipeline"],
+    "climate": ["carbon offset", "carbon footprint", "renewable energy",
+                "clean energy", "climate tech", "solar energy", "wind energy",
+                "circular economy", "sustainability platform", "decarbonization"],
+    "construction": ["construction tech", "building information modeling",
+                     "property management", "real estate platform",
+                     "smart building", "architecture tech"],
+    "cybersecurity": ["information security", "identity management",
+                      "fraud prevention", "threat detection", "zero trust",
+                      "penetration testing", "security operations center",
+                      "vulnerability management"],
+    "data": ["data platform", "data pipeline", "data warehouse", "data lake",
+             "data lakehouse", "data product", "data governance", "data quality",
+             "data engineering", "business intelligence", "analytics platform",
+             "observability platform", "etl pipeline", "data modeling",
+             "databricks", "snowflake", "clickhouse"],
+    "defense": ["defense contractor", "defense tech", "aerospace defense",
+                "military technology", "government contractor"],
+    "devtools": ["developer tool", "developer experience", "ci/cd pipeline",
+                 "code review platform", "api platform", "sdk development",
+                 "source control", "build system", "package manager",
+                 "devops platform"],
+    "ecommerce": ["online retail", "e-commerce platform", "shopping platform",
+                  "direct-to-consumer", "online store", "product catalog",
+                  "shopify", "woocommerce"],
+    "edtech": ["e-learning", "learning management system", "education technology",
+               "online education", "courseware platform", "student platform",
+               "classroom technology", "tutoring platform"],
+    "energy": ["oil and gas", "energy management", "smart grid",
+               "power generation", "energy trading", "utility company"],
+    "fintech": ["payment processing", "digital banking", "lending platform",
+                "wealth management", "trading platform", "insurance technology",
+                "credit platform", "neobank", "blockchain platform",
+                "cryptocurrency exchange", "defi protocol"],
+    "food_bev": ["food delivery", "restaurant tech", "meal kit",
+                 "food safety platform", "precision agriculture",
+                 "grocery platform", "agritech platform"],
+    "gaming": ["video game", "game engine", "game studio", "game development",
+               "interactive entertainment", "mobile game", "esports platform",
+               "unity developer", "unreal engine"],
+    "govtech": ["government technology", "civic tech", "public sector platform",
+                "e-government", "regulatory technology"],
+    "healthtech": ["digital health", "telemedicine platform", "electronic health record",
+                   "patient platform", "medical device software", "telehealth",
+                   "health platform", "clinical software"],
+    "hr_tech": ["recruiting platform", "talent acquisition", "workforce management",
+                "hr platform", "applicant tracking", "people analytics",
+                "employee engagement", "payroll platform"],
+    "infra": ["cloud infrastructure", "container orchestration", "kubernetes",
+              "terraform", "cloud platform", "infrastructure as code",
+              "load balancer", "bare metal hosting", "cdn provider"],
+    "legal_tech": ["legal tech", "contract management", "compliance platform",
+                   "e-discovery", "case management", "document automation",
+                   "legal ai"],
+    "logistics": ["supply chain", "last mile delivery", "warehouse management",
+                  "freight platform", "transportation management",
+                  "fulfillment platform", "3pl platform"],
+    "manufacturing": ["industrial iot", "factory automation", "manufacturing tech",
+                      "quality control system", "production line", "robotics platform",
+                      "scada system"],
+    "marketplace": ["two-sided marketplace", "classifieds platform", "gig economy",
+                    "platform economy", "peer to peer", "rental platform",
+                    "buyer and seller"],
+    "media": ["content platform", "streaming platform", "digital media",
+              "publishing platform", "video platform", "podcast platform",
+              "content management system", "editorial platform",
+              "media company"],
+    "retail": ["retail technology", "point of sale", "pos system",
+               "in-store technology", "omnichannel retail",
+               "inventory management", "store operations",
+               "merchandising platform"],
+    "saas": ["b2b software", "b2b platform", "enterprise software",
+             "subscription platform", "crm platform", "erp system",
+             "productivity software"],
+    "telecom": ["telecommunications", "network operator", "mobile network",
+                "fiber optic", "5g network", "voip platform",
+                "connectivity platform"],
+    "travel": ["travel tech", "booking platform", "hospitality platform",
+               "hotel management", "airline technology", "reservation system",
+               "tourism platform"],
 }
 
 # City → country normalisation for country_weights scoring.

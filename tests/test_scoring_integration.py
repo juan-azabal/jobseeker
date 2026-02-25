@@ -21,7 +21,7 @@ MIXED_PROFILE = {
     "domains": {
         "data": 15,
         "saas": 10,
-        "game": -25,
+        "gaming": -25,
         "edtech": -10,
     },
     "seniority": {"senior": 15, "mid": 10, "staff": 12},
@@ -66,7 +66,7 @@ SAAS_JOB_PARSED = {
 }
 
 GAME_JOB_PARSED = {
-    "domain": "game",
+    "domain": "gaming",
     "seniority": "senior",
     "location_type": "remote",
     "must_have_skills": [],
@@ -205,7 +205,7 @@ class TestSkillsAndDomainInteraction:
             "skills": ["python", "sql", "unity", "game engine"],
         }
         game_parsed_with_skills = {
-            "domain": "game",
+            "domain": "gaming",
             "seniority": "senior",
             "location_type": "remote",
             "must_have_skills": ["unity", "game engine"],

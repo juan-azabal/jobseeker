@@ -136,7 +136,7 @@ class TestInferDomain:
             "must_have_skills": [],
             "technical_stack": ["tensorflow"],
         }
-        assert _infer_domain(p) == "ml"
+        assert _infer_domain(p) == "ai_ml"
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +163,7 @@ class TestHeuristicScore:
     def test_domain_mismatch_scores_lower(self):
         profile = _make_profile()
         parsed_good = _make_parsed()
-        parsed_bad = _make_parsed(domain="healthcare")
+        parsed_bad = _make_parsed(domain="healthtech")
         job = {"location": "Remote"}
         score_good = heuristic_score(profile, parsed_good, job, False)
         score_bad = heuristic_score(profile, parsed_bad, job, False)
@@ -194,7 +194,7 @@ class TestHeuristicScore:
         # Many red flags to push negative
         parsed = _make_parsed(
             red_flags=["a", "b", "c", "d", "e", "f"],
-            domain="healthcare",
+            domain="healthtech",
             seniority="mid",
         )
         job = {"location": "Remote"}
