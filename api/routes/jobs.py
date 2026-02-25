@@ -26,6 +26,7 @@ from api.geo import (
 )
 from api.middleware.auth import get_current_user
 from api.scoring import compute_tier, heuristic_score, load_profile_data
+from api.skill_matcher import match_skills
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -269,7 +270,52 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
 
     home_locations, home_regions = _load_user_geo(user.get("profile_id"))
     row["geo_restricted"] = _compute_reloc(row, home_locations, home_regions) if home_locations else False
+
+    # Skill matches: compute semantic match status for each skill
+    row["skill_matches"] = _compute_skill_matches(row, user)
     return row
+
+
+def _compute_skill_matches(row: dict, user: dict) -> dict | None:
+    """Compute skill match data for job detail response.
+
+    Returns None if user has no profile or job has no parsed skills.
+    """
+    profile = load_profile_data(user.get("profile_id"))
+    if not profile:
+        return None
+
+    parsed = row.get("parsed") or {}
+    must_have = parsed.get("must_have_skills") or []
+    nice_to_have = list(set(
+        (parsed.get("nice_to_have_skills") or [])
+        + (parsed.get("technical_stack") or [])
+    ))
+
+    if not must_have and not nice_to_have:
+        return None
+
+    user_skills = profile.get("skills", [])
+    db = _db_path()
+
+    def _serialize_matches(results):
+        return [
+            {
+                "skill": m.job_skill,
+                "status": m.status,
+                "matched_to": m.user_skill,
+                "similarity": round(m.similarity, 2),
+            }
+            for m in results
+        ]
+
+    must_results = match_skills(user_skills, must_have, db) if must_have else []
+    nice_results = match_skills(user_skills, nice_to_have, db) if nice_to_have else []
+
+    return {
+        "must_have": _serialize_matches(must_results),
+        "nice_to_have": _serialize_matches(nice_results),
+    }
 
 
 class ApplyPayload(BaseModel):
