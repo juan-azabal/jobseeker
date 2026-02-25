@@ -9,6 +9,7 @@ Falls back gracefully if OPENAI_API_KEY is missing or the API errors.
 import logging
 import math
 import os
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,20 @@ _MAX_MEMORY_CACHE = 2000  # max entries in process-level cache
 # Process-level in-memory cache: avoids repeated SQLite reads within the same
 # process lifecycle (e.g. scoring 100 jobs in one request).
 _memory_cache: dict[str, list[float]] = {}
+
+# Circuit breaker: after any API failure, skip retries for this many seconds.
+# Prevents cascading slow requests when the API is down or quota is exhausted.
+_API_BACKOFF_S = 60.0
+_api_unavailable_until: float = 0.0
+
+
+def _api_is_available() -> bool:
+    return time.monotonic() >= _api_unavailable_until
+
+
+def _mark_api_unavailable() -> None:
+    global _api_unavailable_until
+    _api_unavailable_until = time.monotonic() + _API_BACKOFF_S
 
 
 def clear_memory_cache() -> None:
@@ -121,7 +136,9 @@ def get_embedding(text: str, db_path: str) -> list[float] | None:
     if cached is not None:
         return cached
 
-    # Call API
+    # Call API (skip if circuit breaker is open)
+    if not _api_is_available():
+        return None
     try:
         client = openai.OpenAI()
         response = client.embeddings.create(model=MODEL, input=[normalized])
@@ -129,7 +146,8 @@ def get_embedding(text: str, db_path: str) -> list[float] | None:
         _save_to_cache(db_path, normalized, embedding)
         return embedding
     except Exception as exc:
-        logger.warning("get_embedding failed for %r: %s", text, exc)
+        _mark_api_unavailable()
+        logger.warning("get_embedding failed for %r: %s — pausing API calls for %.0fs", text, exc, _API_BACKOFF_S)
         return None
 
 
@@ -177,7 +195,9 @@ def get_embeddings_batch(
     if not misses:
         return result
 
-    # 4. Call API for remaining misses
+    # 4. Call API for remaining misses (skip if circuit breaker is open)
+    if not _api_is_available():
+        return result
     try:
         client = openai.OpenAI()
         response = client.embeddings.create(model=MODEL, input=misses)
@@ -190,6 +210,7 @@ def get_embeddings_batch(
                 _memory_cache[text] = emb
         _save_batch_to_cache(db_path, to_cache)
     except Exception as exc:
-        logger.warning("Batch embedding API call failed: %s", exc)
+        _mark_api_unavailable()
+        logger.warning("Batch embedding API call failed: %s — pausing API calls for %.0fs", exc, _API_BACKOFF_S)
 
     return result
