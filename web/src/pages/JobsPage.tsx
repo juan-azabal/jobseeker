@@ -214,7 +214,7 @@ export default function JobsPage() {
                         job={job}
                         selected={selected.has(job.job_id)}
                         onSelect={(sel) => toggleSelect(job.job_id, sel)}
-                        onClick={() => navigate(`/jobs/${job.job_id}`)}
+                        onClick={() => navigate(`/jobs/${job.job_id}`, { state: { jobIds: jobs.map((j) => j.job_id) } })}
                       />
                     ))}
                   </div>

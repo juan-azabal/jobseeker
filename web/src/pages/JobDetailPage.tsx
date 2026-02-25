@@ -84,10 +84,10 @@ function SkillChip({
   const tooltip = status === 'matched'
     ? `Matches: ${matchedTo}`
     : status === 'partial'
-      ? `Similar: ${matchedTo} (${Math.round(match.similarity * 100)}%)`
+      ? `Similar to "${matchedTo}" (${Math.round(match.similarity * 100)}%) — click to add exact skill`
       : 'Click to add to your skills';
 
-  const isClickable = status === 'none' && !!onClick;
+  const isClickable = (status === 'none' || status === 'partial') && !!onClick;
 
   return (
     <span
@@ -105,9 +105,12 @@ function SkillChip({
 interface Props {
   jobId: string;
   onBack?: () => void;
+  prevId?: string;
+  nextId?: string;
+  onNavigate?: (id: string) => void;
 }
 
-export default function JobDetailPage({ jobId, onBack }: Props) {
+export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigate }: Props) {
   const [job, setJob] = useState<JobDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -166,8 +169,7 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
             onClick={onBack}
             className="mb-8 flex items-center gap-1.5 text-xs font-medium text-zinc-600 transition-colors hover:text-zinc-200"
           >
-            <span>←</span>
-            <span>Back to jobs</span>
+            ← Back to jobs
           </button>
           <div className="flex flex-col items-center gap-3 py-20">
             <span className="text-3xl">🔍</span>
@@ -187,8 +189,7 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
             onClick={onBack}
             className="mb-8 flex items-center gap-1.5 text-xs font-medium text-zinc-600 transition-colors hover:text-zinc-200"
           >
-            <span>←</span>
-            <span>Back to jobs</span>
+            ← Back to jobs
           </button>
           <div className="flex flex-col items-center gap-3 py-20">
             <span className="text-3xl">⚠️</span>
@@ -310,13 +311,35 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-6">
       <div className="mx-auto max-w-2xl">
-        <button
-          onClick={onBack}
-          className="mb-8 flex items-center gap-1.5 text-xs font-medium text-zinc-600 transition-colors hover:text-zinc-200"
-        >
-          <span>←</span>
-          <span>Back to jobs</span>
-        </button>
+        <div className="mb-8 flex items-center justify-between">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-xs font-medium text-zinc-600 transition-colors hover:text-zinc-200"
+          >
+            <span>←</span>
+            <span>Back to jobs</span>
+          </button>
+          {(prevId || nextId) && onNavigate && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => prevId && onNavigate(prevId)}
+                disabled={!prevId}
+                className="rounded-lg border border-zinc-800 px-2.5 py-1 text-xs text-zinc-500 transition-colors hover:border-zinc-600 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Previous job"
+              >
+                ← Prev
+              </button>
+              <button
+                onClick={() => nextId && onNavigate(nextId)}
+                disabled={!nextId}
+                className="rounded-lg border border-zinc-800 px-2.5 py-1 text-xs text-zinc-500 transition-colors hover:border-zinc-600 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Next job"
+              >
+                Next →
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* ── Header ─────────────────────────────────────────────── */}
         <div className="mb-6">
@@ -517,7 +540,7 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
                             key={i}
                             match={m}
                             added={addedSkills.has(m.skill.toLowerCase())}
-                            onClick={m.status === 'none' ? () => handleAddSkill(m.skill) : undefined}
+                            onClick={m.status !== 'matched' ? () => handleAddSkill(m.skill) : undefined}
                           />
                         ))
                       : p.must_have_skills.map((s, i) => <Chip key={i} label={s} variant="skill" />)
@@ -535,7 +558,7 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
                             key={i}
                             match={m}
                             added={addedSkills.has(m.skill.toLowerCase())}
-                            onClick={m.status === 'none' ? () => handleAddSkill(m.skill) : undefined}
+                            onClick={m.status !== 'matched' ? () => handleAddSkill(m.skill) : undefined}
                           />
                         ))
                       : p.nice_to_have_skills.map((s, i) => <Chip key={i} label={s} />)
