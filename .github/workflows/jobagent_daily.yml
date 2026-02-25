@@ -115,7 +115,7 @@ jobs:
           done
 
       - name: Collect seen IDs changes
-        if: always()
+        if: success()  # only persist seen_ids after successful sync — failed syncs must re-scrape
         run: |
           mkdir -p /tmp/seen-ids-staging
           # Copy only files that were modified or created during this run
@@ -128,7 +128,7 @@ jobs:
           echo "Staged $count seen_ids file(s) for ${{ matrix.profile }}"
 
       - name: Upload seen IDs
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: seen-ids-${{ matrix.profile }}
