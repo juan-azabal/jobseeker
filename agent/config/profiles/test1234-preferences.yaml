@@ -6,6 +6,7 @@ prefilter:
   - entry level
   - entry-level
   - associate product manager
+  - APM
   - 0-2 years
   - 1-3 years
   title_must_contain_one_of:
@@ -27,6 +28,7 @@ prefilter:
   - deposit product
   - lending
   - insurance
+  - growth
   exclude_companies:
   - Gartner
   - Capterra
