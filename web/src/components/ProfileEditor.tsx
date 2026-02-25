@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DOMAIN_CHIP_ORDER, domainLabel } from '../constants/domains';
 
 const SENIORITY_OPTIONS = ['junior', 'mid', 'senior', 'staff', 'principal', 'director', 'vp', 'unknown'];
 const COMPANY_TYPE_OPTIONS = ['startup', 'scaleup', 'enterprise', 'consultancy', 'agency', 'ngo'];
@@ -237,10 +238,13 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
 
       {/* Domain weights */}
       <div>
-        <label className="block text-zinc-300 text-sm font-medium mb-2">Domain weights</label>
+        <label className="block text-zinc-300 text-sm font-medium mb-1">Domain weights</label>
+        <p className="text-zinc-500 text-xs mb-3">
+          Boost or penalise jobs by industry domain. Positive = prioritise, negative = deprioritise. The scoring engine uses these to rank jobs for you.
+        </p>
         {Object.entries(domains).map(([domain, weight]) => (
           <div key={domain} className="flex items-center gap-3 mb-2">
-            <span className="text-zinc-400 text-sm w-24 truncate">{domain}</span>
+            <span className="text-zinc-400 text-sm w-28 truncate" title={domain}>{domainLabel(domain)}</span>
             <input
               type="range"
               min={-20}
@@ -259,10 +263,22 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
             >×</button>
           </div>
         ))}
-        <div className="mt-3 flex gap-2">
+        {/* Quick-add chips for known domains not yet added */}
+        <div className="flex flex-wrap gap-1.5 mt-2 mb-3">
+          {DOMAIN_CHIP_ORDER.filter((key) => !(key in domains)).map((key) => (
+            <button
+              key={key}
+              onClick={() => { setDomains({ ...domains, [key]: 10 }); }}
+              className="rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-500 transition-colors hover:border-zinc-500 hover:text-zinc-300"
+            >
+              + {domainLabel(key)}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
           <input
             className="flex-1 rounded bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600"
-            placeholder="Add domain…"
+            placeholder="Add custom domain…"
             value={newDomain}
             onChange={(e) => setNewDomain(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addDomain()}
