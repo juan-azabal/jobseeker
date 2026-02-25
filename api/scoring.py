@@ -5,15 +5,15 @@ without RAG scores — no LLM calls, instant, free.
 """
 
 import json
-import logging
 import os
 from pathlib import Path
 
 import yaml
 
+import structlog
 from api.skill_matcher import SkillMatch, match_skills
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Maps profile domain names → parser-emitted domain names (canonical v1.3 enum).
 # Parser enum (30 values): adtech|ai_ml|automotive|biotech|climate|construction|

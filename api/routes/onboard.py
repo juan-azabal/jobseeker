@@ -1,5 +1,4 @@
 import base64
-import logging
 import os
 import tempfile
 import uuid
@@ -10,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from pydantic import BaseModel
 import yaml
 
-logger = logging.getLogger(__name__)
+import structlog
+logger = structlog.get_logger(__name__)
 
 from api.middleware.auth import get_current_user
 from api.db.queries import (

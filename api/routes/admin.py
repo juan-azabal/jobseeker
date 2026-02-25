@@ -1,7 +1,7 @@
-import logging
 import os
 
 import httpx
+import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 
@@ -12,7 +12,7 @@ from api.db.queries import (
 )
 from api.middleware.auth import get_current_admin, SESSION_COOKIE
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 

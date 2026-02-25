@@ -1,4 +1,3 @@
-import logging
 import os
 import time
 from pathlib import Path
@@ -7,10 +6,14 @@ from dotenv import load_dotenv
 load_dotenv()  # Must be before route imports — auth.py reads env vars at module level.
 # NOTE: no override=True — Railway env vars must always take precedence over any .env file.
 
+import structlog
+from asgi_correlation_id import CorrelationIdMiddleware, correlation_id
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
+
+from api.logging_config import configure_logging
 from api.db.init import init_db
 from api.routes.jobs import router as jobs_router
 from api.routes.auth import router as auth_router
@@ -18,17 +21,21 @@ from api.routes.onboard import router as onboard_router
 from api.routes.ingest import router as ingest_router
 from api.routes.admin import router as admin_router
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+configure_logging()
+logger = structlog.get_logger(__name__)
 
-SLOW_REQUEST_THRESHOLD_S = 2.0  # log a WARNING for any request taking longer than this
+SLOW_REQUEST_THRESHOLD_MS = 2000.0
 
 # country_converter logs a WARNING for every city name it can't resolve to a country
 # (e.g. "barcelona", "madrid") — expected behaviour for city strings, not an error.
-# Silence at WARNING level so our own logs stay readable.
-logging.getLogger("country_converter.country_converter").setLevel(logging.ERROR)
+# Silence handled inside configure_logging().
 
 app = FastAPI(title="JobSeeker")
+
+# Middleware ordering (first added = outermost per Starlette/FastAPI behaviour):
+# 1. SessionMiddleware — reads oauth_state cookie
+# 2. CorrelationIdMiddleware — generates UUID per request, sets X-Request-ID header
+# 3. structlog_middleware — binds correlation_id + user_id to contextvars, logs request
 
 app.add_middleware(
     SessionMiddleware,
@@ -36,25 +43,33 @@ app.add_middleware(
     session_cookie="oauth_state",  # rename to avoid clashing with our auth cookie "jsk"
 )
 
+app.add_middleware(CorrelationIdMiddleware)
+
 
 @app.middleware("http")
-async def log_requests(request: Request, call_next):
-    """Log every request with method, path, status, and duration.
+async def structlog_middleware(request: Request, call_next):
+    """Log every request with structured context.
 
-    Emits WARNING for requests exceeding SLOW_REQUEST_THRESHOLD_S so slow
-    endpoints are visible in logs without grepping through noise.
+    Binds correlation_id to structlog contextvars so all downstream log calls
+    automatically include it. user_id is bound inside get_current_user() for
+    protected routes and is included here via contextvars.
     """
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(
+        correlation_id=correlation_id.get(""),
+    )
+
     start = time.perf_counter()
     response = await call_next(request)
-    elapsed = time.perf_counter() - start
-    level = logging.WARNING if elapsed >= SLOW_REQUEST_THRESHOLD_S else logging.DEBUG
-    logger.log(
-        level,
-        "%s %s → %d  (%.3fs)",
-        request.method,
-        request.url.path,
-        response.status_code,
-        elapsed,
+    elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
+
+    log_fn = logger.warning if elapsed_ms >= SLOW_REQUEST_THRESHOLD_MS else logger.info
+    log_fn(
+        "HTTP request",
+        method=request.method,
+        path=request.url.path,
+        status_code=response.status_code,
+        duration_ms=elapsed_ms,
     )
     return response
 
@@ -63,10 +78,8 @@ async def log_requests(request: Request, call_next):
 def on_startup():
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
     db_exists = Path(db_path).exists()
-    logger.info("=== JobSeeker starting up ===")
-    logger.info("DB_PATH=%s  exists=%s", db_path, db_exists)
+    logger.info("JobSeeker starting up", db_path=db_path, db_exists=db_exists)
 
-    # Warn about any critical env vars that are missing
     critical_vars = [
         "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
         "INGEST_API_KEY",
@@ -74,12 +87,12 @@ def on_startup():
     ]
     missing = [v for v in critical_vars if not os.environ.get(v)]
     if missing:
-        logger.warning("Missing critical env vars: %s", missing)
+        logger.warning("Missing critical env vars", missing=missing)
     else:
         logger.info("All critical env vars present")
 
     init_db(db_path)
-    logger.info("DB ready at %s", db_path)
+    logger.info("DB ready", db_path=db_path)
 
 
 # --- API routes (must be registered before the SPA catch-all) ---

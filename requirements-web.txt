@@ -20,6 +20,8 @@ openai==2.21.0
 
 # Numeric (cosine similarity for skill matching)
 numpy>=1.26
+structlog>=24.0
+asgi-correlation-id>=4.0
 
 # CV builder
 python-docx>=1.1.0

@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import re
 import tempfile
@@ -7,7 +6,8 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated
 
-logger = logging.getLogger(__name__)
+import structlog
+logger = structlog.get_logger(__name__)
 
 import yaml
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query

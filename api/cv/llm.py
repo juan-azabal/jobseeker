@@ -9,6 +9,10 @@ Provider-agnostic interface configured via environment variables:
 import os
 import re
 
+import structlog
+
+logger = structlog.get_logger(__name__)
+
 _DEFAULTS = {
     "anthropic": "claude-sonnet-4-5-20250929",
     "openai": "gpt-4o",

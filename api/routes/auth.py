@@ -1,10 +1,10 @@
-import logging
 import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
+import structlog
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -12,9 +12,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from api.db.queries import create_session, delete_session, get_session, get_user_by_google_id, upsert_user, set_user_admin
 from api.middleware.auth import get_current_user
 
-logger = logging.getLogger(__name__)
-
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -70,11 +68,14 @@ async def callback(request: Request):
     if user.get("email") in admin_emails and not user.get("is_admin"):
         set_user_admin(_db_path(), user["id"], True)
         user = {**user, "is_admin": 1}
-        logger.info("Admin promoted on login: user_id=%d email=%s", user["id"], email)
+        logger.info("Admin promoted on login", user_id=user["id"], email=email)
 
     logger.info(
-        "Login: user_id=%d email=%s profile_id=%r is_admin=%s",
-        user["id"], email, user.get("profile_id"), bool(user.get("is_admin")),
+        "Login",
+        user_id=user["id"],
+        email=email,
+        profile_id=user.get("profile_id"),
+        is_admin=bool(user.get("is_admin")),
     )
 
     session_token = secrets.token_urlsafe(32)
