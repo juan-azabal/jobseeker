@@ -26,6 +26,11 @@ from user_config import load_profile, list_profiles, is_profile_active, resolve_
 
 SEEN_IDS_PATH = "config/seen_ids/juan.txt"  # fallback only; main() always passes profile-derived path
 
+# Hard cap on gpt-4o scoring per profile per run.
+# Prevents runaway costs when a new profile has no seen_ids and encounters hundreds of unseen jobs.
+# Increase only deliberately — each additional job costs ~$0.04.
+MAX_SCORE_PER_RUN = 75
+
 
 def _append_seen_ids(jobs, path=SEEN_IDS_PATH):
     """Append job IDs from this run to seen_ids.txt so future runs skip them."""
@@ -685,6 +690,12 @@ def main():
     new_jobs = jobs_with_parse + jobs_needing_parse
 
     # Step 5: RAG score new jobs (and re-scored ones)
+    # Apply hard cap to prevent runaway costs (e.g. new profile with no seen_ids).
+    if len(new_jobs) > MAX_SCORE_PER_RUN:
+        print(f"\n⚠️  {len(new_jobs)} jobs to score — capping at {MAX_SCORE_PER_RUN} to limit cost.")
+        print(f"   Remaining {len(new_jobs) - MAX_SCORE_PER_RUN} jobs will be scored in future runs.")
+        new_jobs = new_jobs[:MAX_SCORE_PER_RUN]
+
     n_scored = 0
     if new_jobs and not skip_scoring:
         try:
