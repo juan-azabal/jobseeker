@@ -8,6 +8,11 @@ on:
         description: 'Profile to run (leave empty for all active)'
         required: false
         default: ''
+      notify:
+        description: 'Send email digest to users'
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   # ── Job 1: Resolve active profiles → JSON array for matrix ──────────────────
@@ -65,7 +70,17 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        run: python main.py --notify --profile "${{ matrix.profile }}"
+          # Scheduled runs always notify; manual dispatch only if notify input is true
+          SHOULD_NOTIFY: ${{ github.event_name == 'schedule' || github.event.inputs.notify == 'true' }}
+        run: |
+          notify_flag=""
+          if [ "$SHOULD_NOTIFY" = "true" ]; then
+            notify_flag="--notify"
+            echo "Email notifications: ON"
+          else
+            echo "Email notifications: OFF (manual run)"
+          fi
+          python main.py $notify_flag --profile "${{ matrix.profile }}"
 
       - name: Sync results to Railway
         if: success()
