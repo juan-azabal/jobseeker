@@ -25,7 +25,7 @@ from api.geo import (
     build_region_pattern, matches_region, is_pure_timezone,
 )
 from api.middleware.auth import get_current_user
-from api.scoring import compute_tier, heuristic_score, load_profile_data
+from api.scoring import compute_tier, heuristic_score, load_profile_data, precompute_skill_lookup
 from api.skill_matcher import match_skills
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -125,8 +125,8 @@ def _score_and_tier_jobs(
 
     Also applies relocation penalty and assigns tier. Sorts by score DESC.
     """
+    # Pre-parse all jobs and collect unique skills for batch semantic matching
     for job in jobs:
-        # Parse the parsed JSON blob if it's still a string
         parsed = job.get("parsed")
         if isinstance(parsed, str):
             try:
@@ -137,6 +137,22 @@ def _score_and_tier_jobs(
         else:
             job["_parsed_dict"] = parsed or {}
 
+    # Pre-compute skill lookup: one match_skills call for all unique job skills
+    skill_lookup = None
+    if profile and profile.get("skills"):
+        all_unique_skills: set[str] = set()
+        for job in jobs:
+            p = job["_parsed_dict"]
+            for key in ("must_have_skills", "nice_to_have_skills", "technical_stack"):
+                for s in (p.get(key) or []):
+                    if isinstance(s, str) and s.strip():
+                        all_unique_skills.add(s.strip())
+        if all_unique_skills:
+            skill_lookup = precompute_skill_lookup(
+                profile["skills"], list(all_unique_skills), _db_path(),
+            )
+
+    for job in jobs:
         # Compute relocation
         is_reloc = _compute_reloc(job, home_locations, home_regions) if home_locations else False
         job["geo_restricted"] = is_reloc
@@ -145,9 +161,10 @@ def _score_and_tier_jobs(
         if job.get("ujs_score") is not None:
             score = job["ujs_score"]
         elif profile:
-            # db_path intentionally omitted → substring fallback (fast, no API calls).
-            # Semantic skill matching is reserved for the job detail endpoint only.
-            score = heuristic_score(profile, job["_parsed_dict"], job, is_reloc)
+            score = heuristic_score(
+                profile, job["_parsed_dict"], job, is_reloc,
+                db_path=_db_path(), skill_lookup=skill_lookup,
+            )
         else:
             score = 0
 
