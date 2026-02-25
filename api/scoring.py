@@ -16,12 +16,24 @@ from api.skill_matcher import SkillMatch, match_skills
 logger = logging.getLogger(__name__)
 
 # Maps profile domain names → parser-emitted domain names.
-# Parser enum: adtech|data|ml|fintech|saas|ecommerce|healthcare|other
+# Parser enum: adtech|data|ml|fintech|saas|ecommerce|healthcare|game|edtech|climate|
+#              marketplace|platform|growth|devtools|infra|media|security|logistics|
+#              hr_tech|legal_tech|other
 _DOMAIN_ALIASES: dict[str, str] = {
     "ia": "ml",
     "ai": "ml",
     "llm": "ml",
     "martech": "adtech",
+    # New aliases for expanded enum
+    "gaming": "game",
+    "ed-tech": "edtech",
+    "greentech": "climate",
+    "cleantech": "climate",
+    "developer-tools": "devtools",
+    "devsecops": "security",
+    "cybersecurity": "security",
+    "hrtech": "hr_tech",
+    "legaltech": "legal_tech",
 }
 
 # Seniority levels ordered from most junior to most senior
@@ -84,6 +96,63 @@ _DOMAIN_KEYWORDS = {
     "saas": [
         "saas", "subscription", "b2b platform", "developer tool",
         "devops", "observability", "monitoring", "cloud platform",
+    ],
+    # Expanded enum (Phase 13.2)
+    "game": [
+        "video game", "gaming", "game engine", "game studio", "mobile game",
+        "multiplayer", "esports", "player engagement", "game development",
+    ],
+    "edtech": [
+        "education technology", "e-learning", "online course", "learning platform",
+        "ed tech", "curriculum", "lms", "learning management",
+    ],
+    "climate": [
+        "carbon", "sustainability", "renewable energy", "clean energy",
+        "climate tech", "green tech", "carbon offset", "net zero",
+        "carbon footprint", "emissions",
+    ],
+    "marketplace": [
+        "marketplace", "two-sided marketplace", "buyer seller",
+        "vendor management", "listings platform", "seller platform",
+    ],
+    "platform": [
+        "platform engineering", "infrastructure platform", "developer platform",
+        "platform team", "internal platform",
+    ],
+    "growth": [
+        "user acquisition", "product-led growth", "plg", "monetization",
+        "conversion rate", "retention", "growth hacking", "funnel optimization",
+    ],
+    "devtools": [
+        "developer tools", "developer experience", "devex", "sdk",
+        "api platform", "cli tools", "developer productivity", "ide",
+    ],
+    "infra": [
+        "infrastructure", "infrastructure as code", "kubernetes",
+        "cloud infrastructure", "reliability", "sre", "site reliability",
+        "devops platform", "platform infrastructure",
+    ],
+    "media": [
+        "media", "content platform", "publishing", "streaming",
+        "broadcast", "editorial", "digital media",
+    ],
+    "security": [
+        "cybersecurity", "security platform", "identity management",
+        "authentication", "authorization", "threat detection",
+        "zero trust", "siem", "vulnerability management",
+    ],
+    "logistics": [
+        "logistics", "supply chain", "last mile", "shipping",
+        "fulfillment", "warehouse management", "fleet management",
+    ],
+    "hr_tech": [
+        "human resources", "talent management", "recruitment platform",
+        "applicant tracking", "hris", "payroll", "people ops",
+        "workforce management",
+    ],
+    "legal_tech": [
+        "legal tech", "legal ops", "contract management",
+        "compliance platform", "legal automation", "e-discovery",
     ],
 }
 
