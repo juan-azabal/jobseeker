@@ -157,7 +157,7 @@ def load_seen_ids(path="config/seen_ids.txt"):
         return {line.strip() for line in f if line.strip()}
 
 
-def prefilter_jobs(jobs, config_path="config/preferences.yaml", applied_path="config/applied.yaml", seen_path="config/seen_ids.txt", home_locations=None):
+def prefilter_jobs(jobs, config_path, applied_path, seen_path, home_locations=None):
     prefs = load_preferences(config_path)
     pf = prefs["prefilter"]
     applied = load_applied(applied_path)

@@ -38,10 +38,10 @@ class TestJuanProfile:
         assert "EU or remote" in self.rubric
 
     def test_contains_core_domains(self):
-        assert "adtech, data, ml" in self.rubric
+        assert "data, adtech" in self.rubric
 
-    def test_contains_adjacent_saas(self):
-        assert "Adjacent domains (saas)" in self.rubric
+    def test_contains_adjacent_domains(self):
+        assert "Adjacent domains (saas, martech, ia, llm)" in self.rubric
 
     def test_no_hardcoded_pm_abbreviation(self):
         # The rubric should say "Product Manager", not just "PM" as a role type
