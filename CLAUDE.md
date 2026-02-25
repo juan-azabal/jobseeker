@@ -29,6 +29,9 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `api/db/` — SQLite init, migrations, queries
   - `api/ingest.py` — pipeline output → SQLite
   - `api/scoring.py` — per-user heuristic scoring (ported from agent)
+  - `api/geo.py` — geographic region utilities (API-side copy of agent/geo.py)
+  - `api/onboard_utils.py` — CV parsing + profile YAML generation (extracted from agent/onboard.py)
+  - `api/prompts/` — LLM prompts for API-side features (onboard-extraction.md)
   - `api/cv/` — CV generation pipeline
 - Frontend: `web/`
   - `web/src/components/` — React components
@@ -48,7 +51,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 
 ## Conventions
 - Commits: conventional (`type: description`)
-- Backend imports agent modules via sys.path (JOBAGENT_DIR=agent)
+- Backend has zero import dependency on agent/ (api/geo.py + api/onboard_utils.py are self-contained copies)
 - API routes: one file per resource in `api/routes/`
 - SQL: raw sqlite3, migrations in `api/db/migrations/` as numbered .sql files
 - Frontend: functional components, React Context for global state, TypeScript strict
@@ -130,7 +133,7 @@ Phase 10 — Completed
 - Test files excluded from tsconfig.app.json to avoid TS errors on `global`
 - Auth: Google OAuth via authlib, session token in HTTP-only cookie, `get_current_user` FastAPI dependency on jobs router
 - LoginPage uses `<a href="/api/auth/login">` (not a button) — tests must use `getByRole('link', ...)`
-- Agent imported via sys.path — `_load_jobagent()` called at module load adds `JOBAGENT_DIR` (default `agent`) to sys.path
+- API decoupled from agent: `api/geo.py` and `api/onboard_utils.py` are self-contained copies — no sys.path hacks, no `_load_jobagent()`. If shared logic changes, update both copies. `api/prompts/onboard-extraction.md` is also a copy of `agent/prompts/onboard-extraction.md`.
 - Run backend tests from project root (`~/Proyectos/jobsearch/`), not from `web/`
 - openai added to requirements.txt (needed because jobagent/onboard.py imports it at module level)
 - Users with `profile_id: null` are redirected to `/onboard`; test mocks must include `profile_id: 'user'`

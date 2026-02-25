@@ -225,12 +225,8 @@ def load_profile_data(profile_id: str | None) -> dict | None:
     home_locations = [loc.lower() for loc in user_block.get("home_locations", [])]
 
     # Auto-derive home regions via country-converter
-    import sys
-    agent_dir = str(Path(jobagent_dir).resolve())
-    if agent_dir not in sys.path:
-        sys.path.insert(0, agent_dir)
     try:
-        from geo import derive_home_regions
+        from api.geo import derive_home_regions
         home_regions = derive_home_regions(home_locations)
     except Exception as exc:
         logger.warning("derive_home_regions failed for profile_id=%r: %s", profile_id, exc)
