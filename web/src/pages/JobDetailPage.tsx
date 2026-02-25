@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import ScoreBreakdown from '../components/ScoreBreakdown';
-import { type JobDetail } from '../types/job';
+import { type JobDetail, type SkillMatchItem } from '../types/job';
 
 const TIER_SCORE_COLOR: Record<string, string> = {
   A: 'text-emerald-400',
@@ -63,6 +63,45 @@ function Chip({ label, variant = 'default' }: { label: string; variant?: 'defaul
   return <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>;
 }
 
+function SkillChip({
+  match,
+  onClick,
+  added,
+}: {
+  match: SkillMatchItem;
+  onClick?: () => void;
+  added?: boolean;
+}) {
+  const status = added ? 'matched' : match.status;
+  const matchedTo = added ? 'Just added' : match.matched_to;
+
+  const cls = {
+    matched: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+    partial: 'border-amber-400/30 bg-amber-400/10 text-amber-300',
+    none: 'bg-zinc-800/80 text-zinc-300 border-zinc-700',
+  }[status];
+
+  const tooltip = status === 'matched'
+    ? `Matches: ${matchedTo}`
+    : status === 'partial'
+      ? `Similar: ${matchedTo} (${Math.round(match.similarity * 100)}%)`
+      : 'Click to add to your skills';
+
+  const isClickable = status === 'none' && !!onClick;
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs font-medium transition-colors ${cls} ${isClickable ? 'cursor-pointer hover:border-violet-500/40 hover:text-violet-300' : ''}`}
+      title={tooltip}
+      role={isClickable ? 'button' : undefined}
+      onClick={isClickable ? onClick : undefined}
+    >
+      {match.skill}
+      {isClickable && <span className="text-zinc-600">+</span>}
+    </span>
+  );
+}
+
 interface Props {
   jobId: string;
   onBack?: () => void;
@@ -77,6 +116,7 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
   const [cvLoading, setCvLoading] = useState(false);
   const [cvSuccess, setCvSuccess] = useState(false);
   const [cvError, setCvError] = useState<string | null>(null);
+  const [addedSkills, setAddedSkills] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setLoading(true);
@@ -220,6 +260,36 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
       setCvError('Something went wrong');
     } finally {
       setCvLoading(false);
+    }
+  };
+
+  const handleAddSkill = async (skill: string) => {
+    const key = skill.toLowerCase();
+    if (addedSkills.has(key)) return;
+
+    // Optimistic update
+    setAddedSkills((prev) => new Set(prev).add(key));
+
+    try {
+      const resp = await fetch('/api/onboard/profile/skills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skill }),
+      });
+      if (!resp.ok) {
+        // Revert on error
+        setAddedSkills((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    } catch {
+      setAddedSkills((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     }
   };
 
@@ -424,49 +494,66 @@ export default function JobDetailPage({ jobId, onBack }: Props) {
             </>
           )}
 
-          {/* ── Heuristic-only: skills & requirements ─────────────── */}
-          {!isRAG && (
-            <>
-              {(p?.must_have_skills?.length || p?.nice_to_have_skills?.length) && (
-                <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-                  <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
-                    Skills
-                  </h2>
-                  {p?.must_have_skills && p.must_have_skills.length > 0 && (
-                    <div className="mb-3">
-                      <p className="mb-1.5 text-xs text-zinc-600">Required</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {p.must_have_skills.map((s, i) => <Chip key={i} label={s} variant="skill" />)}
-                      </div>
-                    </div>
-                  )}
-                  {p?.nice_to_have_skills && p.nice_to_have_skills.length > 0 && (
-                    <div>
-                      <p className="mb-1.5 text-xs text-zinc-600">Nice to have</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {p.nice_to_have_skills.map((s, i) => <Chip key={i} label={s} />)}
-                      </div>
-                    </div>
-                  )}
-                </section>
+          {/* ── Skills (all jobs) ──────────────────────────────────── */}
+          {(p?.must_have_skills?.length || p?.nice_to_have_skills?.length) && (
+            <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                Skills
+              </h2>
+              {p?.must_have_skills && p.must_have_skills.length > 0 && (
+                <div className="mb-3">
+                  <p className="mb-1.5 text-xs text-zinc-600">Required</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {job.skill_matches
+                      ? job.skill_matches.must_have.map((m, i) => (
+                          <SkillChip
+                            key={i}
+                            match={m}
+                            added={addedSkills.has(m.skill.toLowerCase())}
+                            onClick={m.status === 'none' ? () => handleAddSkill(m.skill) : undefined}
+                          />
+                        ))
+                      : p.must_have_skills.map((s, i) => <Chip key={i} label={s} variant="skill" />)
+                    }
+                  </div>
+                </div>
               )}
+              {p?.nice_to_have_skills && p.nice_to_have_skills.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs text-zinc-600">Nice to have</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {job.skill_matches
+                      ? job.skill_matches.nice_to_have.map((m, i) => (
+                          <SkillChip
+                            key={i}
+                            match={m}
+                            added={addedSkills.has(m.skill.toLowerCase())}
+                            onClick={m.status === 'none' ? () => handleAddSkill(m.skill) : undefined}
+                          />
+                        ))
+                      : p.nice_to_have_skills.map((s, i) => <Chip key={i} label={s} />)
+                    }
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
 
-              {p?.experience_requirements && p.experience_requirements.length > 0 && (
-                <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-                  <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
-                    Requirements
-                  </h2>
-                  <ul className="space-y-1.5">
-                    {p.experience_requirements.map((r, i) => (
-                      <li key={i} className="flex gap-2 text-sm text-zinc-400">
-                        <span className="mt-0.5 shrink-0 text-zinc-700">·</span>
-                        <span>{r}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-            </>
+          {/* ── Heuristic-only: requirements ─────────────────────── */}
+          {!isRAG && p?.experience_requirements && p.experience_requirements.length > 0 && (
+            <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                Requirements
+              </h2>
+              <ul className="space-y-1.5">
+                {p.experience_requirements.map((r, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-zinc-400">
+                    <span className="mt-0.5 shrink-0 text-zinc-700">·</span>
+                    <span>{r}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
 
           {/* ── Red flags (always, if any) ─────────────────────────── */}
