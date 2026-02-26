@@ -46,6 +46,7 @@ class TestProfileSearchesPath:
 
     def test_juan_profile_has_searches_path(self):
         from user_config import load_profile
+
         profile = load_profile("juan")
         searches_path = profile.get("searches")
         assert searches_path is not None
