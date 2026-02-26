@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
+import { identifyUser, resetPostHog } from '../analytics';
 
 interface User {
   id: number;
@@ -39,7 +40,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchUser = () =>
     fetch('/api/auth/me')
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => setUser(data));
+      .then((data) => {
+        setUser(data);
+        if (data) identifyUser(data.id, data.email, data.name);
+      });
 
   useEffect(() => {
     fetchUser().finally(() => setIsLoading(false));
@@ -48,6 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     setUser(null);
+    resetPostHog();
   };
 
   const refreshUser = async () => {
