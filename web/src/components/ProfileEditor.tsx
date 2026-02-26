@@ -4,6 +4,12 @@ import { DOMAIN_CHIP_ORDER, domainLabel } from '../constants/domains';
 const SENIORITY_OPTIONS = ['junior', 'mid', 'senior', 'staff', 'principal', 'director', 'vp', 'unknown'];
 const COMPANY_TYPE_OPTIONS = ['startup', 'scaleup', 'enterprise', 'consultancy', 'agency', 'ngo'];
 const COMMON_COUNTRIES = ['spain', 'germany', 'netherlands', 'france', 'uk', 'portugal', 'remote'];
+const ROLE_FUNCTION_OPTIONS = ['product', 'engineering', 'design', 'data', 'marketing', 'sales', 'ops', 'support', 'other'];
+const ROLE_FUNCTION_LABELS: Record<string, string> = {
+  product: 'Product (PM/PO)', engineering: 'Engineering', design: 'Design/UX',
+  data: 'Data/Analytics', marketing: 'Marketing', sales: 'Sales', ops: 'Operations',
+  support: 'Support/Success', other: 'Other',
+};
 
 interface Profile {
   name: string;
@@ -21,6 +27,8 @@ interface Profile {
   exclude_companies: string[];
   salary_min?: number;
   location_preference?: string;
+  role_type?: string;
+  role_function?: string;
 }
 
 interface Props {
@@ -52,6 +60,8 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
   const [newSeniority, setNewSeniority] = useState('');
   const [newCountry, setNewCountry] = useState('');
   const [newCompanyType, setNewCompanyType] = useState('');
+  const [roleType, setRoleType] = useState(profile.role_type ?? '');
+  const [roleFunction, setRoleFunction] = useState(profile.role_function ?? '');
 
   const handleSave = async () => {
     setError(null);
@@ -65,7 +75,7 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cv_markdown: cvMarkdown,
-          profile: { ...profile, name, skills, home_locations: locations, domains, seniority_weights: seniorityWeights, country_weights: countryWeights, company_type_weights: companyTypeWeights },
+          profile: { ...profile, name, skills, home_locations: locations, domains, seniority_weights: seniorityWeights, country_weights: countryWeights, company_type_weights: companyTypeWeights, role_type: roleType || undefined, role_function: roleFunction || undefined },
           salary_min: salaryMin,
           location_preference: locationPref,
         }),
@@ -85,6 +95,8 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
           skills,
           salary_min: salaryMin,
           location_preference: locationPref,
+          ...(roleType ? { role_type: roleType } : {}),
+          ...(roleFunction ? { role_function: roleFunction } : {}),
         }),
       });
     }
@@ -177,6 +189,34 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
+      </div>
+
+      {/* Role */}
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <label className="block text-zinc-300 text-sm font-medium mb-1">Role title</label>
+          <input
+            className="w-full bg-zinc-800 text-white rounded px-3 py-2 text-sm"
+            value={roleType}
+            placeholder="e.g. Product Manager"
+            onChange={(e) => setRoleType(e.target.value)}
+          />
+        </div>
+        <div className="flex-1">
+          <label className="block text-zinc-300 text-sm font-medium mb-1" htmlFor="role-function-select">Role function</label>
+          <select
+            id="role-function-select"
+            aria-label="Role function"
+            className="w-full bg-zinc-800 text-white rounded px-3 py-2 text-sm"
+            value={roleFunction}
+            onChange={(e) => setRoleFunction(e.target.value)}
+          >
+            <option value="">— not set —</option>
+            {ROLE_FUNCTION_OPTIONS.map((rf) => (
+              <option key={rf} value={rf}>{ROLE_FUNCTION_LABELS[rf] ?? rf}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Seniority weights */}

@@ -55,6 +55,29 @@ test('calls save API and triggers onSaved', async () => {
   await waitFor(() => expect(onSaved).toHaveBeenCalled());
 });
 
+test('renders role_function dropdown and role_type input', () => {
+  const profileWithRoles = {
+    ...MOCK_PROFILE,
+    role_type: 'Product Manager',
+    role_function: 'product',
+  };
+  render(
+    <MemoryRouter>
+      <ProfileEditor
+        profile={profileWithRoles}
+        cvMarkdown="# Alice"
+        onSaved={() => {}}
+      />
+    </MemoryRouter>
+  );
+  // role_type text input should exist
+  expect(screen.getByDisplayValue('Product Manager')).toBeInTheDocument();
+  // role_function dropdown should render (combobox)
+  const dropdown = screen.getByRole('combobox', { name: /role function/i });
+  expect(dropdown).toBeInTheDocument();
+  expect((dropdown as HTMLSelectElement).value).toBe('product');
+});
+
 test('shows error when save fails', async () => {
   global.fetch = vi.fn().mockResolvedValue({
     ok: false,
