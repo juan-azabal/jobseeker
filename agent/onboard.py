@@ -315,6 +315,8 @@ def _build_profile_yaml(
         "target": {
             "level": extracted["target_level"],
             "track": extracted["track"],
+            **({"role_type": extracted["role_type"]} if extracted.get("role_type") else {}),
+            **({"role_function": extracted["role_function"]} if extracted.get("role_function") else {}),
             "domains": extracted.get("domains", {}),
         },
         "scoring": {

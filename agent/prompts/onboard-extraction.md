@@ -10,6 +10,8 @@ Return ONLY valid JSON, no preamble, no markdown fences, no explanation. The JSO
   "current_level": "senior",
   "track": "ic",
   "target_level": "principal",
+  "role_type": "Product Manager",
+  "role_function": "product",
   "domains": {"adtech": 15, "data": 12, "saas": 5},
   "skills": ["python", "sql", "kafka", "snowflake", "a/b-testing", "stakeholder-management"],
   "exclude_companies": ["Acme Corp", "Previous Employer"]
@@ -63,6 +65,19 @@ skills: Extract all technical and professional skills. Include:
   - Soft skills that are PM-relevant (stakeholder-management, cross-functional, etc.)
   Use lowercase. Hyphenate multi-word skills (a/b-testing, data-platform, real-time). Deduplicate.
 
+role_type: The person's current job title verbatim (e.g. "Product Manager", "Head of Product", "Director of Product"). Use null if unclear.
+
+role_function: Classify the primary function of the most recent role. Use one of: product|engineering|design|data|marketing|sales|ops|support|other.
+  - product: Product Manager, Product Owner, Program Manager, Head of Product, CPO
+  - engineering: Software Engineer, Backend/Frontend/Full-stack/Mobile/DevOps/SRE/Platform/Infrastructure Engineer, CTO, VP Engineering, Engineering Manager
+  - design: UX Designer, UI Designer, Product Designer, UX Researcher, Design Manager
+  - data: Data Analyst, Data Scientist, Data Engineer, ML Engineer, Analytics Engineer, BI Analyst
+  - marketing: Marketing Manager, Product Marketing Manager, Growth Manager, CMO
+  - sales: Sales Manager, Account Executive, Business Development, VP Sales
+  - ops: Operations Manager, COO, Project Manager, Scrum Master, Program Manager (non-product)
+  - support: Customer Success, Customer Support, Technical Support
+  - other: anything not clearly in the above categories
+
 exclude_companies: Every company listed in the work history. The user should not see job ads for former employers.
 
 Example (do not copy verbatim, use as format reference only):
@@ -83,6 +98,8 @@ Output:
   "current_level": "senior",
   "track": "ic",
   "target_level": "principal",
+  "role_type": "Senior PM",
+  "role_function": "product",
   "domains": {"adtech": 15, "fintech": 10, "payments": 8},
   "skills": ["sql", "python", "kafka", "a/b-testing", "stakeholder-management", "programmatic", "fraud"],
   "exclude_companies": ["AdTech Corp", "Fintech Startup"]
