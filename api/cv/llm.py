@@ -22,6 +22,12 @@ _DEFAULTS = {
     "openai": "gpt-4o",
 }
 
+# Module-level client singletons — created on first call, reused for all subsequent CV
+# generation requests.  Avoids the overhead of constructing a new PostHog AI wrapper
+# (which calls posthog.setup() internally) on every generate_cv() invocation.
+_anthropic_client = None
+_openai_client = None
+
 
 def strip_analysis(text: str) -> str:
     """Strip the <analysis>...</analysis> chain-of-thought block from LLM output.
@@ -81,6 +87,7 @@ def _call_anthropic(
     model_override: str,
     distinct_id: str | None,
 ) -> str:
+    global _anthropic_client
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise RuntimeError(
@@ -91,8 +98,9 @@ def _call_anthropic(
     from posthog.ai.anthropic import Anthropic  # noqa: PLC0415
 
     model = model_override or _DEFAULTS["anthropic"]
-    client = Anthropic(api_key=api_key)
-    response = client.messages.create(
+    if _anthropic_client is None:
+        _anthropic_client = Anthropic(api_key=api_key)
+    response = _anthropic_client.messages.create(
         model=model,
         max_tokens=4096,
         system=system_prompt,
@@ -109,6 +117,7 @@ def _call_openai(
     model_override: str,
     distinct_id: str | None,
 ) -> str:
+    global _openai_client
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
         raise RuntimeError(
@@ -119,8 +128,9 @@ def _call_openai(
     from posthog.ai.openai import OpenAI  # noqa: PLC0415
 
     model = model_override or _DEFAULTS["openai"]
-    client = OpenAI(api_key=api_key)
-    response = client.chat.completions.create(
+    if _openai_client is None:
+        _openai_client = OpenAI(api_key=api_key)
+    response = _openai_client.chat.completions.create(
         model=model,
         max_tokens=4096,
         messages=[

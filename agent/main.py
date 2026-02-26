@@ -46,10 +46,17 @@ def _capture(profile_id: str, event: str, props: dict) -> None:
     try:
         if _ph_client is None:
             from posthog import Posthog  # noqa: PLC0415
-            _ph_client = Posthog(
-                key,
-                host=os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com"),
-            )
+            host = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com")
+            _ph_client = Posthog(key, host=host)
+            # Also configure the module-level proxy so that posthog.ai wrappers
+            # (used in parser.py / scorer.py) can find posthog.default_client.
+            # Uses the deprecated proxy setter — intentional, no better alternative.
+            try:
+                import posthog as _phm  # noqa: PLC0415
+                _phm.api_key = key
+                _phm.host = host
+            except Exception:
+                pass
         _ph_client.capture(profile_id, event, props)
     except Exception:
         pass
@@ -900,6 +907,9 @@ def main():
 
     if not jobs:
         print("\nNo jobs found. Check your search config.")
+        _d = int(time.time() - start_time)
+        logger.info("pipeline_complete", profile_id=profile_id, mode=mode, duration_s=_d, status="no_jobs", n_parsed=0, n_scored=0)
+        _capture(profile_id, "agent_pipeline_complete", {"profile_id": profile_id, "mode": mode, "duration_s": _d, "status": "no_jobs", "n_parsed": 0, "n_scored": 0})
         return
 
     # Step 2: Pre-filter (always runs on all jobs — applies latest applied.yaml/preferences.yaml)
@@ -914,6 +924,9 @@ def main():
 
     if not passed:
         print("\nAll jobs filtered out. Loosen your preferences.")
+        _d = int(time.time() - start_time)
+        logger.info("pipeline_complete", profile_id=profile_id, mode=mode, duration_s=_d, status="all_filtered", n_parsed=0, n_scored=0)
+        _capture(profile_id, "agent_pipeline_complete", {"profile_id": profile_id, "mode": mode, "duration_s": _d, "status": "all_filtered", "n_parsed": 0, "n_scored": 0})
         return
 
     # Step 3: Load cache (or start fresh if --refresh)
@@ -1053,6 +1066,7 @@ def main():
     _capture(profile_id, "agent_pipeline_complete", {
         "profile_id": profile_id,
         "mode": mode,
+        "status": "success",
         "duration_s": duration_s,
         "cost_usd": cost_usd,
         "total_jobs": len(all_parsed),
