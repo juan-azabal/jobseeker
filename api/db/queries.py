@@ -44,7 +44,8 @@ def get_jobs(
 ) -> list[dict]:
     """Fetch jobs with per-user scores (if available) and user status.
 
-    Returns raw job data + ujs_score/ujs_tier/ujs_scored (nullable).
+    Returns raw job data + ujs_score/ujs_tier/ujs_scored/ujs_technical_grade/
+    ujs_profile_grade/ujs_scored_v2 (all nullable).
     Caller is responsible for heuristic fallback and tier filtering.
     """
     con = _connect(db_path)
@@ -70,9 +71,12 @@ def get_jobs(
                 j.job_id, j.title, j.company, j.location, j.location_type,
                 j.domain, j.parsed, j.first_seen, j.url,
                 json_extract(j.parsed, '$.remote_restriction') AS remote_restriction,
-                ujs.score  AS ujs_score,
-                ujs.tier   AS ujs_tier,
-                ujs.scored AS ujs_scored,
+                ujs.score           AS ujs_score,
+                ujs.tier            AS ujs_tier,
+                ujs.scored          AS ujs_scored,
+                ujs.technical_grade AS ujs_technical_grade,
+                ujs.profile_grade   AS ujs_profile_grade,
+                ujs.scored_v2       AS ujs_scored_v2,
                 ROW_NUMBER() OVER (
                     PARTITION BY j.company, LOWER(TRIM(j.title))
                     ORDER BY COALESCE(ujs.score, 0) DESC
@@ -97,6 +101,7 @@ def get_jobs(
             r.domain, r.parsed, r.first_seen, r.url,
             r.remote_restriction,
             r.ujs_score, r.ujs_tier, r.ujs_scored,
+            r.ujs_technical_grade, r.ujs_profile_grade, r.ujs_scored_v2,
             ag.applied_at,
             ag.dismissed_at
         FROM ranked r
