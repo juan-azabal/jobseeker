@@ -243,7 +243,7 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - Responsive: MockJobDetail hides gap card + reduces to 1 strength on mobile
 
 ### Current
-Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1 + 17.2 complete)
+Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1–17.5 complete)
 - Phase 17.1 — Parser + DB + Ingest: role_function enum
   - Parser prompt v1.4: emits role_function (product|engineering|design|data|marketing|sales|ops|support|other)
   - DB migration 017: role_function column on jobs table, backfilled from parsed JSON
@@ -254,6 +254,17 @@ Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1 + 17.2 complete)
   - scorer.py updated: reads rubric v2, max_tokens 800, parses categorical grades
   - api/grade_mapping.py: grade_to_points() — A→20, B→12, C→5, None→10 (midpoint)
   - Old rubric archived as scoring-rubric-v1.md; schemas/scored_job.json + patterns/scorer.md updated
+- Phase 17.3 — DB + Ingest: grade storage
+  - Migration 018: technical_grade TEXT, profile_grade TEXT, scored_v2 INTEGER NOT NULL DEFAULT 0 on user_job_scores
+  - Ingest: v2 detection via rag.get("technical_depth") is not None; v2 stores grades + scored_v2=1, score=0; v1 stores numeric score unchanged
+  - queries.py: upsert_user_job_score() accepts technical_grade/profile_grade/scored_v2 params; get_jobs() returns all three columns
+- Phase 17.4 — hybrid_score() + wiring
+  - api/scoring.py: hybrid_score() = heuristic_score() + grade_to_points(technical_grade) + grade_to_points(profile_grade), clamped [0,100]
+  - api/routes/jobs.py: scoring priority: v2 (scored_v2=1) → hybrid_score with grades; v1 (ujs_score present) → stored RAG; unscored → hybrid_score with defaults
+- Phase 17.5 — role_function gate
+  - hybrid_score(): -15 penalty when profile.role_function AND parsed.role_function both set and differ (case-insensitive)
+  - get_jobs() CTE: selects j.role_function from jobs table
+  - agent/prefilter.py: prefilter_jobs() accepts profile_role_function param; soft gate filters jobs where both sides have role_function and they mismatch; stats["role_function_mismatch"] counter
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
