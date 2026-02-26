@@ -50,13 +50,14 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `agent/main.py` — pipeline orchestrator (scrape → parse → score → notify)
   - `agent/models.py` — RawJob Pydantic model (source-agnostic scraper output)
   - `agent/merger.py` — merge duplicate RawJobs from multiple scrapers (source-group field priority)
+  - `agent/preseed.py` — maps structured RawJob fields to parser schema (pre-seeds before LLM call)
   - `agent/logging_setup.py` — structlog configuration for the agent
   - `agent/api_cache.py` — cross-user parsed-job cache via Railway DB
   - `agent/scraper.py` — JobSpy wrapper + `make_job_id()` dedup → returns `list[RawJob]`
   - `agent/ats_scraper.py` — Greenhouse/Lever/Ashby API poller → returns `list[RawJob]`
   - `agent/wttj_scraper.py` — Welcome to the Jungle (Algolia API) → returns `list[RawJob]`
   - `agent/prefilter.py` — keyword filter + US-only detection (no API calls)
-  - `agent/parser.py` — gpt-4o-mini: structured JSON extraction from JD
+  - `agent/parser.py` — gpt-4o-mini: structured JSON extraction from JD; pre-seeded with structured fields
   - `agent/scorer.py` — gpt-4o: RAG scoring against full CV via ChromaDB
   - `agent/notifier.py` — Gmail SMTP digest sender (Jinja2 template)
   - `agent/user_config.py` — profile loading + seniority weight computation
@@ -261,6 +262,9 @@ Ingestion Overhaul — Phase 1 complete (2026-02-26)
 - Phase 2.2: Wire merge_jobs() into main.py — all_raw collects all scrapers, merge_jobs() replaces set-based dedup, _to_dicts() shim retained for downstream dicts
 - Phase 2.3: Smart description merge — _merge_description() in merger.py; prefers plain text over HTML, then longer; integrated into Phase 2.1
 - GATE Phase 2 (closed): 332 agent tests passing (1 pre-existing failure); merger.py documented in project structure
+- Phase 3.1: preseed_parsed() — agent/preseed.py; maps job_level→seniority, remote_type→location_type, structured salary (direct_data only), company_industry/source_category→domain, experience_min/max, locations_structured→locations_mentioned; returns only non-null fields; 35 tests
+- Phase 3.2: Parser pre-seed integration — parser.py calls preseed_parsed() before LLM; seed appended to system prompt; _FACTUAL_FIELDS (seniority, salary_mentioned, location_type, years_experience_min/max, locations_mentioned) override LLM; interpretive fields (domain, skills, etc.) use LLM; divergences logged at INFO; 9 tests
+- GATE Phase 3 (closed): 376 agent tests passing (1 pre-existing failure); preseed.py + parser.py documented in project structure
 
 Phase 17 — Decomposed Hybrid Scoring (complete: 17.1–17.7)
 - Phase 17.1 — Parser + DB + Ingest: role_function enum
