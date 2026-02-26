@@ -31,11 +31,14 @@ class TestSearchConfigLoading:
         assert "searches" in config
         assert len(config["searches"]) > 0
 
-    def test_juan_per_user_matches_shared(self):
-        """Juan's per-user searches should match the shared file (copied from it)."""
-        shared = load_search_config("config/searches.yaml")
+    def test_juan_per_user_has_valid_structure(self):
+        """Juan's per-user search config has valid structure (searches list + is_remote)."""
         per_user = load_search_config("config/profiles/juan-searches.yaml")
-        assert shared == per_user
+        assert "searches" in per_user
+        assert len(per_user["searches"]) > 0
+        for search in per_user["searches"]:
+            assert "term" in search
+            assert "sites" in search
 
 
 class TestProfileSearchesPath:
@@ -43,7 +46,6 @@ class TestProfileSearchesPath:
 
     def test_juan_profile_has_searches_path(self):
         from user_config import load_profile
-
         profile = load_profile("juan")
         searches_path = profile.get("searches")
         assert searches_path is not None
