@@ -424,7 +424,7 @@ export default function AdminPage() {
               <tbody>
                 {waitlist.map((entry) => {
                   const date = new Date(entry.created_at + 'Z');
-                  const diffMs = Date.now() - date.getTime();
+                  const diffMs = Math.max(0, Date.now() - date.getTime());
                   const diffDays = Math.floor(diffMs / 86400000);
                   const diffHours = Math.floor(diffMs / 3600000);
                   const diffMins = Math.floor(diffMs / 60000);
