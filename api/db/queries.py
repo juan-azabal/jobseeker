@@ -69,7 +69,7 @@ def get_jobs(
         WITH ranked AS (
             SELECT
                 j.job_id, j.title, j.company, j.location, j.location_type,
-                j.domain, j.parsed, j.first_seen, j.url,
+                j.domain, j.parsed, j.role_function, j.first_seen, j.url,
                 json_extract(j.parsed, '$.remote_restriction') AS remote_restriction,
                 ujs.score           AS ujs_score,
                 ujs.tier            AS ujs_tier,
@@ -98,7 +98,7 @@ def get_jobs(
         )
         SELECT
             r.job_id, r.title, r.company, r.location, r.location_type,
-            r.domain, r.parsed, r.first_seen, r.url,
+            r.domain, r.parsed, r.role_function, r.first_seen, r.url,
             r.remote_restriction,
             r.ujs_score, r.ujs_tier, r.ujs_scored,
             r.ujs_technical_grade, r.ujs_profile_grade, r.ujs_scored_v2,
