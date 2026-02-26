@@ -7,9 +7,18 @@ import sqlite3
 import pytest
 from fastapi.testclient import TestClient
 
+import api.routes.waitlist as waitlist_module
 from api.db.init import init_db
 from api.db.queries import upsert_user, create_session
 from api.main import app
+
+
+@pytest.fixture(autouse=True)
+def clear_rate_limiter():
+    """Reset in-memory rate limiter between tests."""
+    waitlist_module._rate_limiter.clear()
+    yield
+    waitlist_module._rate_limiter.clear()
 
 
 @pytest.fixture
@@ -98,3 +107,13 @@ class TestWaitlistAdminGet:
         assert "total" in data
         assert data["total"] >= 1
         assert any(e["email"] == "w@example.com" for e in data["entries"])
+
+
+class TestRateLimit:
+    def test_6th_request_from_same_ip_returns_429(self, client, db):
+        for i in range(5):
+            resp = client.post("/api/waitlist", json={"email": f"rl{i}@example.com"})
+            assert resp.status_code == 201
+        resp = client.post("/api/waitlist", json={"email": "rl5@example.com"})
+        assert resp.status_code == 429
+        assert resp.json()["detail"] == "rate_limited"
