@@ -307,6 +307,12 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
         logger.warning("Malformed parsed JSON for job_id=%s", job_id)
         row["parsed"] = None
 
+    # Inject remote_restriction from parsed so _is_remote_requiring_reloc() behaves
+    # identically to the list path (which pre-extracts it via SQL json_extract).
+    # SELECT * FROM jobs has no remote_restriction column, so it would otherwise be None.
+    if isinstance(row.get("parsed"), dict) and row.get("remote_restriction") is None:
+        row["remote_restriction"] = row["parsed"].get("remote_restriction")
+
     # Per-user score
     ujs = get_user_job_score(_db_path(), user["id"], job_id)
     profile = load_profile_data(user.get("profile_id"))
