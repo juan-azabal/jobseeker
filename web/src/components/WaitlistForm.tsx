@@ -24,7 +24,6 @@ export default function WaitlistForm({ source }: Props) {
     }
     setState('submitting');
     setErrorMsg('');
-    posthog.capture('waitlist_submitted', { source });
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {

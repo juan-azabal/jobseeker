@@ -83,10 +83,13 @@ test('fetch abort (timeout) shows generic error', async () => {
   await waitFor(() => expect(screen.getByText(/something went wrong/i)).toBeInTheDocument());
 });
 
-test('source prop is passed to posthog.capture on submit', async () => {
+test('posthog.capture waitlist_success fires only after successful submission (201)', async () => {
   global.fetch = vi.fn().mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ status: 'ok' }) } as Response);
   render(<WaitlistForm source="bottom" />);
   await userEvent.type(screen.getByRole('textbox'), 'user@example.com');
   await userEvent.click(screen.getByRole('button', { name: /get early access/i }));
-  expect(posthog.capture).toHaveBeenCalledWith('waitlist_submitted', { source: 'bottom' });
+  await waitFor(() => expect(posthog.capture).toHaveBeenCalledWith('waitlist_success', { source: 'bottom' }));
+  // Must NOT have fired before the request resolved
+  const callsBefore201 = (posthog.capture as ReturnType<typeof vi.fn>).mock.calls;
+  expect(callsBefore201.every(([event]: [string]) => event !== 'waitlist_submitted')).toBe(true);
 });
