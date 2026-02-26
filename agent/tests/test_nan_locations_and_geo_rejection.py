@@ -53,8 +53,8 @@ class TestNanSanitizationScraper:
             jobs = run_scraper()
 
         assert len(jobs) == 1
-        assert jobs[0]["location"] != "nan"
-        assert jobs[0]["location"] == ""
+        assert jobs[0].location != "nan"
+        assert jobs[0].location is None or jobs[0].location == ""
 
     def test_nan_string_location_becomes_empty_string(self):
         """String literal 'nan' (from pandas str conversion) must also be sanitized."""
@@ -86,9 +86,9 @@ class TestNanSanitizationScraper:
             jobs = run_scraper()
 
         assert len(jobs) == 1
-        assert jobs[0]["location"] == ""
-        assert jobs[0]["currency"] == ""
-        assert jobs[0]["interval"] == ""
+        assert jobs[0].location is None or jobs[0].location == ""
+        assert jobs[0].currency is None or jobs[0].currency == ""
+        assert jobs[0].interval is None or jobs[0].interval == ""
 
     def test_valid_location_preserved(self):
         """Non-nan location string is preserved unchanged."""
@@ -120,7 +120,7 @@ class TestNanSanitizationScraper:
             jobs = run_scraper()
 
         assert len(jobs) == 1
-        assert jobs[0]["location"] == "Barcelona, Spain"
+        assert jobs[0].location == "Barcelona, Spain"
 
 
 # ---------------------------------------------------------------------------

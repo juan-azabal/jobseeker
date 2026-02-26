@@ -1,6 +1,6 @@
 """
 Scraper module: wraps JobSpy to fetch jobs from multiple boards.
-Returns a list of standardized job dicts.
+Returns list[RawJob] — standardised intermediate representation.
 """
 
 import math
@@ -8,6 +8,8 @@ import re
 import yaml
 import hashlib
 from jobspy import scrape_jobs
+
+from models import RawJob
 
 
 def _sanitize_str(val) -> str:
@@ -67,12 +69,39 @@ def make_job_id(title: str, company: str) -> str:
     return hashlib.md5(raw.encode()).hexdigest()[:12]
 
 
-def run_scraper(config_path="config/searches.yaml"):
+def _to_remote_type(is_remote_flag) -> str | None:
+    """Map JobSpy bool is_remote flag to RawJob remote_type string."""
+    if is_remote_flag is True or is_remote_flag == 1:
+        return "fulltime"
+    if is_remote_flag is False or is_remote_flag == 0:
+        return "no"
+    return None
+
+
+def _or_none(val) -> str | None:
+    """Like _sanitize_str but returns None instead of '' for missing values."""
+    s = _sanitize_str(val)
+    return s if s else None
+
+
+def _float_or_none(val) -> float | None:
+    """Return float value or None if missing/NaN."""
+    if val is None:
+        return None
+    try:
+        f = float(val)
+        return None if math.isnan(f) else f
+    except (TypeError, ValueError):
+        return None
+
+
+def run_scraper(config_path="config/searches.yaml") -> list[RawJob]:
+    """Scrape jobs from all configured boards. Returns list[RawJob]."""
     config = load_search_config(config_path)
     country = config.get("country_indeed", "Spain")
     is_remote = config.get("is_remote", False)
 
-    all_jobs = {}  # keyed by job_id for dedup
+    all_jobs: dict[str, RawJob] = {}  # keyed by job_id for dedup
 
     for search in config["searches"]:
         term = search.get("term", search.get("search_term", ""))
@@ -106,7 +135,6 @@ def run_scraper(config_path="config/searches.yaml"):
             for _, row in results.iterrows():
                 title = _sanitize_str(row.get("title", ""))
                 company = _sanitize_str(row.get("company", ""))
-                loc = _sanitize_str(row.get("location", ""))
 
                 if not title or not company:
                     continue
@@ -114,23 +142,40 @@ def run_scraper(config_path="config/searches.yaml"):
                 job_id = make_job_id(title, company)
 
                 if job_id not in all_jobs:
-                    all_jobs[job_id] = {
-                        "id": job_id,
-                        "title": title,
-                        "company": company,
-                        "location": loc,
-                        "description": _sanitize_str(row.get("description", "")),
-                        "job_url": _sanitize_str(row.get("job_url", "")),
-                        "date_posted": _sanitize_str(row.get("date_posted", "")),
-                        "job_type": _sanitize_str(row.get("job_type", "")),
-                        "is_remote": bool(row.get("is_remote", False)),
-                        "min_amount": row.get("min_amount"),
-                        "max_amount": row.get("max_amount"),
-                        "currency": _sanitize_str(row.get("currency", "")),
-                        "interval": _sanitize_str(row.get("interval", "")),
-                        "site": _sanitize_str(row.get("site", "")),
-                        "search_term_used": term,
-                    }
+                    source = _sanitize_str(row.get("site", "")) or "unknown"
+                    all_jobs[job_id] = RawJob(
+                        id=job_id,
+                        title=title,
+                        company=company,
+                        source=source,
+                        # Core fields
+                        job_url=_or_none(row.get("job_url")),
+                        location=_or_none(row.get("location")),
+                        description=_or_none(row.get("description")),
+                        job_type=_or_none(row.get("job_type")),
+                        date_posted=_or_none(row.get("date_posted")),
+                        search_term_used=term or None,
+                        # Remote
+                        remote_type=_to_remote_type(row.get("is_remote")),
+                        # Salary
+                        min_amount=_float_or_none(row.get("min_amount")),
+                        max_amount=_float_or_none(row.get("max_amount")),
+                        currency=_or_none(row.get("currency")),
+                        interval=_or_none(row.get("interval")),
+                        salary_source=_or_none(row.get("salary_source")),
+                        # Company metadata
+                        company_url=_or_none(row.get("company_url")),
+                        company_industry=_or_none(row.get("company_industry")),
+                        company_employees_label=_or_none(row.get("company_num_employees")),
+                        company_revenue_label=_or_none(row.get("company_revenue")),
+                        company_logo=_or_none(row.get("company_logo")),
+                        # Role metadata
+                        job_level=_or_none(row.get("job_level")),
+                        job_function=_or_none(row.get("job_function")),
+                        # Contact
+                        emails=([e.strip() for e in row["emails"].split(",") if e.strip()]
+                                if row.get("emails") else None),
+                    )
 
             print(f"   Found {len(results)} results ({len(all_jobs)} unique total)")
 
@@ -146,5 +191,5 @@ def run_scraper(config_path="config/searches.yaml"):
 if __name__ == "__main__":
     jobs = run_scraper()
     for j in jobs[:5]:
-        print(f"\n{j['title']} @ {j['company']} ({j['location']})")
-        print(f"  URL: {j['job_url']}")
+        print(f"\n{j.title} @ {j.company} ({j.location})")
+        print(f"  URL: {j.job_url}")
