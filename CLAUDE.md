@@ -243,7 +243,7 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - Responsive: MockJobDetail hides gap card + reduces to 1 strength on mobile
 
 ### Current
-Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1–17.6 complete)
+Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1–17.7 complete)
 - Phase 17.1 — Parser + DB + Ingest: role_function enum
   - Parser prompt v1.4: emits role_function (product|engineering|design|data|marketing|sales|ops|support|other)
   - DB migration 017: role_function column on jobs table, backfilled from parsed JSON
@@ -271,8 +271,19 @@ Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1–17.6 complete)
   - api/prompts/onboard-extraction.md (+ agent copy): added role_type and role_function to schema + field rules
   - api/onboard_utils.py + agent/onboard.py: _build_profile_yaml() includes role_type and role_function in target block when present
   - web/src/components/ProfileEditor.tsx: role_type text input + role_function dropdown (9 values); wired to save; ROLE_FUNCTION_LABELS uses distinct labels to avoid DOM text collision with domain chips
+- Phase 17.7 — Regression test suite
+  - tests/test_scoring_regression.py: 9 tests across 3 classes
+  - 17.7.1 TestEAGamingRegression: gaming=-20 profile + gaming job → score < 55; gaming=+10 → score > 70; hate < like
+  - 17.7.2 TestPMMismatchRegression: product+marketing job scores 15 pts less than product+product job; penalty absent when no profile RF
+  - 17.7.3 TestCrossUserDifferentiation: Juan (data=15, kafka/flink) scores ≥10 pts higher than Noura (saas=15) on a data PM role
 
 ### Pending
+- Phase 17.3.4 — Reparse + rescore script for existing jobs (deferred; must be implemented before GATE 17.3 is closed)
+  - Create agent/scripts/reparse_rescore.py
+  - Fetches active jobs for a user from Railway DB; re-parses with parser v1.4; re-scores with rubric v2; ingests back
+  - --dry-run flag: prints job count + cost estimate
+  - Usage: cd agent && python scripts/reparse_rescore.py --profile juan
+  - GATE 17.3 updated: DB stores grades + ingest handles v1+v2 + queries return grades + reparse/rescore works + all tests pass
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
 - Phase R — Refactor & Test Coverage
 - Phase F — Ship: Dockerfile, README, deploy
