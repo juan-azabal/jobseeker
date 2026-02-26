@@ -116,7 +116,7 @@ jobsearch/
 │   ├── routes/             # auth, jobs, onboard, ingest, admin
 │   ├── middleware/          # session auth, admin guards
 │   ├── cv/                 # CV generation pipeline (plan → prompt → LLM → validate → docx)
-│   ├── db/                 # SQLite init, migrations (001–014), queries
+│   ├── db/                 # SQLite init, migrations (001–016), queries
 │   ├── ingest.py           # agent output → SQLite
 │   ├── scoring.py          # per-user heuristic scoring (no LLM)
 │   ├── embeddings.py       # OpenAI embedding service with SQLite cache
