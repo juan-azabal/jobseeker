@@ -42,6 +42,10 @@ export default function AdminPage() {
   const [corrections, setCorrections] = useState<{ from: string; to: string; count: number }[] | null>(null);
   const [correctionsError, setCorrectionsError] = useState(false);
 
+  // Waitlist state
+  const [waitlist, setWaitlist] = useState<{ id: number; email: string; created_at: string }[] | null>(null);
+  const [waitlistError, setWaitlistError] = useState(false);
+
   // Inline profile-id edit state
   const [editingProfileId, setEditingProfileId] = useState<{ userId: number; value: string } | null>(null);
   const [savingProfileId, setSavingProfileId] = useState(false);
@@ -61,6 +65,19 @@ export default function AdminPage() {
       .finally(() => setUsersLoading(false));
   };
 
+  const loadWaitlist = () => {
+    fetch('/api/admin/waitlist')
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        setWaitlist(data.entries);
+        setWaitlistError(false);
+      })
+      .catch(() => setWaitlistError(true));
+  };
+
   const loadCorrections = () => {
     fetch('/api/admin/domain-corrections')
       .then((r) => {
@@ -74,10 +91,11 @@ export default function AdminPage() {
       .catch(() => setCorrectionsError(true));
   };
 
-  // Fetch users and corrections — must be before early returns to satisfy Rules of Hooks
+  // Fetch users, corrections, and waitlist — must be before early returns to satisfy Rules of Hooks
   useEffect(() => {
     loadUsers();
     loadCorrections();
+    loadWaitlist();
   }, []);
 
   // Redirect non-admins (after hooks)
@@ -375,6 +393,61 @@ export default function AdminPage() {
             </div>
           )}
         </div>
+      </section>
+
+      {/* Waitlist */}
+      <section className="mb-10 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-zinc-400">
+          Waitlist
+          {waitlist !== null && (
+            <span className="ml-2 rounded-full bg-violet-900/60 px-2 py-0.5 text-xs font-medium text-violet-300 normal-case">
+              {waitlist.length}
+            </span>
+          )}
+        </h2>
+        {waitlistError ? (
+          <p className="text-sm text-red-400">Failed to load waitlist.</p>
+        ) : waitlist === null ? (
+          <p className="text-sm text-zinc-500">Loading…</p>
+        ) : waitlist.length === 0 ? (
+          <p className="text-sm text-zinc-500">No entries yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800 text-left text-xs uppercase tracking-wider text-zinc-500">
+                  <th className="pb-2 pr-6">Email</th>
+                  <th className="pb-2 pr-6">Date</th>
+                  <th className="pb-2">Time ago</th>
+                </tr>
+              </thead>
+              <tbody>
+                {waitlist.map((entry) => {
+                  const date = new Date(entry.created_at);
+                  const diffMs = Date.now() - date.getTime();
+                  const diffDays = Math.floor(diffMs / 86400000);
+                  const diffHours = Math.floor(diffMs / 3600000);
+                  const diffMins = Math.floor(diffMs / 60000);
+                  const timeAgo =
+                    diffDays > 0
+                      ? `${diffDays}d ago`
+                      : diffHours > 0
+                      ? `${diffHours}h ago`
+                      : diffMins > 0
+                      ? `${diffMins}m ago`
+                      : 'just now';
+                  return (
+                    <tr key={entry.id} className="border-b border-zinc-800/50 last:border-0">
+                      <td className="py-2 pr-6 text-zinc-200">{entry.email}</td>
+                      <td className="py-2 pr-6 text-zinc-400">{date.toLocaleDateString()}</td>
+                      <td className="py-2 text-zinc-500">{timeAgo}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {/* Users table */}
