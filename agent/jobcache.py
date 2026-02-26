@@ -61,8 +61,18 @@ def split_by_cache(jobs, cache):
             # (title/company/location/url may have been updated by scraper)
             cached = dict(cache[job_id])
             # Overwrite scrape-time fields with latest values in case they changed
-            for field in ("title", "company", "location", "job_url", "date_posted",
-                          "is_remote", "min_amount", "max_amount", "currency", "interval"):
+            for field in (
+                "title",
+                "company",
+                "location",
+                "job_url",
+                "date_posted",
+                "is_remote",
+                "min_amount",
+                "max_amount",
+                "currency",
+                "interval",
+            ):
                 if field in job:
                     cached[field] = job[field]
             cached_jobs.append(cached)

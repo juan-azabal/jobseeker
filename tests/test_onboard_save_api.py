@@ -28,11 +28,16 @@ def authed_client(tmp_path, monkeypatch):
     jobagent_dir = str(tmp_path / "jobagent")
     os.makedirs(jobagent_dir)
     monkeypatch.setenv("JOBAGENT_DIR", jobagent_dir)
-    user = upsert_user(db_path, {
-        "google_id": "g_t", "email": "t@t.com",
-        "name": "T", "avatar_url": None,
-        "profile_id": "test1234",  # pre-assigned at login (new behavior)
-    })
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g_t",
+            "email": "t@t.com",
+            "name": "T",
+            "avatar_url": None,
+            "profile_id": "test1234",  # pre-assigned at login (new behavior)
+        },
+    )
     create_session(db_path, "tok", user["id"], "2099-01-01T00:00:00")
     c = TestClient(app)
     c.cookies.set("jsk", "tok")

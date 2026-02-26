@@ -2,6 +2,7 @@
 
 Written BEFORE implementation (test-first). Must FAIL initially.
 """
+
 import sqlite3
 
 import pytest
@@ -38,13 +39,16 @@ def client(db):
 @pytest.fixture
 def admin_client(db):
     """Authenticated admin client."""
-    user = upsert_user(db, {
-        "google_id": "g_admin",
-        "email": "admin@test.com",
-        "name": "Admin",
-        "avatar_url": None,
-        "profile_id": "admin",
-    })
+    user = upsert_user(
+        db,
+        {
+            "google_id": "g_admin",
+            "email": "admin@test.com",
+            "name": "Admin",
+            "avatar_url": None,
+            "profile_id": "admin",
+        },
+    )
     conn = sqlite3.connect(db)
     conn.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (user["id"],))
     conn.commit()
@@ -64,9 +68,7 @@ class TestWaitlistPost:
     def test_valid_email_stored_in_db(self, client, db):
         client.post("/api/waitlist", json={"email": "stored@example.com"})
         conn = sqlite3.connect(db)
-        row = conn.execute(
-            "SELECT email FROM waitlist WHERE email = ?", ("stored@example.com",)
-        ).fetchone()
+        row = conn.execute("SELECT email FROM waitlist WHERE email = ?", ("stored@example.com",)).fetchone()
         conn.close()
         assert row is not None
 

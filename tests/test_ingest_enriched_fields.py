@@ -53,9 +53,20 @@ class TestMigration019:
         info = {row[1] for row in con.execute("PRAGMA table_info(jobs)").fetchall()}
         con.close()
         required = {
-            "company_url", "company_logo", "company_industry", "company_size",
-            "job_level", "salary_min", "salary_max", "salary_currency",
-            "salary_interval", "salary_source", "country", "city", "remote_type", "sources",
+            "company_url",
+            "company_logo",
+            "company_industry",
+            "company_size",
+            "job_level",
+            "salary_min",
+            "salary_max",
+            "salary_currency",
+            "salary_interval",
+            "salary_source",
+            "country",
+            "city",
+            "remote_type",
+            "sources",
         }
         for col in required:
             assert col in info, f"Column {col!r} missing from jobs table"

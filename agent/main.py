@@ -64,6 +64,7 @@ def _capture(profile_id: str, event: str, props: dict) -> None:
     try:
         if _ph_client is None:
             from posthog import Posthog  # noqa: PLC0415
+
             host = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com")
             _ph_client = Posthog(key, host=host)
             # Also configure the module-level proxy so that posthog.ai wrappers
@@ -71,6 +72,7 @@ def _capture(profile_id: str, event: str, props: dict) -> None:
             # Uses the deprecated proxy setter — intentional, no better alternative.
             try:
                 import posthog as _phm  # noqa: PLC0415
+
                 _phm.api_key = key
                 _phm.host = host
             except Exception:
@@ -127,7 +129,7 @@ def _heuristic_gate(jobs: list, profile: dict) -> tuple[list, list]:
             if domain_weight > 0:
                 score += 20  # desired domain → full credit
             elif domain_weight < 0:
-                score += 0   # explicitly deprioritized → no credit in gate
+                score += 0  # explicitly deprioritized → no credit in gate
             # else: domain not in target_domains → 0 (unchanged)
 
         # ── Seniority (0–20) ──────────────────────────────────────────────
@@ -148,13 +150,9 @@ def _heuristic_gate(jobs: list, profile: dict) -> tuple[list, list]:
         # ── Skill overlap (0–20, 5 pts/match, cap 4) ──────────────────────
         job_skills = [
             s.lower().replace("-", " ")
-            for s in (parsed.get("must_have_skills") or [])
-            + (parsed.get("nice_to_have_skills") or [])
+            for s in (parsed.get("must_have_skills") or []) + (parsed.get("nice_to_have_skills") or [])
         ]
-        matches = sum(
-            1 for js in job_skills
-            if any(ps in js or js in ps for ps in profile_skills)
-        )
+        matches = sum(1 for js in job_skills if any(ps in js or js in ps for ps in profile_skills))
         score += min(20, matches * 5)
 
         # ── Salary gate (hard block, applied after score) ─────────────────
@@ -259,152 +257,364 @@ def _grade_to_points(grade, default=10):
 # --- Heuristic ranking (no API calls) ---
 # Values loaded from user profile at runtime — see config/profiles/<id>.yaml
 
-_PROFILE_SKILLS = None   # populated by _load_heuristic_config()
+_PROFILE_SKILLS = None  # populated by _load_heuristic_config()
 _DOMAIN_SCORES = None
 _SENIORITY_SCORES = None
 _SALARY_THRESHOLD = 130000
 _HOME_LOCATIONS = []
-_HOME_REGIONS = []           # auto-derived from home_locations via country-converter
-_HOME_REGION_RE = None       # compiled regex for word-boundary region matching
+_HOME_REGIONS = []  # auto-derived from home_locations via country-converter
+_HOME_REGION_RE = None  # compiled regex for word-boundary region matching
 
 
 def _load_heuristic_config(profile: dict):
     """Populate module-level heuristic constants from user profile."""
     from geo import derive_home_regions, build_region_pattern
+
     global _PROFILE_SKILLS, _DOMAIN_SCORES, _SENIORITY_SCORES
     global _SALARY_THRESHOLD, _HOME_LOCATIONS, _HOME_REGIONS, _HOME_REGION_RE
-    _PROFILE_SKILLS   = [s.lower() for s in (profile.get("skills") or [])]
-    _DOMAIN_SCORES    = {k.lower(): v for k, v in (profile.get("target", {}).get("domains") or {}).items()}
+    _PROFILE_SKILLS = [s.lower() for s in (profile.get("skills") or [])]
+    _DOMAIN_SCORES = {k.lower(): v for k, v in (profile.get("target", {}).get("domains") or {}).items()}
     # 3-tier fallback: seniority_weights (current) > seniority (legacy) > compute from level+track
     target = profile.get("target", {})
     stored_sw = target.get("seniority_weights") or target.get("seniority")
     if stored_sw:
         _SENIORITY_SCORES = {k.lower(): int(v) for k, v in stored_sw.items()}
     else:
-        _SENIORITY_SCORES = compute_seniority_weights(
-            target.get("level", ""), target.get("track", "ic")
-        )
+        _SENIORITY_SCORES = compute_seniority_weights(target.get("level", ""), target.get("track", "ic"))
     _SALARY_THRESHOLD = profile.get("target", {}).get("salary_display_threshold", 130000)
-    _HOME_LOCATIONS   = [loc.lower() for loc in (profile.get("user", {}).get("home_locations") or [])]
-    _HOME_REGIONS     = derive_home_regions(_HOME_LOCATIONS)
-    _HOME_REGION_RE   = build_region_pattern(_HOME_REGIONS)
+    _HOME_LOCATIONS = [loc.lower() for loc in (profile.get("user", {}).get("home_locations") or [])]
+    _HOME_REGIONS = derive_home_regions(_HOME_LOCATIONS)
+    _HOME_REGION_RE = build_region_pattern(_HOME_REGIONS)
 
 
 # Domain override: if parser says "other" but keywords match, reclassify.
 # DUAL-COPY: keep identical to api/scoring.py _DOMAIN_KEYWORDS (dual-copy rule).
 _DOMAIN_KEYWORDS = {
-    "adtech": ["ad tech", "programmatic advertising", "demand-side platform",
-               "supply-side platform", "header bidding", "real-time bidding",
-               "publisher monetization", "ad network", "ad exchange",
-               "display advertising"],
-    "ai_ml": ["machine learning", "ml model", "ai agent", "large language model",
-              "natural language processing", "computer vision", "deep learning",
-              "neural network", "generative ai", "ml platform",
-              "model training", "model inference"],
-    "automotive": ["autonomous driving", "electric vehicle", "ev charging",
-                   "connected car", "fleet management", "mobility platform",
-                   "adas system", "vehicle software"],
-    "biotech": ["drug discovery", "clinical trial", "life sciences",
-                "genomics platform", "molecular biology", "bioinformatics pipeline"],
-    "climate": ["carbon offset", "carbon footprint", "renewable energy",
-                "clean energy", "climate tech", "solar energy", "wind energy",
-                "circular economy", "sustainability platform", "decarbonization"],
-    "construction": ["construction tech", "building information modeling",
-                     "property management", "real estate platform",
-                     "smart building", "architecture tech"],
-    "cybersecurity": ["information security", "identity management",
-                      "fraud prevention", "threat detection", "zero trust",
-                      "penetration testing", "security operations center",
-                      "vulnerability management"],
-    "data": ["data platform", "data pipeline", "data warehouse", "data lake",
-             "data lakehouse", "data product", "data governance", "data quality",
-             "data engineering", "business intelligence", "data analytics platform",
-             "observability platform", "etl pipeline", "data modeling",
-             "databricks", "snowflake", "clickhouse"],
-    "defense": ["defense contractor", "defense tech", "aerospace defense",
-                "military technology", "government contractor"],
-    "devtools": ["developer tool", "developer experience", "ci/cd pipeline",
-                 "code review platform", "api platform", "sdk development",
-                 "source control", "build system", "package manager",
-                 "devops platform"],
-    "ecommerce": ["online retail", "e-commerce platform", "shopping platform",
-                  "direct-to-consumer", "online store", "product catalog",
-                  "shopify", "woocommerce"],
-    "edtech": ["e-learning", "learning management system", "education technology",
-               "online education", "courseware platform", "student platform",
-               "classroom technology", "tutoring platform"],
-    "energy": ["oil and gas", "energy management", "smart grid",
-               "power generation", "energy trading", "utility company"],
-    "fintech": ["payment processing", "digital banking", "lending platform",
-                "wealth management", "trading platform", "insurance technology",
-                "credit platform", "neobank", "blockchain platform",
-                "cryptocurrency exchange", "defi protocol",
-                "financial institution", "financial services"],
-    "food_bev": ["food delivery", "restaurant tech", "meal kit",
-                 "food safety platform", "precision agriculture",
-                 "grocery platform", "agritech platform"],
-    "gaming": ["video game", "game engine", "game studio", "game development",
-               "interactive entertainment", "mobile game", "esports platform",
-               "unity developer", "unreal engine"],
-    "govtech": ["government technology", "civic tech", "public sector platform",
-                "e-government", "regulatory technology"],
-    "healthtech": ["digital health", "telemedicine platform", "electronic health record",
-                   "patient platform", "medical device software", "telehealth",
-                   "health platform", "clinical software"],
-    "hr_tech": ["recruiting platform", "talent acquisition", "workforce management",
-                "hr platform", "applicant tracking", "people analytics",
-                "employee engagement", "payroll platform",
-                "training management", "learning and development"],
-    "infra": ["cloud infrastructure", "container orchestration", "kubernetes",
-              "terraform", "cloud platform", "infrastructure as code",
-              "load balancer", "bare metal hosting", "cdn provider"],
-    "legal_tech": ["legal tech", "contract management", "compliance platform",
-                   "e-discovery", "case management", "document automation",
-                   "legal ai"],
-    "logistics": ["supply chain", "last mile delivery", "warehouse management",
-                  "freight platform", "transportation management",
-                  "fulfillment platform", "3pl platform"],
-    "manufacturing": ["industrial iot", "factory automation", "manufacturing tech",
-                      "quality control system", "production line", "robotics platform",
-                      "scada system"],
-    "marketplace": ["two-sided marketplace", "classifieds platform", "gig economy",
-                    "platform economy", "peer to peer", "rental platform",
-                    "buyer and seller"],
-    "media": ["content platform", "streaming platform", "digital media",
-              "publishing platform", "video platform", "podcast platform",
-              "content management system", "editorial platform",
-              "media company"],
-    "retail": ["retail technology", "point of sale", "pos system",
-               "in-store technology", "omnichannel retail",
-               "inventory management", "store operations",
-               "merchandising platform"],
-    "saas": ["b2b software", "b2b platform", "enterprise software",
-             "subscription platform", "crm platform", "erp system",
-             "productivity software"],
-    "telecom": ["telecommunications", "network operator", "mobile network",
-                "fiber optic", "5g network", "voip platform",
-                "connectivity platform"],
-    "travel": ["travel tech", "booking platform", "hospitality platform",
-               "hotel management", "airline technology", "reservation system",
-               "tourism platform"],
+    "adtech": [
+        "ad tech",
+        "programmatic advertising",
+        "demand-side platform",
+        "supply-side platform",
+        "header bidding",
+        "real-time bidding",
+        "publisher monetization",
+        "ad network",
+        "ad exchange",
+        "display advertising",
+    ],
+    "ai_ml": [
+        "machine learning",
+        "ml model",
+        "ai agent",
+        "large language model",
+        "natural language processing",
+        "computer vision",
+        "deep learning",
+        "neural network",
+        "generative ai",
+        "ml platform",
+        "model training",
+        "model inference",
+    ],
+    "automotive": [
+        "autonomous driving",
+        "electric vehicle",
+        "ev charging",
+        "connected car",
+        "fleet management",
+        "mobility platform",
+        "adas system",
+        "vehicle software",
+    ],
+    "biotech": [
+        "drug discovery",
+        "clinical trial",
+        "life sciences",
+        "genomics platform",
+        "molecular biology",
+        "bioinformatics pipeline",
+    ],
+    "climate": [
+        "carbon offset",
+        "carbon footprint",
+        "renewable energy",
+        "clean energy",
+        "climate tech",
+        "solar energy",
+        "wind energy",
+        "circular economy",
+        "sustainability platform",
+        "decarbonization",
+    ],
+    "construction": [
+        "construction tech",
+        "building information modeling",
+        "property management",
+        "real estate platform",
+        "smart building",
+        "architecture tech",
+    ],
+    "cybersecurity": [
+        "information security",
+        "identity management",
+        "fraud prevention",
+        "threat detection",
+        "zero trust",
+        "penetration testing",
+        "security operations center",
+        "vulnerability management",
+    ],
+    "data": [
+        "data platform",
+        "data pipeline",
+        "data warehouse",
+        "data lake",
+        "data lakehouse",
+        "data product",
+        "data governance",
+        "data quality",
+        "data engineering",
+        "business intelligence",
+        "data analytics platform",
+        "observability platform",
+        "etl pipeline",
+        "data modeling",
+        "databricks",
+        "snowflake",
+        "clickhouse",
+    ],
+    "defense": [
+        "defense contractor",
+        "defense tech",
+        "aerospace defense",
+        "military technology",
+        "government contractor",
+    ],
+    "devtools": [
+        "developer tool",
+        "developer experience",
+        "ci/cd pipeline",
+        "code review platform",
+        "api platform",
+        "sdk development",
+        "source control",
+        "build system",
+        "package manager",
+        "devops platform",
+    ],
+    "ecommerce": [
+        "online retail",
+        "e-commerce platform",
+        "shopping platform",
+        "direct-to-consumer",
+        "online store",
+        "product catalog",
+        "shopify",
+        "woocommerce",
+    ],
+    "edtech": [
+        "e-learning",
+        "learning management system",
+        "education technology",
+        "online education",
+        "courseware platform",
+        "student platform",
+        "classroom technology",
+        "tutoring platform",
+    ],
+    "energy": [
+        "oil and gas",
+        "energy management",
+        "smart grid",
+        "power generation",
+        "energy trading",
+        "utility company",
+    ],
+    "fintech": [
+        "payment processing",
+        "digital banking",
+        "lending platform",
+        "wealth management",
+        "trading platform",
+        "insurance technology",
+        "credit platform",
+        "neobank",
+        "blockchain platform",
+        "cryptocurrency exchange",
+        "defi protocol",
+        "financial institution",
+        "financial services",
+    ],
+    "food_bev": [
+        "food delivery",
+        "restaurant tech",
+        "meal kit",
+        "food safety platform",
+        "precision agriculture",
+        "grocery platform",
+        "agritech platform",
+    ],
+    "gaming": [
+        "video game",
+        "game engine",
+        "game studio",
+        "game development",
+        "interactive entertainment",
+        "mobile game",
+        "esports platform",
+        "unity developer",
+        "unreal engine",
+    ],
+    "govtech": [
+        "government technology",
+        "civic tech",
+        "public sector platform",
+        "e-government",
+        "regulatory technology",
+    ],
+    "healthtech": [
+        "digital health",
+        "telemedicine platform",
+        "electronic health record",
+        "patient platform",
+        "medical device software",
+        "telehealth",
+        "health platform",
+        "clinical software",
+    ],
+    "hr_tech": [
+        "recruiting platform",
+        "talent acquisition",
+        "workforce management",
+        "hr platform",
+        "applicant tracking",
+        "people analytics",
+        "employee engagement",
+        "payroll platform",
+        "training management",
+        "learning and development",
+    ],
+    "infra": [
+        "cloud infrastructure",
+        "container orchestration",
+        "kubernetes",
+        "terraform",
+        "cloud platform",
+        "infrastructure as code",
+        "load balancer",
+        "bare metal hosting",
+        "cdn provider",
+    ],
+    "legal_tech": [
+        "legal tech",
+        "contract management",
+        "compliance platform",
+        "e-discovery",
+        "case management",
+        "document automation",
+        "legal ai",
+    ],
+    "logistics": [
+        "supply chain",
+        "last mile delivery",
+        "warehouse management",
+        "freight platform",
+        "transportation management",
+        "fulfillment platform",
+        "3pl platform",
+    ],
+    "manufacturing": [
+        "industrial iot",
+        "factory automation",
+        "manufacturing tech",
+        "quality control system",
+        "production line",
+        "robotics platform",
+        "scada system",
+    ],
+    "marketplace": [
+        "two-sided marketplace",
+        "classifieds platform",
+        "gig economy",
+        "platform economy",
+        "peer to peer",
+        "rental platform",
+        "buyer and seller",
+    ],
+    "media": [
+        "content platform",
+        "streaming platform",
+        "digital media",
+        "publishing platform",
+        "video platform",
+        "podcast platform",
+        "content management system",
+        "editorial platform",
+        "media company",
+    ],
+    "retail": [
+        "retail technology",
+        "point of sale",
+        "pos system",
+        "in-store technology",
+        "omnichannel retail",
+        "inventory management",
+        "store operations",
+        "merchandising platform",
+    ],
+    "saas": [
+        "b2b software",
+        "b2b platform",
+        "enterprise software",
+        "subscription platform",
+        "crm platform",
+        "erp system",
+        "productivity software",
+    ],
+    "telecom": [
+        "telecommunications",
+        "network operator",
+        "mobile network",
+        "fiber optic",
+        "5g network",
+        "voip platform",
+        "connectivity platform",
+    ],
+    "travel": [
+        "travel tech",
+        "booking platform",
+        "hospitality platform",
+        "hotel management",
+        "airline technology",
+        "reservation system",
+        "tourism platform",
+    ],
 }
 
 # DUAL-COPY: keep identical to api/scoring.py _DOMAIN_ALIASES (dual-copy rule).
 _DOMAIN_ALIASES: dict[str, str] = {
     # AI/ML consolidation
-    "ia": "ai_ml", "ai": "ai_ml", "llm": "ai_ml", "ml": "ai_ml",
+    "ia": "ai_ml",
+    "ai": "ai_ml",
+    "llm": "ai_ml",
+    "ml": "ai_ml",
     # Adtech
     "martech": "adtech",
     # Automotive
-    "mobility": "automotive", "ev": "automotive",
+    "mobility": "automotive",
+    "ev": "automotive",
     # Biotech
-    "pharma": "biotech", "life_sciences": "biotech",
+    "pharma": "biotech",
+    "life_sciences": "biotech",
     # Climate
-    "greentech": "climate", "cleantech": "climate",
+    "greentech": "climate",
+    "cleantech": "climate",
     # Construction
     "proptech": "construction",
     # Cybersecurity
-    "security": "cybersecurity", "infosec": "cybersecurity", "devsecops": "cybersecurity",
+    "security": "cybersecurity",
+    "infosec": "cybersecurity",
+    "devsecops": "cybersecurity",
     "cybersecurity": "cybersecurity",
     # Devtools
     "developer-tools": "devtools",
@@ -413,9 +623,12 @@ _DOMAIN_ALIASES: dict[str, str] = {
     # Fintech
     "insurtech": "fintech",
     # Food & bev
-    "agritech": "food_bev", "foodtech": "food_bev",
+    "agritech": "food_bev",
+    "foodtech": "food_bev",
     # Gaming
-    "game": "gaming", "esports": "gaming", "gaming": "gaming",
+    "game": "gaming",
+    "esports": "gaming",
+    "gaming": "gaming",
     # Healthcare (legacy parser value)
     "healthcare": "healthtech",
     # HR tech
@@ -427,17 +640,21 @@ _DOMAIN_ALIASES: dict[str, str] = {
     # Growth (old enum value not in v2 list)
     "growth": "saas",
 }
+
+
 def _infer_domain(parsed):
     """Override 'other' domain using keyword detection."""
     domain = parsed.get("domain", "other")
     if domain != "other":
         return domain
 
-    all_text = " ".join([
-        parsed.get("responsibilities_summary", ""),
-        " ".join(parsed.get("must_have_skills") or []),
-        " ".join(parsed.get("technical_stack") or []),
-    ]).lower()
+    all_text = " ".join(
+        [
+            parsed.get("responsibilities_summary", ""),
+            " ".join(parsed.get("must_have_skills") or []),
+            " ".join(parsed.get("technical_stack") or []),
+        ]
+    ).lower()
 
     best_domain = "other"
     best_count = 0
@@ -496,28 +713,29 @@ def _heuristic_score(job):
 # --- Currency conversion via ECB data (CurrencyConverter) ---
 
 from currency_converter import CurrencyConverter as _CurrencyConverter
+
 _fx = _CurrencyConverter(fallback_on_missing_rate=True)
 
 # Map text signals → ISO 4217 currency codes
 _CURRENCY_SIGNALS: list[tuple[list[str], str]] = [
-    (["cad"],                                "CAD"),
-    (["usd", "$"],                           "USD"),
-    (["pln", "zl", "zlot"],                  "PLN"),
-    (["gbp", "£"],                           "GBP"),
-    (["chf"],                                "CHF"),
-    (["sek"],                                "SEK"),
-    (["dkk"],                                "DKK"),
-    (["nok"],                                "NOK"),
-    (["inr", "₹", "lakh", "lpa"],           "INR"),
-    (["brl", "r$"],                          "BRL"),
-    (["aud", "a$"],                          "AUD"),
-    (["sgd", "s$"],                          "SGD"),
-    (["czk", "kč"],                          "CZK"),
-    (["huf", "ft"],                          "HUF"),
-    (["ron", "lei"],                         "RON"),
-    (["jpy", "¥", "yen"],                   "JPY"),
-    (["ils", "₪", "shekel"],                "ILS"),
-    (["try", "₺", "tl"],                    "TRY"),
+    (["cad"], "CAD"),
+    (["usd", "$"], "USD"),
+    (["pln", "zl", "zlot"], "PLN"),
+    (["gbp", "£"], "GBP"),
+    (["chf"], "CHF"),
+    (["sek"], "SEK"),
+    (["dkk"], "DKK"),
+    (["nok"], "NOK"),
+    (["inr", "₹", "lakh", "lpa"], "INR"),
+    (["brl", "r$"], "BRL"),
+    (["aud", "a$"], "AUD"),
+    (["sgd", "s$"], "SGD"),
+    (["czk", "kč"], "CZK"),
+    (["huf", "ft"], "HUF"),
+    (["ron", "lei"], "RON"),
+    (["jpy", "¥", "yen"], "JPY"),
+    (["ils", "₪", "shekel"], "ILS"),
+    (["try", "₺", "tl"], "TRY"),
 ]
 
 
@@ -561,13 +779,13 @@ def _extract_max_salary_eur(job):
 
     # Normalize: remove spaces used as thousand separators (European style: "50 000")
     # and strip commas used as thousand separators (American style: "50,000")
-    normalized = re.sub(r'(\d)[ \u00a0](\d)', r'\1\2', salary_str)  # "50 000" → "50000"
-    normalized = normalized.replace(',', '')
+    normalized = re.sub(r"(\d)[ \u00a0](\d)", r"\1\2", salary_str)  # "50 000" → "50000"
+    normalized = normalized.replace(",", "")
     # Expand shorthand: "80k" → "80000", "100k" → "100000"
-    normalized = re.sub(r'(\d+)\s*k\b', lambda m: str(int(m.group(1)) * 1000), normalized)
+    normalized = re.sub(r"(\d+)\s*k\b", lambda m: str(int(m.group(1)) * 1000), normalized)
 
     # Extract salary-like numbers: ≥ 4 digits, but exclude years (1900-2099)
-    raw_nums = [int(m) for m in re.findall(r'\d+', normalized)]
+    raw_nums = [int(m) for m in re.findall(r"\d+", normalized)]
     vals = [n for n in raw_nums if n >= 1000 and not (1900 <= n <= 2099)]
     if not vals:
         return 0
@@ -588,6 +806,7 @@ def _extract_max_salary_eur(job):
 
 
 # --- Display ---
+
 
 def _is_remote_requiring_reloc(job, home_locations=None, home_regions=None, region_pattern=None):
     """Return True if a remote job pins the worker to a place outside home.
@@ -641,6 +860,7 @@ def _is_remote_requiring_reloc(job, home_locations=None, home_regions=None, regi
     # 6. Restriction names a specific place (not just a timezone)
     if restriction:
         from geo import is_pure_timezone
+
         if not is_pure_timezone(restriction):
             return True
 
@@ -681,7 +901,7 @@ def _print_job(i, job):
     score = job["_display_score"]
     rag = job.get("rag_score")
 
-    salary_display = f"~EUR {int(salary_eur/1000)}K" if salary_eur > 0 else "no salary"
+    salary_display = f"~EUR {int(salary_eur / 1000)}K" if salary_eur > 0 else "no salary"
     score_label = f"rag:{score}" if rag else f"fit:{score}"
 
     if salary_eur >= _SALARY_THRESHOLD:
@@ -698,7 +918,9 @@ def _print_job(i, job):
         indicator = "[ . ]"
 
     print(f"\n{indicator} {i}. {job['title']} @ {job['company']}")
-    print(f"   {job.get('location', '?')} ({location_type}) | {seniority} | {domain} | {salary_display} | {score_label}")
+    print(
+        f"   {job.get('location', '?')} ({location_type}) | {seniority} | {domain} | {salary_display} | {score_label}"
+    )
 
     if rag:
         verdict = rag.get("one_line_verdict", "")
@@ -773,7 +995,7 @@ def print_summary(jobs):
         reloc_header_shown = False
         for job in jobs:
             if _is_reloc(job) and not reloc_header_shown:
-                print(f"\n  ✈  RELOC required from here ─────────────────────────────────")
+                print("\n  ✈  RELOC required from here ─────────────────────────────────")
                 reloc_header_shown = True
             _print_job(counter, job)
             counter += 1
@@ -794,7 +1016,9 @@ def print_summary(jobs):
     with_salary_count = sum(1 for j in parsed_jobs if j["_salary_eur"] > 0)
     scored_count = sum(1 for j in parsed_jobs if j.get("rag_score"))
     print(f"\n{'=' * 70}")
-    print(f"A:{len(tier_a)}  B:{len(tier_b)}  C:{len(tier_c)} | {hidden_reloc} reloc hidden | {with_salary_count} with salary | {scored_count} RAG scored")
+    print(
+        f"A:{len(tier_a)}  B:{len(tier_b)}  C:{len(tier_c)} | {hidden_reloc} reloc hidden | {with_salary_count} with salary | {scored_count} RAG scored"
+    )
     print(f"Domains: {', '.join(f'{k}({v})' for k, v in sorted(domains.items(), key=lambda x: -x[1]))}")
     print(f"{'=' * 70}")
 
@@ -824,8 +1048,7 @@ def _auto_skip_reloc(jobs, applied_path="config/applied.yaml"):
 
     # Find reloc jobs with score < 50 that aren't already tracked
     candidates = [
-        j for j in jobs
-        if j.get("parsed") and _is_reloc(j) and j.get("_display_score", 0) < 50 and j.get("id")
+        j for j in jobs if j.get("parsed") and _is_reloc(j) and j.get("_display_score", 0) < 50 and j.get("id")
     ]
     if not candidates:
         return
@@ -839,10 +1062,7 @@ def _auto_skip_reloc(jobs, applied_path="config/applied.yaml"):
 
     data.setdefault("applied", {"companies": [], "ids": []})
     data.setdefault("not_interested", {"ids": [], "titles": []})
-    existing_ids = {
-        (e.get("id") if isinstance(e, dict) else e)
-        for e in (data["not_interested"].get("ids") or [])
-    }
+    existing_ids = {(e.get("id") if isinstance(e, dict) else e) for e in (data["not_interested"].get("ids") or [])}
 
     newly_skipped = []
     for j in candidates:
@@ -860,10 +1080,10 @@ def _auto_skip_reloc(jobs, applied_path="config/applied.yaml"):
 
 def main():
     args = sys.argv[1:]
-    skip_scoring   = "--no-score"      in args
-    full_refresh   = "--refresh"       in args  # nuke cache, reprocess everything
-    rescore_only   = "--rescore"       in args  # keep parsed, redo RAG scores only
-    send_email     = "--notify"        in args  # send email digest after run
+    skip_scoring = "--no-score" in args
+    full_refresh = "--refresh" in args  # nuke cache, reprocess everything
+    rescore_only = "--rescore" in args  # keep parsed, redo RAG scores only
+    send_email = "--notify" in args  # send email digest after run
 
     # Resolve profile: --profile <id> or default to first in config/profiles/
     profile_id = None
@@ -888,11 +1108,11 @@ def main():
 
     # Resolve profile-specific paths — single source of truth in resolve_profile_paths()
     paths = resolve_profile_paths(profile_id, profile)
-    seen_ids_path    = paths["seen_ids"]
+    seen_ids_path = paths["seen_ids"]
     preferences_path = paths["preferences"]
-    searches_path    = paths["searches"]
-    watchlist_path   = paths["watchlist"]
-    applied_path     = paths["applied"]
+    searches_path = paths["searches"]
+    watchlist_path = paths["watchlist"]
+    applied_path = paths["applied"]
 
     start_time = time.time()
 
@@ -910,11 +1130,15 @@ def main():
         mode=mode,
         notify=send_email,
     )
-    _capture(profile_id, "agent_pipeline_start", {
-        "profile_id": profile_id,
-        "mode": mode,
-        "notify": send_email,
-    })
+    _capture(
+        profile_id,
+        "agent_pipeline_start",
+        {
+            "profile_id": profile_id,
+            "mode": mode,
+            "notify": send_email,
+        },
+    )
 
     print(f"JobAgent - Phase 2: Scrape > Pre-filter > Parse > RAG Score > Rank  [{profile_id}]")
     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -958,8 +1182,27 @@ def main():
     if not jobs:
         print("\nNo jobs found. Check your search config.")
         _d = int(time.time() - start_time)
-        logger.info("pipeline_complete", profile_id=profile_id, mode=mode, duration_s=_d, status="no_jobs", n_parsed=0, n_scored=0)
-        _capture(profile_id, "agent_pipeline_complete", {"profile_id": profile_id, "mode": mode, "duration_s": _d, "status": "no_jobs", "n_parsed": 0, "n_scored": 0})
+        logger.info(
+            "pipeline_complete",
+            profile_id=profile_id,
+            mode=mode,
+            duration_s=_d,
+            status="no_jobs",
+            n_parsed=0,
+            n_scored=0,
+        )
+        _capture(
+            profile_id,
+            "agent_pipeline_complete",
+            {
+                "profile_id": profile_id,
+                "mode": mode,
+                "duration_s": _d,
+                "status": "no_jobs",
+                "n_parsed": 0,
+                "n_scored": 0,
+            },
+        )
         return
 
     # Step 2: Pre-filter (always runs on all jobs — applies latest applied.yaml/preferences.yaml)
@@ -975,8 +1218,27 @@ def main():
     if not passed:
         print("\nAll jobs filtered out. Loosen your preferences.")
         _d = int(time.time() - start_time)
-        logger.info("pipeline_complete", profile_id=profile_id, mode=mode, duration_s=_d, status="all_filtered", n_parsed=0, n_scored=0)
-        _capture(profile_id, "agent_pipeline_complete", {"profile_id": profile_id, "mode": mode, "duration_s": _d, "status": "all_filtered", "n_parsed": 0, "n_scored": 0})
+        logger.info(
+            "pipeline_complete",
+            profile_id=profile_id,
+            mode=mode,
+            duration_s=_d,
+            status="all_filtered",
+            n_parsed=0,
+            n_scored=0,
+        )
+        _capture(
+            profile_id,
+            "agent_pipeline_complete",
+            {
+                "profile_id": profile_id,
+                "mode": mode,
+                "duration_s": _d,
+                "status": "all_filtered",
+                "n_parsed": 0,
+                "n_scored": 0,
+            },
+        )
         return
 
     # Step 3: Load cache (or start fresh if --refresh)
@@ -990,6 +1252,7 @@ def main():
     # Step 3b: Cross-user dedup — check Railway DB for jobs already parsed by another user
     if new_jobs:
         from api_cache import fetch_existing_parsed
+
         db_parsed = fetch_existing_parsed([j["id"] for j in new_jobs])
         if db_parsed:
             n_restored = 0
@@ -1011,7 +1274,7 @@ def main():
 
     # Step 4: Parse only new jobs (cached ones already have 'parsed')
     jobs_needing_parse = [j for j in new_jobs if not j.get("parsed")]
-    jobs_with_parse    = [j for j in new_jobs if j.get("parsed")]
+    jobs_with_parse = [j for j in new_jobs if j.get("parsed")]
     n_parsed = len(jobs_needing_parse)
     if jobs_needing_parse:
         jobs_needing_parse = parse_all(jobs_needing_parse, model="gpt-4o-mini")
@@ -1046,6 +1309,7 @@ def main():
         try:
             from vectorstore import build_vectorstore
             from scorer import score_all
+
             collection = build_vectorstore(profile=profile)
             new_jobs = score_all(new_jobs, collection, profile=profile)
             n_scored = sum(1 for j in new_jobs if j.get("rag_score"))
@@ -1058,6 +1322,7 @@ def main():
         if scored_jobs:
             try:
                 from gap_tracker import append_gap_history
+
                 n_gaps = append_gap_history(scored_jobs, profile)
                 if n_gaps:
                     print(f"   Gap history: +{n_gaps} entries")
@@ -1113,19 +1378,23 @@ def main():
         tier_b=tier_b,
         tier_c=tier_c,
     )
-    _capture(profile_id, "agent_pipeline_complete", {
-        "profile_id": profile_id,
-        "mode": mode,
-        "status": "success",
-        "duration_s": duration_s,
-        "cost_usd": cost_usd,
-        "total_jobs": len(all_parsed),
-        "n_parsed": n_parsed,
-        "n_scored": n_scored,
-        "tier_a": tier_a,
-        "tier_b": tier_b,
-        "tier_c": tier_c,
-    })
+    _capture(
+        profile_id,
+        "agent_pipeline_complete",
+        {
+            "profile_id": profile_id,
+            "mode": mode,
+            "status": "success",
+            "duration_s": duration_s,
+            "cost_usd": cost_usd,
+            "total_jobs": len(all_parsed),
+            "n_parsed": n_parsed,
+            "n_scored": n_scored,
+            "tier_a": tier_a,
+            "tier_b": tier_b,
+            "tier_c": tier_c,
+        },
+    )
 
     print(f"\n✅ Done in {duration_s}s. Cache: {cache_stats(cache)}")
     if cost_usd > 0:
@@ -1135,6 +1404,7 @@ def main():
     if send_email:
         try:
             import yaml
+
             n_searches = 0
             n_watchlist = 0
             try:
@@ -1151,6 +1421,7 @@ def main():
                 pass
 
             from notifier import send_digest
+
             run_meta = {
                 "duration_s": duration_s,
                 "cost_usd": cost_usd,

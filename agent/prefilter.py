@@ -40,7 +40,7 @@ def load_applied(path: str):
     applied_companies = []
     expired_companies = []
 
-    for entry in (applied_cfg.get("companies") or []):
+    for entry in applied_cfg.get("companies") or []:
         if isinstance(entry, dict):
             name = (entry.get("name") or "").lower()
             raw_date = entry.get("date")
@@ -59,14 +59,16 @@ def load_applied(path: str):
             applied_companies.append(name)
 
     if expired_companies:
-        print(f"\n💡 Expired applied.companies (>{APPLIED_COMPANY_STALE_DAYS}d) — showing again, remove from applied.yaml when ready:")
+        print(
+            f"\n💡 Expired applied.companies (>{APPLIED_COMPANY_STALE_DAYS}d) — showing again, remove from applied.yaml when ready:"
+        )
         for company, applied_date, age_days in expired_companies:
             print(f"   • {company} (applied {applied_date}, {age_days}d ago)")
 
     # applied.ids: accept both {id:..., note:...} dicts and plain strings
     def _extract_ids(entries):
         ids = set()
-        for e in (entries or []):
+        for e in entries or []:
             if isinstance(e, dict):
                 val = e.get("id")
             else:
@@ -77,9 +79,9 @@ def load_applied(path: str):
 
     return {
         "applied_companies": applied_companies,
-        "applied_ids":       _extract_ids(applied_cfg.get("ids")),
-        "skip_ids":          _extract_ids(not_interested.get("ids")),
-        "skip_titles":       [t.lower() for t in (not_interested.get("titles") or [])],
+        "applied_ids": _extract_ids(applied_cfg.get("ids")),
+        "skip_ids": _extract_ids(not_interested.get("ids")),
+        "skip_titles": [t.lower() for t in (not_interested.get("titles") or [])],
     }
 
 
@@ -87,33 +89,56 @@ def load_applied(path: str):
 # Used by the reject_if_requires_relocation_outside filter.
 # Conservative: only well-known unambiguous names included to avoid false positives.
 _COUNTRY_FRAGMENTS: dict[str, str] = {
-    "france": "France", "french": "France",
-    "germany": "Germany", "german": "Germany", "deutschland": "Germany",
-    "netherlands": "Netherlands", "dutch": "Netherlands", "holland": "Netherlands",
-    "italy": "Italy", "italian": "Italy",
+    "france": "France",
+    "french": "France",
+    "germany": "Germany",
+    "german": "Germany",
+    "deutschland": "Germany",
+    "netherlands": "Netherlands",
+    "dutch": "Netherlands",
+    "holland": "Netherlands",
+    "italy": "Italy",
+    "italian": "Italy",
     "portugal": "Portugal",
-    "spain": "Spain", "spanish": "Spain",
-    "poland": "Poland", "polish": "Poland",
-    "sweden": "Sweden", "swedish": "Sweden",
-    "norway": "Norway", "norwegian": "Norway",
-    "denmark": "Denmark", "danish": "Denmark",
-    "finland": "Finland", "finnish": "Finland",
-    "belgium": "Belgium", "belgian": "Belgium",
-    "switzerland": "Switzerland", "swiss": "Switzerland",
-    "austria": "Austria", "austrian": "Austria",
-    "czechia": "Czechia", "czech republic": "Czechia",
+    "spain": "Spain",
+    "spanish": "Spain",
+    "poland": "Poland",
+    "polish": "Poland",
+    "sweden": "Sweden",
+    "swedish": "Sweden",
+    "norway": "Norway",
+    "norwegian": "Norway",
+    "denmark": "Denmark",
+    "danish": "Denmark",
+    "finland": "Finland",
+    "finnish": "Finland",
+    "belgium": "Belgium",
+    "belgian": "Belgium",
+    "switzerland": "Switzerland",
+    "swiss": "Switzerland",
+    "austria": "Austria",
+    "austrian": "Austria",
+    "czechia": "Czechia",
+    "czech republic": "Czechia",
     "romania": "Romania",
     "ukraine": "Ukraine",
     "hungary": "Hungary",
-    "ireland": "Ireland", "irish": "Ireland",
-    "united kingdom": "United Kingdom", "england": "United Kingdom",
-    "turkey": "Turkey", "türkiye": "Turkey",
+    "ireland": "Ireland",
+    "irish": "Ireland",
+    "united kingdom": "United Kingdom",
+    "england": "United Kingdom",
+    "turkey": "Turkey",
+    "türkiye": "Turkey",
     "israel": "Israel",
-    "india": "India", "indian": "India",
+    "india": "India",
+    "indian": "India",
     "singapore": "Singapore",
-    "australia": "Australia", "australian": "Australia",
-    "canada": "Canada", "canadian": "Canada",
-    "brazil": "Brazil", "brazilian": "Brazil",
+    "australia": "Australia",
+    "australian": "Australia",
+    "canada": "Canada",
+    "canadian": "Canada",
+    "brazil": "Brazil",
+    "brazilian": "Brazil",
 }
 
 
@@ -179,16 +204,75 @@ def _is_us_only(job):
     description = (job.get("description") or "").lower()
 
     us_signals_location = [
-        ", al", ", ak", ", az", ", ar", ", ca", ", co", ", ct", ", de", ", fl",
-        ", ga", ", hi", ", id", ", il", ", in", ", ia", ", ks", ", ky", ", la",
-        ", me", ", md", ", ma", ", mi", ", mn", ", ms", ", mo", ", mt", ", ne",
-        ", nv", ", nh", ", nj", ", nm", ", ny", ", nc", ", nd", ", oh", ", ok",
-        ", or", ", pa", ", ri", ", sc", ", sd", ", tn", ", tx", ", ut", ", vt",
-        ", va", ", wa", ", wv", ", wi", ", wy",
-        "united states", "estados unidos", "usa", "nationwide",
-        "new york", "san francisco", "los angeles", "chicago", "seattle",
-        "austin", "denver", "boston", "miami", "atlanta", "dallas",
-        "salt lake city", "minneapolis", "portland", "phoenix",
+        ", al",
+        ", ak",
+        ", az",
+        ", ar",
+        ", ca",
+        ", co",
+        ", ct",
+        ", de",
+        ", fl",
+        ", ga",
+        ", hi",
+        ", id",
+        ", il",
+        ", in",
+        ", ia",
+        ", ks",
+        ", ky",
+        ", la",
+        ", me",
+        ", md",
+        ", ma",
+        ", mi",
+        ", mn",
+        ", ms",
+        ", mo",
+        ", mt",
+        ", ne",
+        ", nv",
+        ", nh",
+        ", nj",
+        ", nm",
+        ", ny",
+        ", nc",
+        ", nd",
+        ", oh",
+        ", ok",
+        ", or",
+        ", pa",
+        ", ri",
+        ", sc",
+        ", sd",
+        ", tn",
+        ", tx",
+        ", ut",
+        ", vt",
+        ", va",
+        ", wa",
+        ", wv",
+        ", wi",
+        ", wy",
+        "united states",
+        "estados unidos",
+        "usa",
+        "nationwide",
+        "new york",
+        "san francisco",
+        "los angeles",
+        "chicago",
+        "seattle",
+        "austin",
+        "denver",
+        "boston",
+        "miami",
+        "atlanta",
+        "dallas",
+        "salt lake city",
+        "minneapolis",
+        "portland",
+        "phoenix",
     ]
 
     for signal in us_signals_location:
@@ -336,7 +420,9 @@ def prefilter_jobs(jobs, config_path, applied_path, seen_path, home_locations=No
         if not reason:
             if _is_us_only(job):
                 location_lower = (job.get("location") or "").lower()
-                if any(loc in location_lower for loc in accept_locations) or any(loc in location_lower for loc in _home_locs):
+                if any(loc in location_lower for loc in accept_locations) or any(
+                    loc in location_lower for loc in _home_locs
+                ):
                     pass
                 else:
                     reason = "US-only role (no EU location)"
@@ -381,12 +467,12 @@ def prefilter_jobs(jobs, config_path, applied_path, seen_path, home_locations=No
         key = r["reject_reason"].split(":")[0].strip()
         reasons[key] = reasons.get(key, 0) + 1
 
-    print(f"   Rejection breakdown:")
+    print("   Rejection breakdown:")
     for reason, count in sorted(reasons.items(), key=lambda x: -x[1]):
         print(f"   ❌ {reason}: {count}")
 
     if rejected:
-        print(f"\n   Sample rejections:")
+        print("\n   Sample rejections:")
         for r in rejected[:5]:
             print(f"   ❌ {r['title']} @ {r['company']} → {r['reject_reason']}")
 

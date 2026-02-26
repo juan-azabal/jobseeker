@@ -10,6 +10,7 @@ capture(user_id, event, properties)
 identify_user(user_id, email, name)
 capture_exception(exc, user_id=None)
 """
+
 import atexit
 import os
 

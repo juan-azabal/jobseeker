@@ -29,6 +29,7 @@ import reparse_rescore
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_job(job_id, has_desc=True, has_parsed=True, has_rf=False):
     job = {
         "id": job_id,
@@ -63,6 +64,7 @@ def _make_profile():
 # Dry-run: prints count and cost, no API calls
 # ---------------------------------------------------------------------------
 
+
 class TestDryRun:
     def test_dry_run_prints_count_and_cost(self, tmp_path, capsys, monkeypatch):
         jobs = {f"job{i}": _make_job(f"job{i}") for i in range(5)}
@@ -72,10 +74,8 @@ class TestDryRun:
         applied_yaml = tmp_path / "applied.yaml"
 
         monkeypatch.setattr(reparse_rescore, "load_cache", lambda: dict(jobs))
-        monkeypatch.setattr(reparse_rescore, "load_profile",
-                            lambda pid, **kw: _make_profile())
-        monkeypatch.setattr(reparse_rescore, "resolve_profile_paths",
-                            lambda pid, raw: {"applied": str(applied_yaml)})
+        monkeypatch.setattr(reparse_rescore, "load_profile", lambda pid, **kw: _make_profile())
+        monkeypatch.setattr(reparse_rescore, "resolve_profile_paths", lambda pid, raw: {"applied": str(applied_yaml)})
 
         parse_called = []
         monkeypatch.setattr(reparse_rescore, "parse_jd", lambda j: parse_called.append(1) or j)
@@ -94,14 +94,11 @@ class TestDryRun:
     def test_dry_run_no_railway_call(self, tmp_path, monkeypatch):
         jobs = {"j1": _make_job("j1")}
         monkeypatch.setattr(reparse_rescore, "load_cache", lambda: dict(jobs))
-        monkeypatch.setattr(reparse_rescore, "load_profile",
-                            lambda pid, **kw: _make_profile())
-        monkeypatch.setattr(reparse_rescore, "resolve_profile_paths",
-                            lambda pid, raw: {"applied": "/nonexistent.yaml"})
+        monkeypatch.setattr(reparse_rescore, "load_profile", lambda pid, **kw: _make_profile())
+        monkeypatch.setattr(reparse_rescore, "resolve_profile_paths", lambda pid, raw: {"applied": "/nonexistent.yaml"})
 
         railway_called = []
-        monkeypatch.setattr(reparse_rescore, "_post_to_railway",
-                            lambda jobs, pid: railway_called.append(1) or True)
+        monkeypatch.setattr(reparse_rescore, "_post_to_railway", lambda jobs, pid: railway_called.append(1) or True)
 
         with pytest.raises(SystemExit):
             sys.argv = ["reparse_rescore.py", "--profile", "testuser", "--dry-run"]
@@ -114,6 +111,7 @@ class TestDryRun:
 # Applied filter
 # ---------------------------------------------------------------------------
 
+
 class TestAppliedFilter:
     def test_applied_jobs_excluded(self, tmp_path, monkeypatch):
         jobs = {
@@ -122,14 +120,10 @@ class TestAppliedFilter:
             "applied2": _make_job("applied2"),
         }
         applied_yaml = tmp_path / "applied.yaml"
-        applied_yaml.write_text(
-            "applied:\n  ids:\n    - applied1\n    - applied2\n"
-        )
+        applied_yaml.write_text("applied:\n  ids:\n    - applied1\n    - applied2\n")
         monkeypatch.setattr(reparse_rescore, "load_cache", lambda: dict(jobs))
-        monkeypatch.setattr(reparse_rescore, "load_profile",
-                            lambda pid, **kw: _make_profile())
-        monkeypatch.setattr(reparse_rescore, "resolve_profile_paths",
-                            lambda pid, raw: {"applied": str(applied_yaml)})
+        monkeypatch.setattr(reparse_rescore, "load_profile", lambda pid, **kw: _make_profile())
+        monkeypatch.setattr(reparse_rescore, "resolve_profile_paths", lambda pid, raw: {"applied": str(applied_yaml)})
 
         parsed_ids = []
 
@@ -141,23 +135,26 @@ class TestAppliedFilter:
             return jobs
 
         monkeypatch.setattr(reparse_rescore, "parse_jd", _fake_parse)
-        monkeypatch.setattr(reparse_rescore, "_post_to_railway",
-                            lambda jobs, pid: True)
+        monkeypatch.setattr(reparse_rescore, "_post_to_railway", lambda jobs, pid: True)
         monkeypatch.setattr(reparse_rescore, "update_cache", lambda c, j: 0)
         monkeypatch.setattr(reparse_rescore, "save_cache", lambda c: None)
 
         with patch("builtins.__import__", wraps=__import__) as mock_import:
             # Patch vectorstore + scorer inside the function
             import importlib
+
             vstore_mock = MagicMock()
             vstore_mock.build_vectorstore.return_value = MagicMock()
             scorer_mock = MagicMock()
             scorer_mock.score_all = _fake_score_all
 
-            with patch.dict("sys.modules", {
-                "vectorstore": vstore_mock,
-                "scorer": scorer_mock,
-            }):
+            with patch.dict(
+                "sys.modules",
+                {
+                    "vectorstore": vstore_mock,
+                    "scorer": scorer_mock,
+                },
+            ):
                 sys.argv = ["reparse_rescore.py", "--profile", "testuser"]
                 reparse_rescore.main()
 
@@ -170,13 +167,12 @@ class TestAppliedFilter:
 # Empty cache
 # ---------------------------------------------------------------------------
 
+
 class TestEmptyCache:
     def test_empty_cache_exits(self, monkeypatch, capsys):
         monkeypatch.setattr(reparse_rescore, "load_cache", lambda: {})
-        monkeypatch.setattr(reparse_rescore, "load_profile",
-                            lambda pid, **kw: _make_profile())
-        monkeypatch.setattr(reparse_rescore, "resolve_profile_paths",
-                            lambda pid, raw: {"applied": "/nonexistent.yaml"})
+        monkeypatch.setattr(reparse_rescore, "load_profile", lambda pid, **kw: _make_profile())
+        monkeypatch.setattr(reparse_rescore, "resolve_profile_paths", lambda pid, raw: {"applied": "/nonexistent.yaml"})
 
         with pytest.raises(SystemExit) as exc:
             sys.argv = ["reparse_rescore.py", "--profile", "testuser"]
@@ -190,6 +186,7 @@ class TestEmptyCache:
 # ---------------------------------------------------------------------------
 # _post_to_railway
 # ---------------------------------------------------------------------------
+
 
 class TestPostToRailway:
     def test_skips_when_no_credentials(self, monkeypatch, capsys):
@@ -206,9 +203,7 @@ class TestPostToRailway:
         mock_resp = MagicMock()
         mock_resp.__enter__ = lambda s: s
         mock_resp.__exit__ = MagicMock(return_value=False)
-        mock_resp.read.return_value = json.dumps(
-            {"inserted": 1, "updated": 0}
-        ).encode()
+        mock_resp.read.return_value = json.dumps({"inserted": 1, "updated": 0}).encode()
 
         with patch("urllib.request.urlopen", return_value=mock_resp):
             result = reparse_rescore._post_to_railway([{"id": "j1"}], "testuser")

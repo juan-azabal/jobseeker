@@ -11,11 +11,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import main
 
 _PATCH_MAIN = {
-    "_DOMAIN_SCORES":    {"saas": 10, "data": 15},
+    "_DOMAIN_SCORES": {"saas": 10, "data": 15},
     "_SENIORITY_SCORES": {"principal": 15, "senior": 8},
-    "_PROFILE_SKILLS":   ["analytics"],
-    "_HOME_LOCATIONS":   ["barcelona"],
-    "_HOME_REGIONS":     [],
+    "_PROFILE_SKILLS": ["analytics"],
+    "_HOME_LOCATIONS": ["barcelona"],
+    "_HOME_REGIONS": [],
 }
 
 
@@ -92,7 +92,9 @@ class TestRankedJobsV2:
         """Hybrid score is clamped to 100 even if arithmetic exceeds it."""
         job = _make_job(rag_score={"technical_depth": "A", "profile_evidence": "A"})
         # Override fit score to something high
-        with patch.multiple("main", **{**_PATCH_MAIN, "_DOMAIN_SCORES": {"saas": 15}, "_SENIORITY_SCORES": {"principal": 15}}):
+        with patch.multiple(
+            "main", **{**_PATCH_MAIN, "_DOMAIN_SCORES": {"saas": 15}, "_SENIORITY_SCORES": {"principal": 15}}
+        ):
             main.ranked_jobs([job])
         # 35+20+20=75 with normal scores; clamping tested here conceptually
         assert job["_display_score"] <= 100

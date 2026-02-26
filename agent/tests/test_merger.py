@@ -26,7 +26,6 @@ def _job(source, title="Senior PM", company="Acme", **kwargs) -> RawJob:
 
 
 class TestSingleSource:
-
     def test_single_job_passes_through(self):
         """Single-source job passes through unchanged (except sources populated)."""
         from merger import merge_jobs
@@ -60,25 +59,28 @@ class TestSingleSource:
         jobs = [
             _job("indeed", title="PM A", company="Co1"),
             _job("indeed", title="PM B", company="Co2"),
-            _job("wttj",  title="PM C", company="Co3"),
+            _job("wttj", title="PM C", company="Co3"),
         ]
         result = merge_jobs(jobs)
         assert len(result) == 3
 
 
 class TestFieldGroupPriority:
-
     def test_salary_prefers_wttj_over_indeed(self):
         """WTTJ has salary priority; Indeed fills remaining gaps."""
         from merger import merge_jobs
 
         indeed_job = _job(
             "indeed",
-            min_amount=75000.0, max_amount=95000.0, currency="USD",
+            min_amount=75000.0,
+            max_amount=95000.0,
+            currency="USD",
         )
         wttj_job = _job(
             "wttj",
-            min_amount=80000.0, max_amount=100000.0, currency="EUR",
+            min_amount=80000.0,
+            max_amount=100000.0,
+            currency="EUR",
         )
         result = merge_jobs([indeed_job, wttj_job])
 
@@ -114,7 +116,7 @@ class TestFieldGroupPriority:
         from merger import merge_jobs
 
         indeed_job = _job("indeed", remote_type="no")
-        wttj_job   = _job("wttj",   remote_type="partial")
+        wttj_job = _job("wttj", remote_type="partial")
         result = merge_jobs([indeed_job, wttj_job])
 
         assert result[0].remote_type == "partial"
@@ -123,7 +125,7 @@ class TestFieldGroupPriority:
         """LinkedIn wins job_level group."""
         from merger import merge_jobs
 
-        indeed_job   = _job("indeed",   job_level="Senior")
+        indeed_job = _job("indeed", job_level="Senior")
         linkedin_job = _job("linkedin", job_level="Director")
         result = merge_jobs([indeed_job, linkedin_job])
 
@@ -133,8 +135,8 @@ class TestFieldGroupPriority:
         """Indeed wins location group (city/country)."""
         from merger import merge_jobs
 
-        wttj_job   = _job("wttj",   city="Barcelona", country="ES")
-        indeed_job = _job("indeed", city="Madrid",    country="ES")
+        wttj_job = _job("wttj", city="Barcelona", country="ES")
+        indeed_job = _job("indeed", city="Madrid", country="ES")
         result = merge_jobs([wttj_job, indeed_job])
 
         assert result[0].city == "Madrid"
@@ -143,8 +145,8 @@ class TestFieldGroupPriority:
         """Greenhouse wins description group (ATS first)."""
         from merger import merge_jobs
 
-        gh_job  = _job("greenhouse", description="GH desc with details about the role.")
-        li_job  = _job("linkedin",   description="LI desc short.")
+        gh_job = _job("greenhouse", description="GH desc with details about the role.")
+        li_job = _job("linkedin", description="LI desc short.")
         result = merge_jobs([gh_job, li_job])
 
         assert "GH desc" in result[0].description
@@ -154,7 +156,7 @@ class TestFieldGroupPriority:
         from merger import merge_jobs
 
         gh_job = _job("greenhouse", team="Platform")
-        li_job = _job("linkedin",   team="Core Product")
+        li_job = _job("linkedin", team="Core Product")
         result = merge_jobs([gh_job, li_job])
 
         # Greenhouse wins org_structure group → its team wins
@@ -165,26 +167,25 @@ class TestFieldGroupPriority:
         from merger import merge_jobs
 
         # Indeed has salary, WTTJ has experience_min but no salary
-        indeed_job = _job("indeed",  min_amount=90000.0, currency="USD")
-        wttj_job   = _job("wttj",    experience_min=5,   experience_max=8)
+        indeed_job = _job("indeed", min_amount=90000.0, currency="USD")
+        wttj_job = _job("wttj", experience_min=5, experience_max=8)
         result = merge_jobs([indeed_job, wttj_job])
 
         r = result[0]
         # WTTJ wins salary group → but WTTJ has no salary, so Indeed fills in
-        assert r.min_amount == 90000.0   # Indeed fills since WTTJ has none
+        assert r.min_amount == 90000.0  # Indeed fills since WTTJ has none
         # WTTJ wins remote group → experience from WTTJ
         assert r.experience_min == 5
         assert r.experience_max == 8
 
 
 class TestDescriptionMerge:
-
     def test_description_prefers_longer(self):
         """Within description group, longer text wins even if lower-priority source."""
         from merger import merge_jobs
 
         short_gh = _job("greenhouse", description="Short GH desc.")
-        long_li  = _job("linkedin",   description="Long LinkedIn description " * 10)
+        long_li = _job("linkedin", description="Long LinkedIn description " * 10)
         result = merge_jobs([short_gh, long_li])
 
         # LinkedIn desc is much longer → should win
@@ -194,8 +195,8 @@ class TestDescriptionMerge:
         """Plain text preferred over HTML of similar length."""
         from merger import merge_jobs
 
-        html_job  = _job("greenhouse", description="<p>Build <b>features</b> and define roadmap.</p>")
-        plain_job = _job("linkedin",   description="Build features and define roadmap for the team.")
+        html_job = _job("greenhouse", description="<p>Build <b>features</b> and define roadmap.</p>")
+        plain_job = _job("linkedin", description="Build features and define roadmap for the team.")
         result = merge_jobs([html_job, plain_job])
 
         # Plain text wins (no HTML tags)
@@ -206,20 +207,19 @@ class TestDescriptionMerge:
         from merger import merge_jobs
 
         gh_job = _job("greenhouse", description=None)
-        li_job = _job("linkedin",   description="LinkedIn description content.")
+        li_job = _job("linkedin", description="LinkedIn description content.")
         result = merge_jobs([gh_job, li_job])
 
         assert result[0].description == "LinkedIn description content."
 
 
 class TestListFieldMerge:
-
     def test_departments_unioned(self):
         """departments lists merged across sources (deduped)."""
         from merger import merge_jobs
 
-        gh_job   = _job("greenhouse", departments=["Product"])
-        ashby_job = _job("ashby",     departments=["Product", "Platform"])
+        gh_job = _job("greenhouse", departments=["Product"])
+        ashby_job = _job("ashby", departments=["Product", "Platform"])
         result = merge_jobs([gh_job, ashby_job])
 
         depts = result[0].departments
@@ -230,7 +230,7 @@ class TestListFieldMerge:
         from merger import merge_jobs
 
         wttj1 = _job("wttj", locations_structured=[{"city": "Barcelona", "country_code": "ES"}])
-        wttj2 = _job("wttj", locations_structured=[{"city": "Madrid",    "country_code": "ES"}])
+        wttj2 = _job("wttj", locations_structured=[{"city": "Madrid", "country_code": "ES"}])
         # Same id — different run results
         result = merge_jobs([wttj1, wttj2])
 
@@ -241,14 +241,13 @@ class TestListFieldMerge:
         from merger import merge_jobs
 
         gh_job = _job("greenhouse", departments=["Product"])
-        li_job = _job("linkedin",   departments=None)
+        li_job = _job("linkedin", departments=None)
         result = merge_jobs([gh_job, li_job])
 
         assert result[0].departments == ["Product"]
 
 
 class TestSourcesTracking:
-
     def test_two_sources_tracked(self):
         from merger import merge_jobs
 
@@ -281,8 +280,8 @@ class TestSourcesTracking:
         from merger import merge_jobs
 
         # greenhouse rank=1, indeed rank=6
-        gh_job     = _job("greenhouse", job_url="https://boards.greenhouse.io/acme/1")
-        indeed_job = _job("indeed",     job_url="https://www.indeed.com/job/1")
+        gh_job = _job("greenhouse", job_url="https://boards.greenhouse.io/acme/1")
+        indeed_job = _job("indeed", job_url="https://www.indeed.com/job/1")
         result = merge_jobs([gh_job, indeed_job])
 
         # greenhouse has highest priority → its job_url wins

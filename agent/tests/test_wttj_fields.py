@@ -21,9 +21,7 @@ def _make_wttj_hit(**overrides):
         "organization": {"name": "Acme Corp", "slug": "acme-corp"},
         "slug": "senior-pm-data-123",
         "reference": "ref-123",
-        "offices": [
-            {"city": "Barcelona", "country_code": "ES", "zip": "08001", "name": "Barcelona HQ"}
-        ],
+        "offices": [{"city": "Barcelona", "country_code": "ES", "zip": "08001", "name": "Barcelona HQ"}],
         "remote": "partial",
         "contract_type": "fulltime",
         "published_at": "2024-01-15",

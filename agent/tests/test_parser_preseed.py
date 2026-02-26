@@ -62,7 +62,6 @@ def _job(**kwargs) -> dict:
 
 
 class TestPreseedInParser:
-
     def test_preseed_called_before_llm(self):
         """preseed_parsed is called for every job that goes to LLM."""
         from parser import parse_jd
@@ -70,8 +69,7 @@ class TestPreseedInParser:
         job = _job(job_level="Director", remote_type="fulltime")
         mock_resp = _llm_response(_base_llm_output())
 
-        with patch("parser._make_openai_client") as mock_client_factory, \
-             patch("parser.preseed_parsed") as mock_preseed:
+        with patch("parser._make_openai_client") as mock_client_factory, patch("parser.preseed_parsed") as mock_preseed:
             mock_preseed.return_value = {}
             client = MagicMock()
             client.chat.completions.create.return_value = mock_resp
@@ -117,9 +115,7 @@ class TestPreseedInParser:
         from parser import parse_jd
 
         job = _job(experience_min=5, experience_max=10)
-        mock_resp = _llm_response(_base_llm_output(
-            years_experience_min=3, years_experience_max=6
-        ))
+        mock_resp = _llm_response(_base_llm_output(years_experience_min=3, years_experience_max=6))
 
         with patch("parser._make_openai_client") as mock_client_factory:
             client = MagicMock()
@@ -167,7 +163,11 @@ class TestPreseedInParser:
 
             system_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
             # Pre-seed values should appear in system prompt
-            assert "director" in system_msg.lower() or "pre-determined" in system_msg.lower() or "pre-seeded" in system_msg.lower()
+            assert (
+                "director" in system_msg.lower()
+                or "pre-determined" in system_msg.lower()
+                or "pre-seeded" in system_msg.lower()
+            )
 
     def test_no_preseed_when_no_structured_fields(self):
         """No structured fields → preseed dict empty → prompt unchanged."""
@@ -176,8 +176,10 @@ class TestPreseedInParser:
         job = _job()  # no structured fields
         mock_resp = _llm_response(_base_llm_output(seniority="senior"))
 
-        with patch("parser._make_openai_client") as mock_client_factory, \
-             patch("parser.preseed_parsed", return_value={}) as mock_preseed:
+        with (
+            patch("parser._make_openai_client") as mock_client_factory,
+            patch("parser.preseed_parsed", return_value={}) as mock_preseed,
+        ):
             client = MagicMock()
             client.chat.completions.create.return_value = mock_resp
             mock_client_factory.return_value = client
@@ -191,8 +193,10 @@ class TestPreseedInParser:
         from parser import parse_jd
 
         job = _job(
-            min_amount=80000.0, max_amount=100000.0,
-            currency="EUR", interval="yearly",
+            min_amount=80000.0,
+            max_amount=100000.0,
+            currency="EUR",
+            interval="yearly",
             salary_source="direct_data",
         )
         mock_resp = _llm_response(_base_llm_output(salary_mentioned=None))

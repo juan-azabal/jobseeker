@@ -63,7 +63,10 @@ class TestRoleFunctionPrefilter:
         """PM profile + Engineering job → filtered out."""
         jobs = [_make_job(role_function="engineering")]
         passed, rejected, stats = prefilter_jobs(
-            jobs, prefs_file, empty_applied, empty_seen,
+            jobs,
+            prefs_file,
+            empty_applied,
+            empty_seen,
             profile_role_function="product",
         )
         assert len(passed) == 0
@@ -74,7 +77,10 @@ class TestRoleFunctionPrefilter:
         """PM profile + PM job → kept."""
         jobs = [_make_job(role_function="product")]
         passed, rejected, stats = prefilter_jobs(
-            jobs, prefs_file, empty_applied, empty_seen,
+            jobs,
+            prefs_file,
+            empty_applied,
+            empty_seen,
             profile_role_function="product",
         )
         assert len(passed) == 1
@@ -83,7 +89,10 @@ class TestRoleFunctionPrefilter:
         """Job without role_function → gate disabled → kept."""
         jobs = [_make_job()]  # no role_function
         passed, rejected, stats = prefilter_jobs(
-            jobs, prefs_file, empty_applied, empty_seen,
+            jobs,
+            prefs_file,
+            empty_applied,
+            empty_seen,
             profile_role_function="product",
         )
         assert len(passed) == 1
@@ -92,7 +101,10 @@ class TestRoleFunctionPrefilter:
         """Profile without role_function → gate disabled → kept."""
         jobs = [_make_job(role_function="engineering")]
         passed, rejected, stats = prefilter_jobs(
-            jobs, prefs_file, empty_applied, empty_seen,
+            jobs,
+            prefs_file,
+            empty_applied,
+            empty_seen,
             # profile_role_function not passed (None)
         )
         assert len(passed) == 1
@@ -101,7 +113,10 @@ class TestRoleFunctionPrefilter:
         """role_function match is case-insensitive."""
         jobs = [_make_job(role_function="Product")]
         passed, rejected, stats = prefilter_jobs(
-            jobs, prefs_file, empty_applied, empty_seen,
+            jobs,
+            prefs_file,
+            empty_applied,
+            empty_seen,
             profile_role_function="product",
         )
         assert len(passed) == 1
@@ -110,7 +125,10 @@ class TestRoleFunctionPrefilter:
         """Mismatch increments role_function_mismatch in stats."""
         jobs = [_make_job(role_function="marketing")]
         passed, rejected, stats = prefilter_jobs(
-            jobs, prefs_file, empty_applied, empty_seen,
+            jobs,
+            prefs_file,
+            empty_applied,
+            empty_seen,
             profile_role_function="product",
         )
         assert stats.get("role_function_mismatch", 0) == 1

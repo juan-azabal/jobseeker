@@ -78,8 +78,7 @@ def list_profiles(profiles_dir: str = PROFILES_DIR, active_only: bool = False) -
     if not os.path.isdir(profiles_dir):
         return []
     ids = sorted(
-        f[:-5] for f in os.listdir(profiles_dir)
-        if f.endswith(".yaml") and not f.startswith("_") and "-" not in f[:-5]
+        f[:-5] for f in os.listdir(profiles_dir) if f.endswith(".yaml") and not f.startswith("_") and "-" not in f[:-5]
     )
     if not active_only:
         return ids
@@ -98,13 +97,12 @@ def resolve_profile_paths(profile_id: str, raw: dict) -> dict:
     """
     per_user_prefs = f"config/profiles/{profile_id}-preferences.yaml"
     return {
-        "preferences": raw.get("preferences") or (
-            per_user_prefs if os.path.exists(per_user_prefs) else "config/preferences.yaml"
-        ),
-        "searches":  raw.get("searches")  or "config/searches.yaml",
+        "preferences": raw.get("preferences")
+        or (per_user_prefs if os.path.exists(per_user_prefs) else "config/preferences.yaml"),
+        "searches": raw.get("searches") or "config/searches.yaml",
         "watchlist": raw.get("watchlist") or "config/watchlist.yaml",
-        "applied":   raw.get("applied")   or f"config/profiles/{profile_id}-applied.yaml",
-        "seen_ids":  raw.get("seen_ids")  or f"config/seen_ids/{profile_id}.txt",
+        "applied": raw.get("applied") or f"config/profiles/{profile_id}-applied.yaml",
+        "seen_ids": raw.get("seen_ids") or f"config/seen_ids/{profile_id}.txt",
     }
 
 

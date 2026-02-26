@@ -6,7 +6,6 @@ in the skill_embeddings table (migration 011) to avoid redundant API calls.
 Falls back gracefully if OPENAI_API_KEY is missing or the API errors.
 """
 
-import os
 import time
 
 import numpy as np
@@ -74,6 +73,7 @@ def _load_from_cache(db_path: str, skill_text: str) -> list[float] | None:
     """Read embedding from SQLite cache. Returns None on miss."""
     try:
         from api.db.queries import get_cached_embeddings
+
         result = get_cached_embeddings(db_path, [_normalize(skill_text)])
         return result.get(_normalize(skill_text))
     except Exception as exc:
@@ -87,6 +87,7 @@ def _load_batch_from_cache(db_path: str, skills: list[str]) -> dict[str, list[fl
         return {}
     try:
         from api.db.queries import get_cached_embeddings
+
         return get_cached_embeddings(db_path, [_normalize(s) for s in skills])
     except Exception as exc:
         logger.warning("Batch cache read failed: %s", exc)
@@ -97,19 +98,19 @@ def _save_to_cache(db_path: str, skill_text: str, embedding: list[float]) -> Non
     """Store embedding in SQLite cache."""
     try:
         from api.db.queries import save_embedding
+
         save_embedding(db_path, _normalize(skill_text), embedding, MODEL)
     except Exception as exc:
         logger.warning("Cache write failed for %r: %s", skill_text, exc)
 
 
-def _save_batch_to_cache(
-    db_path: str, items: list[tuple[str, list[float]]]
-) -> None:
+def _save_batch_to_cache(db_path: str, items: list[tuple[str, list[float]]]) -> None:
     """Bulk-store embeddings in SQLite cache."""
     if not items:
         return
     try:
         from api.db.queries import save_embeddings_batch
+
         save_embeddings_batch(
             db_path,
             [(_normalize(text), emb, MODEL) for text, emb in items],
@@ -141,7 +142,9 @@ def get_embedding(text: str, db_path: str) -> list[float] | None:
     try:
         client = openai.OpenAI()
         response = client.embeddings.create(
-            model=MODEL, input=[normalized], dimensions=DIMENSIONS,
+            model=MODEL,
+            input=[normalized],
+            dimensions=DIMENSIONS,
         )
         embedding = response.data[0].embedding
         _save_to_cache(db_path, normalized, embedding)
@@ -152,9 +155,7 @@ def get_embedding(text: str, db_path: str) -> list[float] | None:
         return None
 
 
-def get_embeddings_batch(
-    texts: list[str], db_path: str
-) -> dict[str, list[float]]:
+def get_embeddings_batch(texts: list[str], db_path: str) -> dict[str, list[float]]:
     """Get embeddings for multiple texts. Memory cache → SQLite → API.
 
     Returns dict of normalized_text → embedding. Missing texts (API failure)
@@ -206,7 +207,9 @@ def get_embeddings_batch(
             try:
                 client = openai.OpenAI()
                 response = client.embeddings.create(
-                    model=MODEL, input=misses, dimensions=DIMENSIONS,
+                    model=MODEL,
+                    input=misses,
+                    dimensions=DIMENSIONS,
                 )
                 new_embeddings = [item.embedding for item in response.data]
                 to_cache = []

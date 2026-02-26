@@ -31,7 +31,11 @@ def db():
 
 
 def _insert_job(db_path: str, job_id: str, role_function: str | None):
-    parsed = {"domain": "saas", "seniority": "senior", "role_function": role_function} if role_function else {"domain": "saas", "seniority": "senior"}
+    parsed = (
+        {"domain": "saas", "seniority": "senior", "role_function": role_function}
+        if role_function
+        else {"domain": "saas", "seniority": "senior"}
+    )
     con = sqlite3.connect(db_path)
     con.execute(
         """INSERT INTO jobs (job_id, title, company, location, location_type,

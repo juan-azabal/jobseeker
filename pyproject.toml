@@ -1,0 +1,15 @@
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+# E402: module-level import not at top — intentional lazy imports in agent/main.py
+# E741: ambiguous variable names (l, O, I) — pre-existing in codebase
+# F401: unused imports — suppressed per-file for tests; checked elsewhere
+ignore = ["E402", "E741"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests frequently import fixtures and helpers that appear unused to the linter
+"tests/**/*.py"       = ["F401", "F811", "F841"]
+"agent/tests/**/*.py" = ["F401", "F811", "F841"]
+"**/conftest.py"      = ["F401"]
+"agent/scripts/**"    = ["F401"]

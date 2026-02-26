@@ -24,9 +24,9 @@ ATS constraints:
   - Single column, no tabs except right-aligned date
   - Post-processing: replaces em dash, en dash, arrows, Oxford comma
 """
+
 import logging
 import re
-from pathlib import Path
 
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 
 # ── Color palette ────────────────────────────────────────────────────────────
 COLOR_ACCENT = RGBColor(0x1F, 0x4E, 0x79)  # dark blue: name, section headers
-COLOR_TITLE  = RGBColor(0x44, 0x44, 0x44)  # dark gray: professional title
-COLOR_MUTED  = RGBColor(0x55, 0x55, 0x55)  # medium gray: contact, dates, URLs, context
+COLOR_TITLE = RGBColor(0x44, 0x44, 0x44)  # dark gray: professional title
+COLOR_MUTED = RGBColor(0x55, 0x55, 0x55)  # medium gray: contact, dates, URLs, context
 # Black = default (no color attribute): body text, bullets
 
 # Tab stop for right-aligned date: A4 content width at 1" margins
@@ -46,14 +46,14 @@ _DATE_TAB_POS = Inches(6.27)
 
 # ATS post-processing: characters to replace
 _REPLACEMENTS = [
-    ("\u2014", "-"),   # em dash → hyphen
-    ("\u2013", "-"),   # en dash → hyphen
-    ("\u2192", ""),    # → arrow → removed
-    ("=>",     ""),    # => arrow → removed
-    ("\u007e", ""),    # tilde
-    ("\u2022", ""),    # • bullet
-    ("\u25e6", ""),    # ◦ hollow bullet
-    ("\u25aa", ""),    # ▪ small square
+    ("\u2014", "-"),  # em dash → hyphen
+    ("\u2013", "-"),  # en dash → hyphen
+    ("\u2192", ""),  # → arrow → removed
+    ("=>", ""),  # => arrow → removed
+    ("\u007e", ""),  # tilde
+    ("\u2022", ""),  # • bullet
+    ("\u25e6", ""),  # ◦ hollow bullet
+    ("\u25aa", ""),  # ▪ small square
 ]
 
 
@@ -81,13 +81,13 @@ def _strip_fences_and_preamble(markdown: str) -> str:
     match = re.search(r"^# ", markdown, re.MULTILINE)
     if not match:
         return markdown.strip()
-    return markdown[match.start():].strip()
+    return markdown[match.start() :].strip()
 
 
 # ── Run / paragraph helpers ──────────────────────────────────────────────────
 
-def _set_run(run, size_pt: int, bold: bool = False, italic: bool = False,
-             color: RGBColor = None) -> None:
+
+def _set_run(run, size_pt: int, bold: bool = False, italic: bool = False, color: RGBColor = None) -> None:
     """Configure font on a run (Calibri, size, bold, italic, color)."""
     run.font.name = "Calibri"
     run.font.size = Pt(size_pt)
@@ -107,6 +107,7 @@ def _set_spacing(para, before_twips: int = 0, after_twips: int = 0) -> None:
 
 
 # ── Element builders ─────────────────────────────────────────────────────────
+
 
 def _add_name(doc: Document, text: str) -> None:
     """Name: 20pt bold #1F4E79, after:60."""
@@ -232,15 +233,11 @@ def _add_education_line(doc: Document, text: str) -> None:
 
 # ── Section parsers ──────────────────────────────────────────────────────────
 
+
 def _is_italic_context_line(line: str) -> bool:
     """Return True if line is a standalone _italic context_ marker."""
     s = line.strip()
-    return (
-        s.startswith("_")
-        and s.endswith("_")
-        and len(s) > 2
-        and not s.startswith("__")
-    )
+    return s.startswith("_") and s.endswith("_") and len(s) > 2 and not s.startswith("__")
 
 
 def _parse_work_experience(doc: Document, lines: list[str]) -> None:
@@ -329,8 +326,7 @@ def _parse_core_skills(doc: Document, lines: list[str]) -> None:
         # Phase 6: "Theme: prose" — colon within first ~60 chars, not a bullet/bold
         colon_match = re.match(r"^([A-Za-z][^:*\n]{0,50}):\s+(.+)", s)
         if colon_match and not s.startswith("- ") and not s.startswith("**"):
-            _add_core_skills_line(doc, colon_match.group(1).strip(),
-                                  colon_match.group(2).strip())
+            _add_core_skills_line(doc, colon_match.group(1).strip(), colon_match.group(2).strip())
         elif s.startswith("**") and s.endswith("**"):
             # Phase 5 compat: **Theme Name** block
             theme = s.strip("*").strip()
@@ -371,6 +367,7 @@ def _parse_prose_section(doc: Document, lines: list[str]) -> None:
 
 # ── Main entry point ─────────────────────────────────────────────────────────
 
+
 def build_docx(markdown: str, output_path: str) -> str:
     """Parse structured LLM markdown and build an ATS-compliant .docx file.
 
@@ -394,19 +391,18 @@ def build_docx(markdown: str, output_path: str) -> str:
 
     if not re.search(r"^# ", markdown, re.MULTILINE):
         raise ValueError(
-            "Malformed CV markdown: no '# Name' heading found. "
-            "The LLM output must start with a level-1 heading."
+            "Malformed CV markdown: no '# Name' heading found. The LLM output must start with a level-1 heading."
         )
 
     doc = Document()
 
     # Page setup: A4, 1-inch margins
     section = doc.sections[0]
-    section.page_width  = Inches(8.27)
+    section.page_width = Inches(8.27)
     section.page_height = Inches(11.69)
-    section.left_margin   = Inches(1.0)
-    section.right_margin  = Inches(1.0)
-    section.top_margin    = Inches(1.0)
+    section.left_margin = Inches(1.0)
+    section.right_margin = Inches(1.0)
+    section.top_margin = Inches(1.0)
     section.bottom_margin = Inches(1.0)
 
     # Default paragraph style

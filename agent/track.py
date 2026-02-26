@@ -32,6 +32,7 @@ APPLIED_YAML = "config/applied.yaml"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
+
 def _load_latest_jobs():
     files = sorted(glob.glob("output/jobs_*.json"), reverse=True)
     files = [f for f in files if "rejected" not in f]
@@ -47,6 +48,7 @@ def _ranked_list(jobs):
     """Return jobs in digest order (same as main.py's ranked_jobs)."""
     # Import here to avoid circular deps; main.py has no side-effects at import
     from main import ranked_jobs
+
     tier_a, tier_b, tier_c = ranked_jobs(jobs)
     return tier_a + tier_b + tier_c
 
@@ -95,20 +97,15 @@ def _existing_company_names(data):
 
 
 def _existing_skip_ids(data):
-    return {
-        (e.get("id") or e) if isinstance(e, dict) else str(e)
-        for e in (data["not_interested"].get("ids") or [])
-    }
+    return {(e.get("id") or e) if isinstance(e, dict) else str(e) for e in (data["not_interested"].get("ids") or [])}
 
 
 def _existing_applied_ids(data):
-    return {
-        (e.get("id") or e) if isinstance(e, dict) else str(e)
-        for e in (data["applied"].get("ids") or [])
-    }
+    return {(e.get("id") or e) if isinstance(e, dict) else str(e) for e in (data["applied"].get("ids") or [])}
 
 
 # ── commands ─────────────────────────────────────────────────────────────────
+
 
 def cmd_applied(positions):
     jobs, src = _load_latest_jobs()
@@ -140,11 +137,11 @@ def cmd_applied(positions):
         for a in added:
             print(f"   {a}")
     if skipped:
-        print(f"ℹ️   Already tracked:")
+        print("ℹ️   Already tracked:")
         for s in skipped:
             print(f"   {s}")
 
-    print(f"\n   These companies will be filtered for 90 days.")
+    print("\n   These companies will be filtered for 90 days.")
 
 
 def cmd_skip(positions):
@@ -173,15 +170,15 @@ def cmd_skip(positions):
 
     if added:
         _save_yaml(data)
-        print(f"✅  Marked as not interested:")
+        print("✅  Marked as not interested:")
         for a in added:
             print(f"   {a}")
     if skipped:
-        print(f"ℹ️   Already tracked:")
+        print("ℹ️   Already tracked:")
         for s in skipped:
             print(f"   {s}")
 
-    print(f"\n   These jobs will be filtered from future runs.")
+    print("\n   These jobs will be filtered from future runs.")
 
 
 def cmd_list():
@@ -205,6 +202,7 @@ def cmd_list():
                 d = e.get("date", "?")
                 try:
                     from datetime import datetime
+
                     age = (today - datetime.strptime(d, "%Y-%m-%d").date()).days
                     expires_in = 90 - age
                     status = f"expires in {expires_in}d" if expires_in > 0 else "⚠ expired"
@@ -237,7 +235,7 @@ def cmd_list():
     if skip_titles:
         print("\n   Title patterns:")
         for t in skip_titles:
-            print(f"   \"{t}\"")
+            print(f'   "{t}"')
 
 
 def cmd_help():
@@ -245,6 +243,7 @@ def cmd_help():
 
 
 # ── main ─────────────────────────────────────────────────────────────────────
+
 
 def main():
     args = sys.argv[1:]

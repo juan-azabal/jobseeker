@@ -122,6 +122,7 @@ JOB_HEALTHCARE = {
 # Rubric tests
 # ---------------------------------------------------------------------------
 
+
 class TestRubricForDE:
     """Rubric must reflect Data Engineer profile, not PM/EU."""
 
@@ -160,6 +161,7 @@ class TestRubricForDE:
 # Prefilter tests
 # ---------------------------------------------------------------------------
 
+
 class TestPrefilterForDE:
     """Prefilter with DE preferences should accept DE titles, reject PM titles."""
 
@@ -192,6 +194,7 @@ class TestPrefilterForDE:
 # Heuristic scoring tests
 # ---------------------------------------------------------------------------
 
+
 class TestHeuristicScoringForDE:
     """Heuristic scoring uses the DE profile's domains/skills, not Juan's."""
 
@@ -217,6 +220,7 @@ class TestHeuristicScoringForDE:
     def test_no_juan_specific_values_in_scoring(self):
         """Ensure _HOME_LOCATIONS was set to DE profile's, not Juan's."""
         from main import _HOME_LOCATIONS
+
         assert "barcelona" not in _HOME_LOCATIONS
         assert "new york" in _HOME_LOCATIONS or "us" in _HOME_LOCATIONS
 
@@ -224,6 +228,7 @@ class TestHeuristicScoringForDE:
 # ---------------------------------------------------------------------------
 # Full pipeline integration (without live API calls)
 # ---------------------------------------------------------------------------
+
 
 class TestFullPipelineNonJuan:
     """No Juan-specific values appear anywhere in outputs."""

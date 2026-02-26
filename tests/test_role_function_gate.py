@@ -99,8 +99,7 @@ class TestRoleFunctionGate:
     def test_mismatch_score_not_below_zero(self):
         """Mismatch penalty never drives score below 0."""
         profile_bad = {**_PROFILE_WITH_RF, "domains": {"other": -5}}
-        score = hybrid_score(profile_bad, _PARSED_ENG, _JOB, False,
-                             technical_grade="C", profile_grade="C")
+        score = hybrid_score(profile_bad, _PARSED_ENG, _JOB, False, technical_grade="C", profile_grade="C")
         assert score >= 0
 
     def test_case_insensitive_match(self):

@@ -23,6 +23,7 @@ from tests.fixtures import BASELINE_PROFILE
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 def _load_juan_profile():
     """Return the fixed baseline profile and initialize heuristic config.
 
@@ -30,6 +31,7 @@ def _load_juan_profile():
     profile tuning never breaks these regression tests.
     """
     import copy
+
     profile = copy.deepcopy(BASELINE_PROFILE)
     _load_heuristic_config(profile)
     return profile
@@ -97,6 +99,7 @@ JOB_LOW_FIT = {
 # Heuristic score regression
 # ---------------------------------------------------------------------------
 
+
 class TestHeuristicScoreBaseline:
     """Exact heuristic scores for Juan's profile — regression safety net."""
 
@@ -119,6 +122,7 @@ class TestHeuristicScoreBaseline:
 # ---------------------------------------------------------------------------
 # Rubric prompt regression
 # ---------------------------------------------------------------------------
+
 
 class TestRubricPromptBaseline:
     """Rubric prompt output for Juan's profile — regression safety net."""

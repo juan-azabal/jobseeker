@@ -33,8 +33,8 @@ os.chdir(ROOT)
 sys.path.insert(0, str(ROOT))
 
 from user_config import load_profile, list_profiles  # noqa: E402
-from vectorstore import build_vectorstore             # noqa: E402
-from scorer import score_all                          # noqa: E402
+from vectorstore import build_vectorstore  # noqa: E402
+from scorer import score_all  # noqa: E402
 
 
 def load_all_unique_jobs():
@@ -42,10 +42,8 @@ def load_all_unique_jobs():
     Within each group, prefer entries with rag_score, then fit_score."""
     all_jobs: dict[str, dict] = {}
     # Load original files first, then reparsed (reparsed has latest parsed data)
-    original_files  = sorted(f for f in glob.glob("output/jobs_*.json")
-                             if "reparsed" not in f and "rescored" not in f)
-    reparsed_files  = sorted(f for f in glob.glob("output/jobs_*.json")
-                             if "reparsed" in f and "rescored" not in f)
+    original_files = sorted(f for f in glob.glob("output/jobs_*.json") if "reparsed" not in f and "rescored" not in f)
+    reparsed_files = sorted(f for f in glob.glob("output/jobs_*.json") if "reparsed" in f and "rescored" not in f)
 
     for path in original_files + reparsed_files:
         try:
@@ -63,13 +61,12 @@ def load_all_unique_jobs():
                 all_jobs[jid] = j
             else:
                 has_rag = bool(j.get("rag_score"))
-                ex_rag  = bool(existing.get("rag_score"))
+                ex_rag = bool(existing.get("rag_score"))
                 # Prefer rag_score; within rag prefer higher score; else prefer latest
                 if has_rag and not ex_rag:
                     all_jobs[jid] = j
                 elif has_rag and ex_rag:
-                    if (j.get("rag_score") or {}).get("score", 0) > \
-                       (existing.get("rag_score") or {}).get("score", 0):
+                    if (j.get("rag_score") or {}).get("score", 0) > (existing.get("rag_score") or {}).get("score", 0):
                         all_jobs[jid] = j
                 elif not ex_rag:
                     all_jobs[jid] = j  # take latest if neither has rag
@@ -100,13 +97,15 @@ def main():
 
     # Filter: need description + parsed, and either no rag_score or --all
     eligible = [
-        j for j in jobs
-        if j.get("description") and len(j.get("description", "")) >= 100
+        j
+        for j in jobs
+        if j.get("description")
+        and len(j.get("description", "")) >= 100
         and j.get("parsed")
         and (force_all or not j.get("rag_score"))
     ]
     already_scored = sum(1 for j in jobs if j.get("rag_score"))
-    skipped_no_desc = sum(1 for j in jobs if not j.get("description") or len(j.get("description","")) < 100)
+    skipped_no_desc = sum(1 for j in jobs if not j.get("description") or len(j.get("description", "")) < 100)
 
     print(f"  Already RAG-scored:  {already_scored}")
     print(f"  Skipped (no desc):   {skipped_no_desc}")
@@ -118,7 +117,7 @@ def main():
         return
 
     # Build vectorstore
-    print(f"\nBuilding vectorstore from profile knowledge files...")
+    print("\nBuilding vectorstore from profile knowledge files...")
     collection = build_vectorstore(profile=profile)
 
     # RAG score
@@ -147,7 +146,7 @@ def main():
     print(f"\n>> Saved {len(clean)} jobs to {out_path}")
     print(f"   Total with RAG score: {total_rag}/{len(clean)}")
     print("\nNext step: ingest into jobsearch:")
-    print(f"  cd ~/Proyectos/jobsearch && python3 -m api.ingest")
+    print("  cd ~/Proyectos/jobsearch && python3 -m api.ingest")
 
 
 if __name__ == "__main__":

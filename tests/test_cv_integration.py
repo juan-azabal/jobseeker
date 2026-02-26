@@ -15,6 +15,7 @@ Every formatting requirement is verified end-to-end:
   - No **bold** markers leaking as text
   - Core Skills: #1F4E79 theme run (not bold) + normal prose run
 """
+
 import pytest
 from pathlib import Path
 from docx import Document
@@ -23,9 +24,9 @@ from docx.oxml.ns import qn
 
 
 # ── Color constants (mirror docx_builder) ────────────────────────────────────
-_COLOR_ACCENT = RGBColor(0x1F, 0x4E, 0x79)   # dark blue: name, section headers
-_COLOR_TITLE  = RGBColor(0x44, 0x44, 0x44)   # dark gray: professional title
-_COLOR_MUTED  = RGBColor(0x55, 0x55, 0x55)   # medium gray: contact, dates, context
+_COLOR_ACCENT = RGBColor(0x1F, 0x4E, 0x79)  # dark blue: name, section headers
+_COLOR_TITLE = RGBColor(0x44, 0x44, 0x44)  # dark gray: professional title
+_COLOR_MUTED = RGBColor(0x55, 0x55, 0x55)  # medium gray: contact, dates, context
 
 # ── Golden-path Phase 6 markdown ─────────────────────────────────────────────
 # Realistic 2-page CV with all required sections, tab-separated dates,
@@ -90,6 +91,7 @@ GOLDEN_MARKDOWN = (
 def _build(tmp_path) -> tuple[Path, Document]:
     """Build the golden .docx and return (path, Document)."""
     from api.cv.docx_builder import build_docx
+
     path = tmp_path / "integration_golden.docx"
     build_docx(GOLDEN_MARKDOWN, str(path))
     return path, Document(str(path))
@@ -97,32 +99,30 @@ def _build(tmp_path) -> tuple[Path, Document]:
 
 # ── Full pipeline tests ───────────────────────────────────────────────────────
 
+
 def test_pipeline_passes_ats_audit(tmp_path):
     """Full pipeline: build_docx() → audit_docx() → passed:True, zero violations."""
     from api.cv.ats_audit import audit_docx
+
     path, _ = _build(tmp_path)
     result = audit_docx(str(path))
-    assert result["passed"] is True, (
-        f"ATS audit failed. Violations: {result['violations']}"
-    )
-    assert result["violations"] == [], (
-        f"Expected zero violations, got: {result['violations']}"
-    )
+    assert result["passed"] is True, f"ATS audit failed. Violations: {result['violations']}"
+    assert result["violations"] == [], f"Expected zero violations, got: {result['violations']}"
 
 
 def test_pipeline_zero_warnings(tmp_path):
     """Full pipeline: build_docx() → audit_docx() → zero formatting warnings."""
     from api.cv.ats_audit import audit_docx
+
     path, _ = _build(tmp_path)
     result = audit_docx(str(path))
-    assert result["warnings"] == [], (
-        f"Expected zero warnings, got: {result['warnings']}"
-    )
+    assert result["warnings"] == [], f"Expected zero warnings, got: {result['warnings']}"
 
 
 def test_pipeline_audit_result_has_all_keys(tmp_path):
     """audit_docx() result must contain passed, violations, warnings, stats."""
     from api.cv.ats_audit import audit_docx
+
     path, _ = _build(tmp_path)
     result = audit_docx(str(path))
     for key in ("passed", "violations", "warnings", "stats"):
@@ -132,14 +132,11 @@ def test_pipeline_audit_result_has_all_keys(tmp_path):
 def test_pipeline_stats_sections_and_bullets(tmp_path):
     """ATS audit stats must reflect all required sections and bullets."""
     from api.cv.ats_audit import audit_docx
+
     path, _ = _build(tmp_path)
     stats = audit_docx(str(path))["stats"]
-    assert stats["section_count"] >= 6, (
-        f"Expected ≥6 sections, got {stats['section_count']}"
-    )
-    assert stats["bullet_count"] >= 5, (
-        f"Expected ≥5 bullets, got {stats['bullet_count']}"
-    )
+    assert stats["section_count"] >= 6, f"Expected ≥6 sections, got {stats['section_count']}"
+    assert stats["bullet_count"] >= 5, f"Expected ≥5 bullets, got {stats['bullet_count']}"
     assert stats["paragraph_count"] > 10, "Too few paragraphs"
     assert stats["estimated_pages"] >= 1
 
@@ -147,27 +144,22 @@ def test_pipeline_stats_sections_and_bullets(tmp_path):
 def test_pipeline_stats_formatting_counters(tmp_path):
     """ATS audit stats must report italic lines, tab lines, bold lines."""
     from api.cv.ats_audit import audit_docx
+
     path, _ = _build(tmp_path)
     stats = audit_docx(str(path))["stats"]
-    assert stats["italic_count"] >= 2, (
-        f"Expected ≥2 italic context paragraphs, got {stats['italic_count']}"
-    )
-    assert stats["tab_count"] >= 2, (
-        f"Expected ≥2 tab-stop paragraphs (company lines), got {stats['tab_count']}"
-    )
-    assert stats["bold_count"] < 15, (
-        f"Expected <15 all-bold paragraphs, got {stats['bold_count']}"
-    )
+    assert stats["italic_count"] >= 2, f"Expected ≥2 italic context paragraphs, got {stats['italic_count']}"
+    assert stats["tab_count"] >= 2, f"Expected ≥2 tab-stop paragraphs (company lines), got {stats['tab_count']}"
+    assert stats["bold_count"] < 15, f"Expected <15 all-bold paragraphs, got {stats['bold_count']}"
 
 
 # ── Formatting spec tests ─────────────────────────────────────────────────────
+
 
 def test_name_20pt_bold_accent_color(tmp_path):
     """Name: 20pt, bold, #1F4E79."""
     path, doc = _build(tmp_path)
     name_para = next(
-        (p for p in doc.paragraphs
-         if p.runs and p.runs[0].font.size and abs(p.runs[0].font.size.pt - 20.0) < 0.5),
+        (p for p in doc.paragraphs if p.runs and p.runs[0].font.size and abs(p.runs[0].font.size.pt - 20.0) < 0.5),
         None,
     )
     assert name_para is not None, "No 20pt paragraph found (expected: name)"
@@ -175,9 +167,7 @@ def test_name_20pt_bold_accent_color(tmp_path):
     run = name_para.runs[0]
     assert run.font.bold is True, "Name run must be bold"
     assert run.font.color.type is not None, "Name must have explicit color"
-    assert run.font.color.rgb == _COLOR_ACCENT, (
-        f"Name color must be #1F4E79, got {run.font.color.rgb}"
-    )
+    assert run.font.color.rgb == _COLOR_ACCENT, f"Name color must be #1F4E79, got {run.font.color.rgb}"
 
 
 def test_all_required_section_headers_present(tmp_path):
@@ -198,49 +188,34 @@ def test_all_required_section_headers_present(tmp_path):
         assert para.runs, f"Header '{name}' has no runs"
         run = para.runs[0]
         assert run.font.bold is True, f"Header '{name}' must be bold"
-        assert run.font.size and abs(run.font.size.pt - 12.0) < 0.5, (
-            f"Header '{name}' must be 12pt"
-        )
+        assert run.font.size and abs(run.font.size.pt - 12.0) < 0.5, f"Header '{name}' must be 12pt"
         assert run.font.color.type is not None
-        assert run.font.color.rgb == _COLOR_ACCENT, (
-            f"Header '{name}' must be #1F4E79"
-        )
+        assert run.font.color.rgb == _COLOR_ACCENT, f"Header '{name}' must be #1F4E79"
 
 
 def test_bullets_use_list_style_only(tmp_path):
     """Bullets: at least 5 List Bullet paragraphs; zero unicode bullet characters."""
     UNICODE_BULLETS = {"\u2022", "\u25e6", "\u25aa", "\u2013", "\u2192", "•", "◦", "▪"}
     path, doc = _build(tmp_path)
-    list_paras = [
-        p for p in doc.paragraphs
-        if "List" in p.style.name or "Bullet" in p.style.name
-    ]
-    assert len(list_paras) >= 5, (
-        f"Expected ≥5 List Bullet paragraphs, got {len(list_paras)}"
-    )
+    list_paras = [p for p in doc.paragraphs if "List" in p.style.name or "Bullet" in p.style.name]
+    assert len(list_paras) >= 5, f"Expected ≥5 List Bullet paragraphs, got {len(list_paras)}"
     for para in doc.paragraphs:
         for char in UNICODE_BULLETS:
-            assert char not in para.text, (
-                f"Unicode bullet '{char}' found in: {para.text[:60]}"
-            )
+            assert char not in para.text, f"Unicode bullet '{char}' found in: {para.text[:60]}"
 
 
 def test_context_lines_italic_10pt_muted(tmp_path):
     """Work Experience context lines: italic, 10pt, #555555, at least 2."""
     path, doc = _build(tmp_path)
     italic_paras = [p for p in doc.paragraphs if any(r.font.italic for r in p.runs)]
-    assert len(italic_paras) >= 2, (
-        f"Expected ≥2 italic context paragraphs, got {len(italic_paras)}"
-    )
+    assert len(italic_paras) >= 2, f"Expected ≥2 italic context paragraphs, got {len(italic_paras)}"
     for para in italic_paras:
         italic_run = next(r for r in para.runs if r.font.italic)
         assert italic_run.font.size and abs(italic_run.font.size.pt - 10.0) < 0.5, (
             f"Context line not 10pt: '{para.text[:60]}'"
         )
         assert italic_run.font.color.type is not None
-        assert italic_run.font.color.rgb == _COLOR_MUTED, (
-            f"Context line not #555555: '{para.text[:60]}'"
-        )
+        assert italic_run.font.color.rgb == _COLOR_MUTED, f"Context line not #555555: '{para.text[:60]}'"
 
 
 def test_company_date_lines_tab_stop_accent_company_muted_date(tmp_path):
@@ -251,46 +226,27 @@ def test_company_date_lines_tab_stop_accent_company_muted_date(tmp_path):
     """
     path, doc = _build(tmp_path)
     tab_paras = [p for p in doc.paragraphs if "\t" in p.text]
-    assert len(tab_paras) >= 2, (
-        f"Expected ≥2 company/date paragraphs with tab, got {len(tab_paras)}"
-    )
+    assert len(tab_paras) >= 2, f"Expected ≥2 company/date paragraphs with tab, got {len(tab_paras)}"
     for para in tab_paras:
         pPr = para._p.pPr
-        assert pPr is not None and pPr.find(qn("w:tabs")) is not None, (
-            f"No <w:tabs> XML element in: '{para.text[:60]}'"
-        )
-        assert len(para.runs) >= 2, (
-            f"Expected ≥2 runs in company/date line: '{para.text[:60]}'"
-        )
+        assert pPr is not None and pPr.find(qn("w:tabs")) is not None, f"No <w:tabs> XML element in: '{para.text[:60]}'"
+        assert len(para.runs) >= 2, f"Expected ≥2 runs in company/date line: '{para.text[:60]}'"
         # First run: company name — accent color, NOT bold
         run_company = para.runs[0]
-        assert run_company.font.bold is not True, (
-            f"Company run1 must not be bold: '{para.text[:60]}'"
-        )
-        assert run_company.font.color.type is not None, (
-            f"Company run1 must have explicit color: '{para.text[:60]}'"
-        )
-        assert run_company.font.color.rgb == _COLOR_ACCENT, (
-            f"Company run1 must be #1F4E79: '{para.text[:60]}'"
-        )
+        assert run_company.font.bold is not True, f"Company run1 must not be bold: '{para.text[:60]}'"
+        assert run_company.font.color.type is not None, f"Company run1 must have explicit color: '{para.text[:60]}'"
+        assert run_company.font.color.rgb == _COLOR_ACCENT, f"Company run1 must be #1F4E79: '{para.text[:60]}'"
         # Last run: \tdate — not bold, muted color
         date_run = para.runs[-1]
-        assert date_run.font.bold is not True, (
-            f"Date run must not be bold: '{para.text[:60]}'"
-        )
+        assert date_run.font.bold is not True, f"Date run must not be bold: '{para.text[:60]}'"
         assert date_run.font.color.type is not None
-        assert date_run.font.color.rgb == _COLOR_MUTED, (
-            f"Date run must be #555555: '{para.text[:60]}'"
-        )
+        assert date_run.font.color.rgb == _COLOR_MUTED, f"Date run must be #555555: '{para.text[:60]}'"
 
 
 def test_all_bold_paragraphs_under_15(tmp_path):
     """Total all-bold paragraphs must be < 15 (only headers and company lines)."""
     path, doc = _build(tmp_path)
-    bold_paras = [
-        p for p in doc.paragraphs
-        if p.runs and all(r.font.bold is True for r in p.runs if r.text.strip())
-    ]
+    bold_paras = [p for p in doc.paragraphs if p.runs and all(r.font.bold is True for r in p.runs if r.text.strip())]
     assert len(bold_paras) < 15, (
         f"Too many all-bold paragraphs: {len(bold_paras)} — only headers and company "
         f"name runs should be all-bold. Check for body text inadvertently bolded."
@@ -300,9 +256,7 @@ def test_all_bold_paragraphs_under_15(tmp_path):
 def test_zero_tables_in_document(tmp_path):
     """Document must contain zero tables (ATS parsers cannot parse table-based CVs)."""
     path, doc = _build(tmp_path)
-    assert len(doc.tables) == 0, (
-        f"Found {len(doc.tables)} table(s) — ATS hard violation"
-    )
+    assert len(doc.tables) == 0, f"Found {len(doc.tables)} table(s) — ATS hard violation"
 
 
 def test_only_three_allowed_colors(tmp_path):
@@ -315,9 +269,7 @@ def test_only_three_allowed_colors(tmp_path):
                 if run.font.color.type is None:
                     continue  # black / no explicit color — OK
                 rgb = run.font.color.rgb
-                assert rgb in ALLOWED, (
-                    f"Disallowed color {rgb!r} in: '{para.text[:60]}'"
-                )
+                assert rgb in ALLOWED, f"Disallowed color {rgb!r} in: '{para.text[:60]}'"
             except Exception as exc:
                 # Theme-inherited colors: ignore (not explicit rgb)
                 if "rgb" in str(exc).lower():
@@ -328,34 +280,30 @@ def test_no_bold_markers_leaked_as_text(tmp_path):
     """No **bold** markdown markers must appear as literal text in the .docx."""
     path, doc = _build(tmp_path)
     full_text = " ".join(p.text for p in doc.paragraphs)
-    assert "**" not in full_text, (
-        "Bold markers (**) leaked into output — _clean_text() may have missed them"
-    )
+    assert "**" not in full_text, "Bold markers (**) leaked into output — _clean_text() may have missed them"
 
 
 def test_core_skills_accent_theme_plus_normal_prose(tmp_path):
     """Core Skills: each line has #1F4E79 theme run (not bold) + non-bold prose run, ≥2 lines."""
     path, doc = _build(tmp_path)
     skill_paras = [
-        p for p in doc.paragraphs
+        p
+        for p in doc.paragraphs
         if len(p.runs) >= 2
         and p.runs[0].font.bold is not True
-        and (
-            p.runs[0].font.color.type is not None
-            and p.runs[0].font.color.rgb == _COLOR_ACCENT
-        )
+        and (p.runs[0].font.color.type is not None and p.runs[0].font.color.rgb == _COLOR_ACCENT)
         and p.runs[1].font.bold is not True
         and ":" in p.runs[0].text
     ]
     assert len(skill_paras) >= 2, (
-        f"Expected ≥2 Core Skills theme lines (#1F4E79 theme + normal prose), "
-        f"got {len(skill_paras)}"
+        f"Expected ≥2 Core Skills theme lines (#1F4E79 theme + normal prose), got {len(skill_paras)}"
     )
 
 
 def test_em_dash_replaced_in_golden(tmp_path):
     """Em dash in golden markdown must be replaced with hyphen in output."""
     from api.cv.docx_builder import build_docx
+
     # Inject an em dash into a bullet
     md = GOLDEN_MARKDOWN.replace(
         "Reduced time-to-market 35%",
@@ -371,6 +319,7 @@ def test_em_dash_replaced_in_golden(tmp_path):
 def test_oxford_comma_replaced_in_golden(tmp_path):
     """Oxford comma in golden markdown must be removed in output."""
     from api.cv.docx_builder import build_docx
+
     md = GOLDEN_MARKDOWN.replace(
         "Data Platforms: Deep expertise in data warehousing, streaming pipelines, ML feature stores, and self-serve analytics tooling.",
         "Data Platforms: Deep expertise in data warehousing, streaming pipelines, ML feature stores, and self-serve analytics tooling, and more.",

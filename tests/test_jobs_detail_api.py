@@ -19,15 +19,20 @@ JOB = {
     "ingested_at": "2026-02-23T10:00:00",
 }
 
-SCORED_JSON = json.dumps({
-    "score": 72,
-    "score_breakdown": {
-        "domain_fit": 20, "seniority_fit": 15,
-        "technical_depth": 18, "profile_evidence": 15, "strategic_impact": 4
-    },
-    "strengths": [{"claim": "Strong data background", "evidence": "5 years"}],
-    "gaps": [{"skill": "Rust", "severity": "low", "mitigation": "nice to have"}],
-})
+SCORED_JSON = json.dumps(
+    {
+        "score": 72,
+        "score_breakdown": {
+            "domain_fit": 20,
+            "seniority_fit": 15,
+            "technical_depth": 18,
+            "profile_evidence": 15,
+            "strategic_impact": 4,
+        },
+        "strengths": [{"claim": "Strong data background", "evidence": "5 years"}],
+        "gaps": [{"skill": "Rust", "severity": "low", "mitigation": "nice to have"}],
+    }
+)
 
 
 @pytest.fixture
@@ -36,10 +41,16 @@ def authed_client(tmp_path, monkeypatch):
     init_db(db_path)
     upsert_job(db_path, JOB)
     monkeypatch.setenv("DB_PATH", db_path)
-    user = upsert_user(db_path, {
-        "google_id": "g_t", "email": "t@t.com",
-        "name": "T", "avatar_url": None, "profile_id": None,
-    })
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g_t",
+            "email": "t@t.com",
+            "name": "T",
+            "avatar_url": None,
+            "profile_id": None,
+        },
+    )
     upsert_user_job_score(db_path, user["id"], "a1", 72, "A", SCORED_JSON)
     create_session(db_path, "tok", user["id"], "2099-01-01T00:00:00")
     c = TestClient(app)
@@ -81,25 +92,34 @@ def test_get_job_detail_has_skill_matches(tmp_path, monkeypatch):
     init_db(db_path)
     job_with_skills = {
         **JOB,
-        "parsed": json.dumps({
-            "domain": "data",
-            "must_have_skills": ["SQL", "python"],
-            "nice_to_have_skills": ["kafka"],
-            "technical_stack": ["snowflake"],
-        }),
+        "parsed": json.dumps(
+            {
+                "domain": "data",
+                "must_have_skills": ["SQL", "python"],
+                "nice_to_have_skills": ["kafka"],
+                "technical_stack": ["snowflake"],
+            }
+        ),
     }
     upsert_job(db_path, job_with_skills)
     monkeypatch.setenv("DB_PATH", db_path)
 
     # Create user with a profile_id so load_profile_data is attempted
-    user = upsert_user(db_path, {
-        "google_id": "g_skill", "email": "skill@test.com",
-        "name": "Skill User", "avatar_url": None, "profile_id": "test_skill_user",
-    })
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g_skill",
+            "email": "skill@test.com",
+            "name": "Skill User",
+            "avatar_url": None,
+            "profile_id": "test_skill_user",
+        },
+    )
     create_session(db_path, "skill_tok", user["id"], "2099-01-01T00:00:00")
 
     # Mock load_profile_data to return a profile with skills
     from unittest.mock import patch
+
     mock_profile = {
         "domains": {"data": 15},
         "seniority": {"senior": 15},

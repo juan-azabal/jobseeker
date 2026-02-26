@@ -49,9 +49,7 @@ class TestMigration018GradeColumns:
             VALUES (1, 'uj-test-1', 75, 'A', 1, datetime('now'))
         """)
         con.commit()
-        row = con.execute(
-            "SELECT scored_v2 FROM user_job_scores WHERE job_id = 'uj-test-1'"
-        ).fetchone()
+        row = con.execute("SELECT scored_v2 FROM user_job_scores WHERE job_id = 'uj-test-1'").fetchone()
         con.close()
         assert row is not None
         assert row[0] == 0

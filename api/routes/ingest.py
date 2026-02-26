@@ -78,13 +78,18 @@ def ingest_jobs(payload: IngestPayload):
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
     logger.info(
         "Ingest request: %d jobs, profile_id=%r, db_path=%s",
-        len(payload.jobs), payload.profile_id, db_path,
+        len(payload.jobs),
+        payload.profile_id,
+        db_path,
     )
     result = ingest_from_list(db_path, payload.jobs, profile_id=payload.profile_id)
     logger.info(
         "Ingest complete: inserted=%d updated=%d skipped=%d scored=%d deleted=%d (db=%s)",
-        result.get("inserted", 0), result.get("updated", 0),
-        result.get("skipped", 0), result.get("scored", 0),
-        result.get("deleted", 0), db_path,
+        result.get("inserted", 0),
+        result.get("updated", 0),
+        result.get("skipped", 0),
+        result.get("scored", 0),
+        result.get("deleted", 0),
+        db_path,
     )
     return result

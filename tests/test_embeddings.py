@@ -15,10 +15,12 @@ from api.db.init import init_db
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def _clear_embedding_state():
     """Clear the in-memory embedding cache and circuit breaker before each test."""
     import api.embeddings as _emb
+
     _emb.clear_memory_cache()
     _emb._api_unavailable_until = 0.0
     yield
@@ -37,15 +39,11 @@ def db_path(tmp_path):
 # 12.1 — Migration: skill_embeddings table exists
 # ---------------------------------------------------------------------------
 
+
 class TestSkillEmbeddingsMigration:
     def test_table_exists_after_init(self, db_path):
         con = sqlite3.connect(db_path)
-        tables = [
-            row[0]
-            for row in con.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-        ]
+        tables = [row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
         con.close()
         assert "skill_embeddings" in tables
 
@@ -87,9 +85,7 @@ class TestSkillEmbeddingsMigration:
             ("sql", b"[1,0]"),
         )
         con.commit()
-        row = con.execute(
-            "SELECT model FROM skill_embeddings WHERE skill_text = ?", ("sql",)
-        ).fetchone()
+        row = con.execute("SELECT model FROM skill_embeddings WHERE skill_text = ?", ("sql",)).fetchone()
         con.close()
         assert row[0] == "text-embedding-3-small"
 
@@ -102,23 +98,27 @@ class TestSkillEmbeddingsMigration:
 class TestCosineSimilarity:
     def test_identical_vectors(self):
         from api.embeddings import cosine_similarity
+
         v = [1.0, 2.0, 3.0]
         assert cosine_similarity(v, v) == pytest.approx(1.0, abs=1e-9)
 
     def test_orthogonal_vectors(self):
         from api.embeddings import cosine_similarity
+
         a = [1.0, 0.0]
         b = [0.0, 1.0]
         assert cosine_similarity(a, b) == pytest.approx(0.0, abs=1e-9)
 
     def test_opposite_vectors(self):
         from api.embeddings import cosine_similarity
+
         a = [1.0, 0.0]
         b = [-1.0, 0.0]
         assert cosine_similarity(a, b) == pytest.approx(-1.0, abs=1e-9)
 
     def test_known_angle(self):
         from api.embeddings import cosine_similarity
+
         a = [1.0, 0.0]
         b = [1.0, 1.0]
         # cos(45°) ≈ 0.7071
@@ -126,6 +126,7 @@ class TestCosineSimilarity:
 
     def test_zero_vector_returns_zero(self):
         from api.embeddings import cosine_similarity
+
         a = [0.0, 0.0]
         b = [1.0, 1.0]
         assert cosine_similarity(a, b) == 0.0
@@ -298,6 +299,7 @@ class TestSkillMatcher:
 
     def _make_embeddings(self, mapping: dict[str, list[float]]):
         """Helper to mock get_embeddings_batch with known vectors."""
+
         def mock_batch(texts, db_path):
             result = {}
             for t in texts:
@@ -305,6 +307,7 @@ class TestSkillMatcher:
                 if key in mapping:
                     result[key] = mapping[key]
             return result
+
         return mock_batch
 
     def test_identical_strings_matched(self, db_path):
@@ -354,6 +357,7 @@ class TestSkillMatcher:
         # Construct vectors with cosine similarity between thresholds
         # cos(a,b) = 0.73 (between 0.68 and 0.80)
         import math
+
         angle = math.acos(0.73)
         embs = {
             "javascript": [1.0, 0.0],

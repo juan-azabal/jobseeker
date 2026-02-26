@@ -6,9 +6,14 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from api.db.queries import (
-    get_all_users, reset_user_onboarding, set_session_impersonation,
-    set_user_profile_id, get_user_by_id,
-    get_other_domain_jobs, update_job_domain, get_domain_corrections,
+    get_all_users,
+    reset_user_onboarding,
+    set_session_impersonation,
+    set_user_profile_id,
+    get_user_by_id,
+    get_other_domain_jobs,
+    update_job_domain,
+    get_domain_corrections,
 )
 from api.middleware.auth import get_current_admin, SESSION_COOKIE
 
@@ -19,7 +24,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 class TriggerRequest(BaseModel):
     profile: str | None = None  # None → run all active profiles
-    mode: str | None = None     # None/"digest" → normal; "reparse_rescore" → digest + re-parse/re-score
+    mode: str | None = None  # None/"digest" → normal; "reparse_rescore" → digest + re-parse/re-score
 
 
 class SetProfileIdRequest(BaseModel):
@@ -31,8 +36,18 @@ def list_users(admin: dict = Depends(get_current_admin)):
     """Return all registered users with admin flags."""
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
     users = get_all_users(db_path)
-    safe_keys = {"id", "email", "name", "avatar_url", "profile_id", "is_admin",
-                 "created_at", "last_login", "has_cv", "has_yaml"}
+    safe_keys = {
+        "id",
+        "email",
+        "name",
+        "avatar_url",
+        "profile_id",
+        "is_admin",
+        "created_at",
+        "last_login",
+        "has_cv",
+        "has_yaml",
+    }
     return [{k: v for k, v in u.items() if k in safe_keys} for u in users]
 
 
@@ -113,11 +128,11 @@ def env_check(admin: dict = Depends(get_current_admin)):
     return {
         "present": {k: bool(os.environ.get(k, "")) for k in vars_to_check},
         "gh_token_length": len(os.environ.get("GH_ACTIONS_TOKEN", "")),
-        "gh_repo_value": os.environ.get("GH_REPO", "(not set)"),   # safe to expose
-        "gh_ref_value": os.environ.get("GH_REF", "(not set)"),     # safe to expose
-        "db_path_value": db_path,                                   # safe to expose
+        "gh_repo_value": os.environ.get("GH_REPO", "(not set)"),  # safe to expose
+        "gh_ref_value": os.environ.get("GH_REF", "(not set)"),  # safe to expose
+        "db_path_value": db_path,  # safe to expose
         "db_file_exists": os.path.exists(db_path),
-        "all_env_keys": sorted(os.environ.keys()),                  # names only, no values
+        "all_env_keys": sorted(os.environ.keys()),  # names only, no values
     }
 
 
@@ -298,9 +313,7 @@ def backfill_embeddings(
                     except Exception:
                         continue
 
-                for (parsed_json,) in conn.execute(
-                    "SELECT parsed FROM jobs WHERE parsed IS NOT NULL"
-                ).fetchall():
+                for (parsed_json,) in conn.execute("SELECT parsed FROM jobs WHERE parsed IS NOT NULL").fetchall():
                     try:
                         parsed = json.loads(parsed_json)
                         for key in ("must_have_skills", "nice_to_have_skills", "technical_stack"):
@@ -320,7 +333,9 @@ def backfill_embeddings(
             result = get_embeddings_batch(all_skills, db_path)
             logger.info(
                 "Embedding backfill completed: %d/%d cached (triggered by %s)",
-                len(result), len(all_skills), email,
+                len(result),
+                len(all_skills),
+                email,
             )
         except Exception as exc:
             logger.error("Embedding backfill failed (triggered by %s): %s", email, exc)
@@ -353,12 +368,14 @@ def reparse_domains_preview(admin: dict = Depends(get_current_admin)):
             continue
         inferred = _infer_domain(parsed)
         if inferred != "other":
-            samples.append({
-                "job_id": row["job_id"],
-                "company": row["company"],
-                "title": row["title"],
-                "inferred": inferred,
-            })
+            samples.append(
+                {
+                    "job_id": row["job_id"],
+                    "company": row["company"],
+                    "title": row["title"],
+                    "inferred": inferred,
+                }
+            )
         if len(samples) >= 5:
             break
 
@@ -395,7 +412,9 @@ def reparse_domains(admin: dict = Depends(get_current_admin)):
 
     logger.info(
         "Domain reparse: reclassified %d/%d 'other' jobs (triggered by %s)",
-        reclassified, total_other, admin["email"],
+        reclassified,
+        total_other,
+        admin["email"],
     )
     return {"reclassified": reclassified, "total_other": total_other}
 
@@ -456,7 +475,9 @@ async def trigger_pipeline(body: TriggerRequest = TriggerRequest(), admin: dict 
 
     logger.warning(
         "Pipeline trigger returned %s: %s (triggered by %s)",
-        resp.status_code, resp.text, admin["email"],
+        resp.status_code,
+        resp.text,
+        admin["email"],
     )
     raise HTTPException(
         status_code=502,

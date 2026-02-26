@@ -40,7 +40,7 @@ def load_all_unique_jobs():
     most recent file's entry. This prevents newer scraper-only runs (no scores)
     from overwriting scored entries produced by earlier full runs.
     """
-    all_jobs: dict[str, dict] = {}   # job_id -> best entry seen so far
+    all_jobs: dict[str, dict] = {}  # job_id -> best entry seen so far
     files = sorted(glob.glob("output/jobs_*.json"))  # sorted = chronological
     for path in files:
         if "reparsed" in path:
@@ -103,7 +103,7 @@ def main():
 
     before_soft = sum(1 for j in with_desc if has_soft_skills(j))
     before_parsed = sum(1 for j in with_desc if j.get("parsed"))
-    print(f"\nBefore reparse:")
+    print("\nBefore reparse:")
     print(f"  Jobs with parsed data:                {before_parsed}/{len(with_desc)}")
     print(f"  Jobs with soft skills in must_have:   {before_soft}/{before_parsed}")
 
@@ -122,7 +122,7 @@ def main():
     new_field = sum(1 for j in reparsed if (j.get("parsed") or {}).get("experience_requirements"))
     with_restriction = sum(1 for j in reparsed if (j.get("parsed") or {}).get("remote_restriction"))
 
-    print(f"\nAfter reparse:")
+    print("\nAfter reparse:")
     print(f"  Jobs with parsed data:                {after_parsed}/{len(reparsed)}")
     print(f"  Jobs with soft skills in must_have:   {after_soft}/{after_parsed}  (was {before_soft})")
     print(f"  Jobs with experience_requirements:    {new_field}/{after_parsed}")

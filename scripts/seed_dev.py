@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT))
 os.chdir(ROOT)  # so relative DB_PATH works
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from api.db.init import init_db
@@ -24,15 +25,15 @@ from api.db.queries import upsert_user, create_session
 
 # ── config ───────────────────────────────────────────────────────────────────
 DB_PATH = os.environ.get("DB_PATH", "data/jobseeker.db")
-TOKEN   = "dev-jsk-juan"          # fixed token — easy to type in DevTools
-EXPIRES = "2099-12-31T23:59:59"   # never expires in dev
+TOKEN = "dev-jsk-juan"  # fixed token — easy to type in DevTools
+EXPIRES = "2099-12-31T23:59:59"  # never expires in dev
 
 USER = {
-    "google_id":  "dev-juan-azabal",
-    "email":      "j.azabal@gmail.com",
-    "name":       "Juan Azabal",
+    "google_id": "dev-juan-azabal",
+    "email": "j.azabal@gmail.com",
+    "name": "Juan Azabal",
     "avatar_url": None,
-    "profile_id": "juan",         # matches jobagent config/profiles/juan.yaml
+    "profile_id": "juan",  # matches jobagent config/profiles/juan.yaml
 }
 
 # ── seed ─────────────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ Each test verifies that analytics.capture() is called with the correct
 event name and key properties when the corresponding endpoint succeeds.
 Tests are written BEFORE implementation (test-first).
 """
+
 import json
 import os
 import pytest
@@ -25,12 +26,14 @@ JOB = {
     "location_type": "hybrid",
     "domain": "saas",
     "description": "We need a seasoned Product Manager to drive the roadmap for our SaaS platform.",
-    "parsed": json.dumps({
-        "domain": "saas",
-        "must_have_skills": ["SQL"],
-        "seniority": "senior",
-        "description": "We need a seasoned Product Manager to drive the roadmap for our SaaS platform.",
-    }),
+    "parsed": json.dumps(
+        {
+            "domain": "saas",
+            "must_have_skills": ["SQL"],
+            "seniority": "senior",
+            "description": "We need a seasoned Product Manager to drive the roadmap for our SaaS platform.",
+        }
+    ),
     "first_seen": "2026-02-23",
     "last_seen": "2026-02-23",
     "ingested_at": "2026-02-23T10:00:00",
@@ -59,10 +62,16 @@ def db_client(tmp_path, monkeypatch):
     init_db(db_path)
     upsert_job(db_path, JOB)
     monkeypatch.setenv("DB_PATH", db_path)
-    user = upsert_user(db_path, {
-        "google_id": "g1", "email": "u@t.com",
-        "name": "User", "avatar_url": None, "profile_id": None,
-    })
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g1",
+            "email": "u@t.com",
+            "name": "User",
+            "avatar_url": None,
+            "profile_id": None,
+        },
+    )
     create_session(db_path, "tok", user["id"], "2099-01-01T00:00:00")
     c = TestClient(app)
     c.cookies.set("jsk", "tok")
@@ -80,10 +89,16 @@ def profile_client(tmp_path, monkeypatch):
     jobagent_dir = str(tmp_path / "jobagent")
     monkeypatch.setenv("JOBAGENT_DIR", jobagent_dir)
 
-    user = upsert_user(db_path, {
-        "google_id": "g2", "email": "p@t.com",
-        "name": "Profile User", "avatar_url": None, "profile_id": "profXYZ",
-    })
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g2",
+            "email": "p@t.com",
+            "name": "Profile User",
+            "avatar_url": None,
+            "profile_id": "profXYZ",
+        },
+    )
     create_session(db_path, "ptok", user["id"], "2099-01-01T00:00:00")
 
     # Create profile YAML on disk
@@ -104,12 +119,15 @@ def profile_client(tmp_path, monkeypatch):
 
 # ─── Event tests ──────────────────────────────────────────────────────────────
 
+
 def test_job_viewed_event(db_client):
     """GET /api/jobs/{id} fires job_viewed with job_id and company."""
     client, user, _ = db_client
-    with patch("api.analytics.capture") as mock_capture, \
-         patch("api.routes.jobs.load_profile_data", return_value=None), \
-         patch("api.routes.jobs.match_skills", return_value=[]):
+    with (
+        patch("api.analytics.capture") as mock_capture,
+        patch("api.routes.jobs.load_profile_data", return_value=None),
+        patch("api.routes.jobs.match_skills", return_value=[]),
+    ):
         resp = client.get("/api/jobs/j1")
     assert resp.status_code == 200
     mock_capture.assert_called_once()
@@ -155,17 +173,25 @@ def test_cv_generated_event(tmp_path, monkeypatch):
     monkeypatch.setenv("DB_PATH", db_path)
     monkeypatch.setenv("CV_REFERENCES_DIR", str(tmp_path / "refs"))
 
-    user = upsert_user(db_path, {
-        "google_id": "g3", "email": "cv@t.com",
-        "name": "CV User", "avatar_url": None, "profile_id": None,
-    })
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g3",
+            "email": "cv@t.com",
+            "name": "CV User",
+            "avatar_url": None,
+            "profile_id": None,
+        },
+    )
     create_session(db_path, "cvtok", user["id"], "2099-01-01T00:00:00")
     client = TestClient(app)
     client.cookies.set("jsk", "cvtok")
 
-    with patch("api.cv.llm.generate_cv", return_value=MOCK_CV), \
-         patch("api.cv.prompt.build_cv_prompts", return_value=("sys", "usr")), \
-         patch("api.analytics.capture") as mock_capture:
+    with (
+        patch("api.cv.llm.generate_cv", return_value=MOCK_CV),
+        patch("api.cv.prompt.build_cv_prompts", return_value=("sys", "usr")),
+        patch("api.analytics.capture") as mock_capture,
+    ):
         resp = client.post("/api/jobs/j1/generate-cv")
 
     assert resp.status_code == 200
@@ -183,9 +209,11 @@ def test_cv_generated_event(tmp_path, monkeypatch):
 def test_skill_added_event(profile_client):
     """POST /api/onboard/profile/skills fires skill_added with the skill name."""
     client, user, _ = profile_client
-    with patch("api.analytics.capture") as mock_capture, \
-         patch("api.embeddings.get_embedding"), \
-         patch("api.embeddings.clear_memory_cache"):
+    with (
+        patch("api.analytics.capture") as mock_capture,
+        patch("api.embeddings.get_embedding"),
+        patch("api.embeddings.clear_memory_cache"),
+    ):
         resp = client.post("/api/onboard/profile/skills", json={"skill": "go"})
     assert resp.status_code == 200
     mock_capture.assert_called_once()
@@ -222,8 +250,10 @@ def test_profile_saved_event(profile_client):
         "salary_min": 80000,
         "location_preference": "b",
     }
-    with patch("api.analytics.capture") as mock_capture, \
-         patch("api.routes.onboard._push_file_to_github", new_callable=AsyncMock):
+    with (
+        patch("api.analytics.capture") as mock_capture,
+        patch("api.routes.onboard._push_file_to_github", new_callable=AsyncMock),
+    ):
         resp = client.patch("/api/onboard/profile", json=payload)
     assert resp.status_code == 200
     mock_capture.assert_called_once()
@@ -240,31 +270,42 @@ def test_onboard_completed_event(tmp_path, monkeypatch):
     monkeypatch.setenv("JOBAGENT_DIR", jobagent_dir)
 
     # User with profile_id but NO profile_yaml → onboarded=False → first-time path
-    user = upsert_user(db_path, {
-        "google_id": "g5", "email": "ob@t.com",
-        "name": "Onboard", "avatar_url": None, "profile_id": "obXYZ",
-    })
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g5",
+            "email": "ob@t.com",
+            "name": "Onboard",
+            "avatar_url": None,
+            "profile_id": "obXYZ",
+        },
+    )
     create_session(db_path, "obtok", user["id"], "2099-01-01T00:00:00")
     client = TestClient(app)
     client.cookies.set("jsk", "obtok")
 
-    with patch("api.analytics.capture") as mock_capture, \
-         patch("api.routes.onboard._sync_and_trigger_pipeline", new_callable=AsyncMock):
-        resp = client.post("/api/onboard/save-profile", json={
-            "cv_markdown": "# Onboard\nSenior PM",
-            "profile": {
-                "name": "Onboard",
-                "email": "ob@t.com",
-                "home_locations": ["barcelona"],
-                "current_level": "senior",
-                "target_level": "senior",
-                "track": "ic",
-                "domains": {"saas": 15, "data": 10},
-                "skills": ["python", "sql"],
+    with (
+        patch("api.analytics.capture") as mock_capture,
+        patch("api.routes.onboard._sync_and_trigger_pipeline", new_callable=AsyncMock),
+    ):
+        resp = client.post(
+            "/api/onboard/save-profile",
+            json={
+                "cv_markdown": "# Onboard\nSenior PM",
+                "profile": {
+                    "name": "Onboard",
+                    "email": "ob@t.com",
+                    "home_locations": ["barcelona"],
+                    "current_level": "senior",
+                    "target_level": "senior",
+                    "track": "ic",
+                    "domains": {"saas": 15, "data": 10},
+                    "skills": ["python", "sql"],
+                },
+                "salary_min": 80000,
+                "location_preference": "b",
             },
-            "salary_min": 80000,
-            "location_preference": "b",
-        })
+        )
     assert resp.status_code == 200
     mock_capture.assert_called_once()
     assert mock_capture.call_args[0][1] == "onboard_completed"

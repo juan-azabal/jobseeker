@@ -8,6 +8,7 @@ Coverage:
   C. heuristic_score() with domain_override parameter
   D. _score_and_tier_jobs() batch loading of domain overrides
 """
+
 import json
 import pytest
 from fastapi.testclient import TestClient
@@ -39,10 +40,16 @@ def authed_client(tmp_path, monkeypatch):
     init_db(db_path)
     upsert_job(db_path, JOB)
     monkeypatch.setenv("DB_PATH", db_path)
-    user = upsert_user(db_path, {
-        "google_id": "g_test", "email": "t@t.com",
-        "name": "T", "avatar_url": None, "profile_id": None,
-    })
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g_test",
+            "email": "t@t.com",
+            "name": "T",
+            "avatar_url": None,
+            "profile_id": None,
+        },
+    )
     create_session(db_path, "tok", user["id"], "2099-01-01T00:00:00")
     c = TestClient(app)
     c.cookies.set("jsk", "tok")
@@ -58,12 +65,19 @@ def authed_client_with_status(tmp_path, monkeypatch):
     init_db(db_path)
     upsert_job(db_path, JOB)
     monkeypatch.setenv("DB_PATH", db_path)
-    user = upsert_user(db_path, {
-        "google_id": "g_test2", "email": "t2@t.com",
-        "name": "T2", "avatar_url": None, "profile_id": None,
-    })
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g_test2",
+            "email": "t2@t.com",
+            "name": "T2",
+            "avatar_url": None,
+            "profile_id": None,
+        },
+    )
     # Insert a pre-existing applied status
     import sqlite3
+
     con = sqlite3.connect(db_path)
     con.execute(
         "INSERT INTO user_job_status (user_id, job_id, applied_at) VALUES (?, ?, ?)",
@@ -80,6 +94,7 @@ def authed_client_with_status(tmp_path, monkeypatch):
 
 
 # ── A. PATCH /api/jobs/{job_id}/domain ────────────────────────────────────
+
 
 class TestPatchDomainEndpoint:
     def test_valid_domain_returns_200(self, authed_client):
@@ -136,12 +151,14 @@ class TestPatchDomainEndpoint:
     def test_all_valid_domains_accepted(self, authed_client):
         """Every value in VALID_DOMAINS must be accepted."""
         from api.scoring import VALID_DOMAINS
+
         for domain in sorted(VALID_DOMAINS):
             resp = authed_client.patch("/api/jobs/j1/domain", json={"domain": domain})
             assert resp.status_code == 200, f"Expected 200 for domain={domain!r}"
 
 
 # ── B. GET /api/jobs/{job_id} includes domain_override ───────────────────
+
 
 class TestGetJobDetailDomainOverride:
     def test_no_override_returns_none(self, authed_client):
@@ -164,6 +181,7 @@ class TestGetJobDetailDomainOverride:
 
 
 # ── C. heuristic_score() with domain_override ─────────────────────────────
+
 
 class TestHeuristicScoreWithOverride:
     """Unit tests for heuristic_score() domain_override parameter."""
@@ -193,9 +211,8 @@ class TestHeuristicScoreWithOverride:
     def test_override_uses_override_domain(self, profile, parsed_data, job_row):
         """When domain_override='gaming', score uses gaming weight (15) not 'other' (0)."""
         from api.scoring import heuristic_score
-        score_with_override = heuristic_score(
-            profile, parsed_data, job_row, False, domain_override="gaming"
-        )
+
+        score_with_override = heuristic_score(profile, parsed_data, job_row, False, domain_override="gaming")
         score_without = heuristic_score(profile, parsed_data, job_row, False)
         # Gaming gives 15 domain pts, other gives 0
         assert score_with_override > score_without
@@ -203,33 +220,30 @@ class TestHeuristicScoreWithOverride:
     def test_override_none_uses_cascade(self, profile, parsed_data, job_row):
         """domain_override=None falls back to normal cascade."""
         from api.scoring import heuristic_score
-        score_none_override = heuristic_score(
-            profile, parsed_data, job_row, False, domain_override=None
-        )
+
+        score_none_override = heuristic_score(profile, parsed_data, job_row, False, domain_override=None)
         score_default = heuristic_score(profile, parsed_data, job_row, False)
         assert score_none_override == score_default
 
     def test_override_skips_inferred_domain(self, profile, job_row):
         """Override ignores keyword-inferred domain."""
         from api.scoring import heuristic_score
+
         # Parsed has keywords that would infer 'data', but override says 'gaming'
         parsed_with_data_keywords = {
             "domain": "other",
             "seniority": "senior",
             "must_have_skills": ["data platform", "data pipeline"],
         }
-        score_override = heuristic_score(
-            profile, parsed_with_data_keywords, job_row, False, domain_override="gaming"
-        )
-        score_inferred = heuristic_score(
-            profile, parsed_with_data_keywords, job_row, False
-        )
+        score_override = heuristic_score(profile, parsed_with_data_keywords, job_row, False, domain_override="gaming")
+        score_inferred = heuristic_score(profile, parsed_with_data_keywords, job_row, False)
         # Override forces gaming (15); inference would find 'data' (5)
         assert score_override > score_inferred
 
     def test_override_backward_compatible(self, profile, parsed_data, job_row):
         """Calling heuristic_score() without domain_override still works."""
         from api.scoring import heuristic_score
+
         # Must not raise
         score = heuristic_score(profile, parsed_data, job_row, False)
         assert isinstance(score, int)
@@ -237,6 +251,7 @@ class TestHeuristicScoreWithOverride:
 
 
 # ── D. _score_and_tier_jobs() batch loading ──────────────────────────────
+
 
 class TestScoreAndTierJobsBatchLoad:
     """Integration tests: domain overrides are loaded and applied in batch scoring."""
@@ -262,10 +277,16 @@ class TestScoreAndTierJobsBatchLoad:
         upsert_job(db_path, job_other)
         monkeypatch.setenv("DB_PATH", db_path)
 
-        user = upsert_user(db_path, {
-            "google_id": "g_batch", "email": "batch@t.com",
-            "name": "B", "avatar_url": None, "profile_id": "batch_profile",
-        })
+        user = upsert_user(
+            db_path,
+            {
+                "google_id": "g_batch",
+                "email": "batch@t.com",
+                "name": "B",
+                "avatar_url": None,
+                "profile_id": "batch_profile",
+            },
+        )
         create_session(db_path, "batch_tok", user["id"], "2099-01-01T00:00:00")
 
         mock_profile = {

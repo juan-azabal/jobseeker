@@ -1,4 +1,5 @@
 """Tests for api/cv/plan.py — deterministic CV plan builder (Phase 6.2)."""
+
 import json
 import pytest
 from api.cv.plan import build_cv_plan
@@ -9,54 +10,60 @@ from api.cv.plan import build_cv_plan
 # Job dict that mimics a Paris-based data consulting role with scored data.
 # Parsed description contains explicit English consultancy signals.
 WEFIIT_LIKE_JOB = {
-    "title":   "Product Manager Data & IA",
+    "title": "Product Manager Data & IA",
     "company": "WeFiiT",
     "location": "Paris, FR",
-    "parsed": json.dumps({
-        "seniority":            "mid",
-        "locations_mentioned":  ["Paris, FR"],
-        "must_have_skills":     ["SQL", "Python", "data product experience", "agile mindset"],
-        "nice_to_have_skills":  ["excellent relational skills", "proactive"],
-        "technical_stack":      ["SQL", "Python", "R"],
-        "domain":               "data",
-        "responsibilities_summary": "Build vision for Data Products, define roadmap.",
-        "description": (
-            "WeFiiT is a consulting firm specialised in data and AI. "
-            "As a Product Manager, you will work with our clients on high-impact "
-            "data products. You will be embedded in client teams and expected to "
-            "understand client challenges rapidly. Consulting mindset required."
-        ),
-    }),
-    "scored": json.dumps({
-        "score": 72,
-        "score_breakdown": {
-            "domain_fit":       20,
-            "seniority_fit":    15,
-            "technical_depth":  18,
-            "profile_evidence": 15,
-            "strategic_impact": 4,
-        },
-        "strengths": [
-            {"claim": "Strong data platform experience.", "evidence": "Snowplow, Kafka, Snowflake at Gartner."},
-        ],
-        "gaps": [
-            {"gap": "Seniority mismatch (mid vs senior).", "severity": "medium", "mitigation": "Emphasise scope."},
-        ],
-    }),
+    "parsed": json.dumps(
+        {
+            "seniority": "mid",
+            "locations_mentioned": ["Paris, FR"],
+            "must_have_skills": ["SQL", "Python", "data product experience", "agile mindset"],
+            "nice_to_have_skills": ["excellent relational skills", "proactive"],
+            "technical_stack": ["SQL", "Python", "R"],
+            "domain": "data",
+            "responsibilities_summary": "Build vision for Data Products, define roadmap.",
+            "description": (
+                "WeFiiT is a consulting firm specialised in data and AI. "
+                "As a Product Manager, you will work with our clients on high-impact "
+                "data products. You will be embedded in client teams and expected to "
+                "understand client challenges rapidly. Consulting mindset required."
+            ),
+        }
+    ),
+    "scored": json.dumps(
+        {
+            "score": 72,
+            "score_breakdown": {
+                "domain_fit": 20,
+                "seniority_fit": 15,
+                "technical_depth": 18,
+                "profile_evidence": 15,
+                "strategic_impact": 4,
+            },
+            "strengths": [
+                {"claim": "Strong data platform experience.", "evidence": "Snowplow, Kafka, Snowflake at Gartner."},
+            ],
+            "gaps": [
+                {"gap": "Seniority mismatch (mid vs senior).", "severity": "medium", "mitigation": "Emphasise scope."},
+            ],
+        }
+    ),
 }
 
 # Job with no scored data — plan should still build with graceful defaults.
 NO_SCORE_JOB = {
-    "title":   "Product Manager",
+    "title": "Product Manager",
     "company": "Unknown Corp",
-    "parsed": json.dumps({
-        "seniority":           "unknown",
-        "locations_mentioned": ["Berlin, DE"],
-        "must_have_skills":    ["Kafka", "Python"],
-        "technical_stack":     ["Kafka"],
-        "domain":              "data",
-        "description":         "Join our team to build our product.",
-    }),
+    "parsed": json.dumps(
+        {
+            "seniority": "unknown",
+            "locations_mentioned": ["Berlin, DE"],
+            "must_have_skills": ["Kafka", "Python"],
+            "technical_stack": ["Kafka"],
+            "domain": "data",
+            "description": "Join our team to build our product.",
+        }
+    ),
     "scored": None,
 }
 
@@ -122,12 +129,13 @@ Spanish (native) | English (advanced) | Catalan (basic)
 """
 
 SAMPLE_REF_FILES = {
-    "master-cv-profile.md":    SAMPLE_PROFILE,
+    "master-cv-profile.md": SAMPLE_PROFILE,
     "master-cv-experience.md": SAMPLE_EXPERIENCE,
 }
 
 
 # ── Helper ────────────────────────────────────────────────────────────────
+
 
 def _plan(job=WEFIIT_LIKE_JOB, ref_files=None):
     return build_cv_plan(job, ref_files or SAMPLE_REF_FILES)
@@ -136,6 +144,7 @@ def _plan(job=WEFIIT_LIKE_JOB, ref_files=None):
 # ══════════════════════════════════════════════════════════════════════════
 # jd_context tests
 # ══════════════════════════════════════════════════════════════════════════
+
 
 def test_jd_context_company_type_consultancy():
     """Job with explicit consulting signals → company_type == 'consultancy'."""
@@ -148,16 +157,18 @@ def test_jd_context_company_type_consultancy():
 def test_jd_context_company_type_in_house():
     """Job with in-house signals → company_type == 'in_house'."""
     in_house_job = {
-        "title":   "Product Manager",
+        "title": "Product Manager",
         "company": "StartupCo",
-        "parsed": json.dumps({
-            "seniority":           "senior",
-            "locations_mentioned": ["London, UK"],
-            "must_have_skills":    ["Python"],
-            "technical_stack":     ["Python"],
-            "domain":              "data",
-            "description":         "We are building our platform to scale our product. Join our team!",
-        }),
+        "parsed": json.dumps(
+            {
+                "seniority": "senior",
+                "locations_mentioned": ["London, UK"],
+                "must_have_skills": ["Python"],
+                "technical_stack": ["Python"],
+                "domain": "data",
+                "description": "We are building our platform to scale our product. Join our team!",
+            }
+        ),
         "scored": None,
     }
     plan = build_cv_plan(in_house_job, SAMPLE_REF_FILES)
@@ -168,18 +179,14 @@ def test_jd_context_location_hints_french_for_paris():
     """Paris-based job → location_language_hints contains 'French'."""
     plan = _plan()
     hints = plan["jd_context"]["location_language_hints"]
-    assert "French" in hints, (
-        f"Expected 'French' in location_language_hints for Paris job, got {hints}"
-    )
+    assert "French" in hints, f"Expected 'French' in location_language_hints for Paris job, got {hints}"
 
 
 def test_jd_context_location_hints_german_for_berlin():
     """Berlin-based job → location_language_hints contains 'German'."""
     plan = build_cv_plan(NO_SCORE_JOB, SAMPLE_REF_FILES)
     hints = plan["jd_context"]["location_language_hints"]
-    assert "German" in hints, (
-        f"Expected 'German' in hints for Berlin job, got {hints}"
-    )
+    assert "German" in hints, f"Expected 'German' in hints for Berlin job, got {hints}"
 
 
 def test_jd_context_location_hints_empty_for_english_cities():
@@ -187,14 +194,16 @@ def test_jd_context_location_hints_empty_for_english_cities():
     uk_job = {
         "title": "PM",
         "company": "Corp",
-        "parsed": json.dumps({
-            "seniority": "senior",
-            "locations_mentioned": ["London, UK"],
-            "must_have_skills": [],
-            "technical_stack": [],
-            "domain": "data",
-            "description": "Join our product team.",
-        }),
+        "parsed": json.dumps(
+            {
+                "seniority": "senior",
+                "locations_mentioned": ["London, UK"],
+                "must_have_skills": [],
+                "technical_stack": [],
+                "domain": "data",
+                "description": "Join our product team.",
+            }
+        ),
         "scored": None,
     }
     plan = build_cv_plan(uk_job, SAMPLE_REF_FILES)
@@ -217,9 +226,16 @@ def test_jd_context_key_tools_filtered_to_known_tools():
 
 def test_jd_context_has_all_required_keys():
     """jd_context must contain all required keys."""
-    REQUIRED = {"company_type", "business_model", "vertical", "location",
-                "seniority_read", "key_tools", "team_signals",
-                "location_language_hints"}
+    REQUIRED = {
+        "company_type",
+        "business_model",
+        "vertical",
+        "location",
+        "seniority_read",
+        "key_tools",
+        "team_signals",
+        "location_language_hints",
+    }
     plan = _plan()
     missing = REQUIRED - set(plan["jd_context"].keys())
     assert not missing, f"Missing jd_context keys: {missing}"
@@ -228,6 +244,7 @@ def test_jd_context_has_all_required_keys():
 # ══════════════════════════════════════════════════════════════════════════
 # score_summary tests
 # ══════════════════════════════════════════════════════════════════════════
+
 
 def test_score_summary_total_matches_input():
     """score_summary.total must equal the job's score."""
@@ -239,7 +256,7 @@ def test_score_summary_dimension_guidance_has_entry_for_each_dimension():
     """score_summary.dimension_guidance must have an entry for every score dimension."""
     plan = _plan()
     breakdown = plan["score_summary"]["breakdown"]
-    guidance  = plan["score_summary"]["dimension_guidance"]
+    guidance = plan["score_summary"]["dimension_guidance"]
     assert set(breakdown.keys()) == set(guidance.keys()), (
         f"Guidance dimensions {set(guidance.keys())} don't match breakdown {set(breakdown.keys())}"
     )
@@ -274,6 +291,7 @@ def test_score_summary_strengths_and_gaps_present():
 # source_facts tests
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def test_source_facts_title_extracted():
     """source_facts.title must match the professional title in the profile."""
     plan = _plan()
@@ -287,9 +305,7 @@ def test_source_facts_years_experience_from_experience_dates():
     plan = _plan()
     years = plan["source_facts"]["years_experience"]
     # Earliest PM role in SAMPLE_EXPERIENCE is 03/2013 → 13 years → "10+"
-    assert years == "10+", (
-        f"Expected '10+' years, got {years!r}"
-    )
+    assert years == "10+", f"Expected '10+' years, got {years!r}"
 
 
 def test_source_facts_languages_contains_spanish():
@@ -313,9 +329,7 @@ def test_source_facts_core_skills_themes_extracted():
     plan = _plan()
     themes = plan["source_facts"]["core_skills_themes"]
     assert isinstance(themes, list)
-    assert len(themes) >= 2, (
-        f"Expected ≥2 core skills themes, got {themes}"
-    )
+    assert len(themes) >= 2, f"Expected ≥2 core skills themes, got {themes}"
 
 
 def test_source_facts_themes_contain_expected_names():
@@ -333,13 +347,12 @@ def test_source_facts_themes_contain_expected_names():
 # bullet_allocation tests
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def test_bullet_allocation_total_budget_le_12():
     """Total bullet budget across all companies must not exceed 12."""
     plan = _plan()
     total = sum(v["budget"] for v in plan["bullet_allocation"].values())
-    assert total <= 12, (
-        f"Total bullet budget {total} exceeds maximum of 12"
-    )
+    assert total <= 12, f"Total bullet budget {total} exceeds maximum of 12"
 
 
 def test_bullet_allocation_companies_match_experience():
@@ -360,9 +373,7 @@ def test_bullet_allocation_each_entry_has_required_keys():
         assert entry["relevance"] in ("high", "medium", "low"), (
             f"Invalid relevance '{entry['relevance']}' for '{company}'"
         )
-        assert isinstance(entry["budget"], int), (
-            f"Budget must be int for '{company}'"
-        )
+        assert isinstance(entry["budget"], int), f"Budget must be int for '{company}'"
 
 
 def test_bullet_allocation_sql_rich_company_gets_higher_budget():
@@ -370,19 +381,20 @@ def test_bullet_allocation_sql_rich_company_gets_higher_budget():
     plan = _plan()
     allocation = plan["bullet_allocation"]
     # Acme Corp has SQL/Kafka/Snowflake mentions → should get higher budget than Early Corp
-    acme_budget   = allocation.get("Acme Corp", {}).get("budget", 0)
-    early_budget  = allocation.get("Early Corp", {}).get("budget", 0)
-    assert acme_budget >= early_budget, (
-        f"Expected Acme Corp ({acme_budget}) ≥ Early Corp ({early_budget}) budget"
-    )
+    acme_budget = allocation.get("Acme Corp", {}).get("budget", 0)
+    early_budget = allocation.get("Early Corp", {}).get("budget", 0)
+    assert acme_budget >= early_budget, f"Expected Acme Corp ({acme_budget}) ≥ Early Corp ({early_budget}) budget"
 
 
 def test_bullet_allocation_empty_when_no_experience():
     """Empty experience file → empty bullet_allocation."""
-    plan = build_cv_plan(WEFIIT_LIKE_JOB, {
-        "master-cv-profile.md":    SAMPLE_PROFILE,
-        "master-cv-experience.md": "",
-    })
+    plan = build_cv_plan(
+        WEFIIT_LIKE_JOB,
+        {
+            "master-cv-profile.md": SAMPLE_PROFILE,
+            "master-cv-experience.md": "",
+        },
+    )
     assert plan["bullet_allocation"] == {}
 
 
@@ -390,12 +402,12 @@ def test_bullet_allocation_empty_when_no_experience():
 # Graceful degradation tests
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def test_no_scored_data_plan_still_builds():
     """Job with no scored data must still return a valid plan (no exceptions)."""
     plan = build_cv_plan(NO_SCORE_JOB, SAMPLE_REF_FILES)
     assert isinstance(plan, dict)
-    for key in ("jd_context", "score_summary", "strengths", "gaps",
-                "bullet_allocation", "source_facts"):
+    for key in ("jd_context", "score_summary", "strengths", "gaps", "bullet_allocation", "source_facts"):
         assert key in plan, f"Missing top-level key: {key}"
 
 
@@ -436,7 +448,6 @@ def test_missing_reference_files_returns_empty_source_facts():
 
 def test_plan_has_all_top_level_keys():
     """Plan must always contain all 6 top-level keys."""
-    REQUIRED = {"jd_context", "score_summary", "strengths", "gaps",
-                "bullet_allocation", "source_facts"}
+    REQUIRED = {"jd_context", "score_summary", "strengths", "gaps", "bullet_allocation", "source_facts"}
     plan = _plan()
     assert set(plan.keys()) == REQUIRED

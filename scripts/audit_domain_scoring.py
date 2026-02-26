@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 def load_sample_jobs(db_path: str, limit: int = 30) -> list[dict]:
     """Load sample jobs with parsed data from the DB."""
     import sqlite3
+
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
@@ -41,15 +42,17 @@ def load_sample_jobs(db_path: str, limit: int = 30) -> list[dict]:
         jobs = []
         for row in rows:
             parsed = json.loads(row["parsed"] or "{}")
-            jobs.append({
-                "id": row["job_id"],
-                "title": row["title"],
-                "company": row["company"],
-                "location": row["location"],
-                "domain_col": row["domain"],  # jobs.domain column (updated by reparse)
-                "description": "",
-                "parsed": parsed,
-            })
+            jobs.append(
+                {
+                    "id": row["job_id"],
+                    "title": row["title"],
+                    "company": row["company"],
+                    "location": row["location"],
+                    "domain_col": row["domain"],  # jobs.domain column (updated by reparse)
+                    "description": "",
+                    "parsed": parsed,
+                }
+            )
         return jobs
     finally:
         conn.close()
@@ -57,8 +60,9 @@ def load_sample_jobs(db_path: str, limit: int = 30) -> list[dict]:
 
 def run_audit(profile_id: str, db_path: str, limit: int) -> None:
     from api.scoring import (
-        load_profile_data, _infer_domain, _semantic_domain_score, heuristic_score,
-        _DOMAIN_KEYWORDS,
+        load_profile_data,
+        _infer_domain,
+        _semantic_domain_score,
     )
 
     profile = load_profile_data(profile_id)
@@ -75,10 +79,7 @@ def run_audit(profile_id: str, db_path: str, limit: int) -> None:
     print(f"DB: {db_path}  |  Jobs: {len(jobs)}")
     print(f"\nDomain weights: {profile['domains']}\n")
 
-    header = (
-        f"{'Title':<35} {'Company':<18} "
-        f"{'Parsed':>9} {'DB.col':>9} {'Inferred':>9} {'Path':>8} {'Score':>6}"
-    )
+    header = f"{'Title':<35} {'Company':<18} {'Parsed':>9} {'DB.col':>9} {'Inferred':>9} {'Path':>8} {'Score':>6}"
     print(header)
     print("-" * len(header))
 

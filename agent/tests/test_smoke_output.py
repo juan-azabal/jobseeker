@@ -80,12 +80,9 @@ def test_job_ids_are_deterministic():
             recomputed = make_job_id(title, company)
             if recomputed != stored_id:
                 mismatches.append(
-                    f"{os.path.basename(path)}: '{title}' @ '{company}' "
-                    f"stored={stored_id!r} recomputed={recomputed!r}"
+                    f"{os.path.basename(path)}: '{title}' @ '{company}' stored={stored_id!r} recomputed={recomputed!r}"
                 )
-    assert not mismatches, (
-        f"Found {len(mismatches)} ID mismatches (first 10):\n" + "\n".join(mismatches[:10])
-    )
+    assert not mismatches, f"Found {len(mismatches)} ID mismatches (first 10):\n" + "\n".join(mismatches[:10])
 
 
 @pytest.mark.smoke
@@ -95,9 +92,7 @@ def test_no_duplicate_ids_within_file():
     for path, jobs in files:
         ids = [j.get("id") for j in jobs]
         unique_ids = set(ids)
-        assert len(ids) == len(unique_ids), (
-            f"{os.path.basename(path)}: {len(ids) - len(unique_ids)} duplicate job IDs"
-        )
+        assert len(ids) == len(unique_ids), f"{os.path.basename(path)}: {len(ids) - len(unique_ids)} duplicate job IDs"
 
 
 @pytest.mark.smoke

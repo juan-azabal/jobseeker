@@ -2,7 +2,14 @@ import os
 import tempfile
 import pytest
 from api.db.init import init_db
-from api.db.queries import upsert_job, get_jobs, get_job_by_id, upsert_user_job_score, get_user_job_score, get_total_job_count
+from api.db.queries import (
+    upsert_job,
+    get_jobs,
+    get_job_by_id,
+    upsert_user_job_score,
+    get_user_job_score,
+    get_total_job_count,
+)
 
 JOB = {
     "job_id": "abc123",
@@ -30,6 +37,7 @@ def test_init_creates_table(tmp_path):
     path = str(tmp_path / "test.db")
     init_db(path)
     import sqlite3
+
     con = sqlite3.connect(path)
     tables = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     assert ("jobs",) in tables
@@ -69,6 +77,7 @@ def test_user_job_scores(db_path):
     upsert_job(db_path, JOB)
     # Create a test user
     import sqlite3
+
     con = sqlite3.connect(db_path)
     con.execute("INSERT INTO users (id, google_id, email, name) VALUES (1, 'g1', 'a@b.com', 'Test')")
     con.commit()

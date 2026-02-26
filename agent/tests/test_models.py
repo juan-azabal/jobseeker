@@ -11,10 +11,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 class TestRawJobModel:
-
     def test_minimal_required_fields(self):
         """Only id, title, company, source are required."""
         from models import RawJob
+
         job = RawJob(id="abc123", title="Senior PM", company="Acme", source="indeed")
         assert job.id == "abc123"
         assert job.title == "Senior PM"
@@ -24,12 +24,14 @@ class TestRawJobModel:
     def test_glassdoor_is_valid_source(self):
         """glassdoor must be a valid source value."""
         from models import RawJob
+
         job = RawJob(id="x", title="PM", company="Acme", source="glassdoor")
         assert job.source == "glassdoor"
 
     def test_all_sources_valid(self):
         """All 8 expected source values must be accepted."""
         from models import RawJob
+
         for src in ("indeed", "linkedin", "google", "glassdoor", "greenhouse", "lever", "ashby", "wttj"):
             job = RawJob(id="x", title="PM", company="Acme", source=src)
             assert job.source == src
@@ -37,6 +39,7 @@ class TestRawJobModel:
     def test_optional_fields_default_to_none(self):
         """Optional fields not provided default to None."""
         from models import RawJob
+
         job = RawJob(id="x", title="PM", company="Acme", source="indeed")
         assert job.company_url is None
         assert job.company_industry is None
@@ -62,30 +65,35 @@ class TestRawJobModel:
     def test_is_remote_true_when_fulltime(self):
         """is_remote computed property returns True when remote_type='fulltime'."""
         from models import RawJob
+
         job = RawJob(id="x", title="PM", company="Acme", source="wttj", remote_type="fulltime")
         assert job.is_remote is True
 
     def test_is_remote_true_when_partial(self):
         """is_remote returns True when remote_type='partial'."""
         from models import RawJob
+
         job = RawJob(id="x", title="PM", company="Acme", source="wttj", remote_type="partial")
         assert job.is_remote is True
 
     def test_is_remote_false_when_no(self):
         """is_remote returns False when remote_type='no'."""
         from models import RawJob
+
         job = RawJob(id="x", title="PM", company="Acme", source="wttj", remote_type="no")
         assert job.is_remote is False
 
     def test_is_remote_false_when_none(self):
         """is_remote returns False when remote_type is None."""
         from models import RawJob
+
         job = RawJob(id="x", title="PM", company="Acme", source="indeed")
         assert job.is_remote is False
 
     def test_all_optional_fields_populate(self):
         """All optional fields can be set and retrieved."""
         from models import RawJob
+
         job = RawJob(
             id="abc",
             title="Head of PM",
@@ -121,9 +129,13 @@ class TestRawJobModel:
     def test_extra_fields_ignored(self):
         """Pydantic model must ignore unknown extra fields."""
         from models import RawJob
+
         # Pydantic v2 default: ignore extras — should not raise
         job = RawJob(
-            id="x", title="PM", company="Acme", source="indeed",
+            id="x",
+            title="PM",
+            company="Acme",
+            source="indeed",
             unknown_field_xyz="should be ignored",
         )
         assert job.id == "x"

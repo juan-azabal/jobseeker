@@ -4,7 +4,6 @@ Ported from agent/main.py _heuristic_score(). Runs at query time for jobs
 without RAG scores — no LLM calls, instant, free.
 """
 
-import json
 import os
 from pathlib import Path
 
@@ -23,19 +22,27 @@ logger = structlog.get_logger(__name__)
 #   marketplace|media|retail|saas|telecom|travel|other
 _DOMAIN_ALIASES: dict[str, str] = {
     # AI/ML consolidation
-    "ia": "ai_ml", "ai": "ai_ml", "llm": "ai_ml", "ml": "ai_ml",
+    "ia": "ai_ml",
+    "ai": "ai_ml",
+    "llm": "ai_ml",
+    "ml": "ai_ml",
     # Adtech
     "martech": "adtech",
     # Automotive
-    "mobility": "automotive", "ev": "automotive",
+    "mobility": "automotive",
+    "ev": "automotive",
     # Biotech
-    "pharma": "biotech", "life_sciences": "biotech",
+    "pharma": "biotech",
+    "life_sciences": "biotech",
     # Climate
-    "greentech": "climate", "cleantech": "climate",
+    "greentech": "climate",
+    "cleantech": "climate",
     # Construction
     "proptech": "construction",
     # Cybersecurity
-    "security": "cybersecurity", "infosec": "cybersecurity", "devsecops": "cybersecurity",
+    "security": "cybersecurity",
+    "infosec": "cybersecurity",
+    "devsecops": "cybersecurity",
     "cybersecurity": "cybersecurity",
     # Devtools
     "developer-tools": "devtools",
@@ -44,9 +51,12 @@ _DOMAIN_ALIASES: dict[str, str] = {
     # Fintech
     "insurtech": "fintech",
     # Food & bev
-    "agritech": "food_bev", "foodtech": "food_bev",
+    "agritech": "food_bev",
+    "foodtech": "food_bev",
     # Gaming
-    "game": "gaming", "esports": "gaming", "gaming": "gaming",
+    "game": "gaming",
+    "esports": "gaming",
+    "gaming": "gaming",
     # Healthcare (legacy parser value)
     "healthcare": "healthtech",
     # HR tech
@@ -60,13 +70,40 @@ _DOMAIN_ALIASES: dict[str, str] = {
 }
 
 # Frozenset of all valid canonical domain values (v1.3 — 30 entries).
-VALID_DOMAINS: frozenset[str] = frozenset({
-    "adtech", "ai_ml", "automotive", "biotech", "climate", "construction",
-    "cybersecurity", "data", "defense", "devtools", "ecommerce", "edtech",
-    "energy", "fintech", "food_bev", "gaming", "govtech", "healthtech",
-    "hr_tech", "infra", "legal_tech", "logistics", "manufacturing",
-    "marketplace", "media", "retail", "saas", "telecom", "travel", "other",
-})
+VALID_DOMAINS: frozenset[str] = frozenset(
+    {
+        "adtech",
+        "ai_ml",
+        "automotive",
+        "biotech",
+        "climate",
+        "construction",
+        "cybersecurity",
+        "data",
+        "defense",
+        "devtools",
+        "ecommerce",
+        "edtech",
+        "energy",
+        "fintech",
+        "food_bev",
+        "gaming",
+        "govtech",
+        "healthtech",
+        "hr_tech",
+        "infra",
+        "legal_tech",
+        "logistics",
+        "manufacturing",
+        "marketplace",
+        "media",
+        "retail",
+        "saas",
+        "telecom",
+        "travel",
+        "other",
+    }
+)
 
 # Seniority levels ordered from most junior to most senior
 _SENIORITY_LEVELS = ["junior", "mid", "senior", "staff", "principal", "director", "vp"]
@@ -113,134 +150,367 @@ def _compute_seniority_weights(level: str, track: str) -> dict[str, int]:
 # Domain override keywords — mirrors agent/main.py _DOMAIN_KEYWORDS (dual-copy rule).
 # All keywords are ≥2 words or known brand/product names to avoid false-match substrings.
 _DOMAIN_KEYWORDS = {
-    "adtech": ["ad tech", "programmatic advertising", "demand-side platform",
-               "supply-side platform", "header bidding", "real-time bidding",
-               "publisher monetization", "ad network", "ad exchange",
-               "display advertising"],
-    "ai_ml": ["machine learning", "ml model", "ai agent", "large language model",
-              "natural language processing", "computer vision", "deep learning",
-              "neural network", "generative ai", "ml platform",
-              "model training", "model inference"],
-    "automotive": ["autonomous driving", "electric vehicle", "ev charging",
-                   "connected car", "fleet management", "mobility platform",
-                   "adas system", "vehicle software"],
-    "biotech": ["drug discovery", "clinical trial", "life sciences",
-                "genomics platform", "molecular biology", "bioinformatics pipeline"],
-    "climate": ["carbon offset", "carbon footprint", "renewable energy",
-                "clean energy", "climate tech", "solar energy", "wind energy",
-                "circular economy", "sustainability platform", "decarbonization"],
-    "construction": ["construction tech", "building information modeling",
-                     "property management", "real estate platform",
-                     "smart building", "architecture tech"],
-    "cybersecurity": ["information security", "identity management",
-                      "fraud prevention", "threat detection", "zero trust",
-                      "penetration testing", "security operations center",
-                      "vulnerability management"],
-    "data": ["data platform", "data pipeline", "data warehouse", "data lake",
-             "data lakehouse", "data product", "data governance", "data quality",
-             "data engineering", "business intelligence", "data analytics platform",
-             "observability platform", "etl pipeline", "data modeling",
-             "databricks", "snowflake", "clickhouse"],
-    "defense": ["defense contractor", "defense tech", "aerospace defense",
-                "military technology", "government contractor"],
-    "devtools": ["developer tool", "developer experience", "ci/cd pipeline",
-                 "code review platform", "api platform", "sdk development",
-                 "source control", "build system", "package manager",
-                 "devops platform"],
-    "ecommerce": ["online retail", "e-commerce platform", "shopping platform",
-                  "direct-to-consumer", "online store", "product catalog",
-                  "shopify", "woocommerce"],
-    "edtech": ["e-learning", "learning management system", "education technology",
-               "online education", "courseware platform", "student platform",
-               "classroom technology", "tutoring platform"],
-    "energy": ["oil and gas", "energy management", "smart grid",
-               "power generation", "energy trading", "utility company"],
-    "fintech": ["payment processing", "digital banking", "lending platform",
-                "wealth management", "trading platform", "insurance technology",
-                "credit platform", "neobank", "blockchain platform",
-                "cryptocurrency exchange", "defi protocol",
-                "financial institution", "financial services"],
-    "food_bev": ["food delivery", "restaurant tech", "meal kit",
-                 "food safety platform", "precision agriculture",
-                 "grocery platform", "agritech platform"],
-    "gaming": ["video game", "game engine", "game studio", "game development",
-               "interactive entertainment", "mobile game", "esports platform",
-               "unity developer", "unreal engine"],
-    "govtech": ["government technology", "civic tech", "public sector platform",
-                "e-government", "regulatory technology"],
-    "healthtech": ["digital health", "telemedicine platform", "electronic health record",
-                   "patient platform", "medical device software", "telehealth",
-                   "health platform", "clinical software"],
-    "hr_tech": ["recruiting platform", "talent acquisition", "workforce management",
-                "hr platform", "applicant tracking", "people analytics",
-                "employee engagement", "payroll platform",
-                "training management", "learning and development"],
-    "infra": ["cloud infrastructure", "container orchestration", "kubernetes",
-              "terraform", "cloud platform", "infrastructure as code",
-              "load balancer", "bare metal hosting", "cdn provider"],
-    "legal_tech": ["legal tech", "contract management", "compliance platform",
-                   "e-discovery", "case management", "document automation",
-                   "legal ai"],
-    "logistics": ["supply chain", "last mile delivery", "warehouse management",
-                  "freight platform", "transportation management",
-                  "fulfillment platform", "3pl platform"],
-    "manufacturing": ["industrial iot", "factory automation", "manufacturing tech",
-                      "quality control system", "production line", "robotics platform",
-                      "scada system"],
-    "marketplace": ["two-sided marketplace", "classifieds platform", "gig economy",
-                    "platform economy", "peer to peer", "rental platform",
-                    "buyer and seller"],
-    "media": ["content platform", "streaming platform", "digital media",
-              "publishing platform", "video platform", "podcast platform",
-              "content management system", "editorial platform",
-              "media company"],
-    "retail": ["retail technology", "point of sale", "pos system",
-               "in-store technology", "omnichannel retail",
-               "inventory management", "store operations",
-               "merchandising platform"],
-    "saas": ["b2b software", "b2b platform", "enterprise software",
-             "subscription platform", "crm platform", "erp system",
-             "productivity software"],
-    "telecom": ["telecommunications", "network operator", "mobile network",
-                "fiber optic", "5g network", "voip platform",
-                "connectivity platform"],
-    "travel": ["travel tech", "booking platform", "hospitality platform",
-               "hotel management", "airline technology", "reservation system",
-               "tourism platform"],
+    "adtech": [
+        "ad tech",
+        "programmatic advertising",
+        "demand-side platform",
+        "supply-side platform",
+        "header bidding",
+        "real-time bidding",
+        "publisher monetization",
+        "ad network",
+        "ad exchange",
+        "display advertising",
+    ],
+    "ai_ml": [
+        "machine learning",
+        "ml model",
+        "ai agent",
+        "large language model",
+        "natural language processing",
+        "computer vision",
+        "deep learning",
+        "neural network",
+        "generative ai",
+        "ml platform",
+        "model training",
+        "model inference",
+    ],
+    "automotive": [
+        "autonomous driving",
+        "electric vehicle",
+        "ev charging",
+        "connected car",
+        "fleet management",
+        "mobility platform",
+        "adas system",
+        "vehicle software",
+    ],
+    "biotech": [
+        "drug discovery",
+        "clinical trial",
+        "life sciences",
+        "genomics platform",
+        "molecular biology",
+        "bioinformatics pipeline",
+    ],
+    "climate": [
+        "carbon offset",
+        "carbon footprint",
+        "renewable energy",
+        "clean energy",
+        "climate tech",
+        "solar energy",
+        "wind energy",
+        "circular economy",
+        "sustainability platform",
+        "decarbonization",
+    ],
+    "construction": [
+        "construction tech",
+        "building information modeling",
+        "property management",
+        "real estate platform",
+        "smart building",
+        "architecture tech",
+    ],
+    "cybersecurity": [
+        "information security",
+        "identity management",
+        "fraud prevention",
+        "threat detection",
+        "zero trust",
+        "penetration testing",
+        "security operations center",
+        "vulnerability management",
+    ],
+    "data": [
+        "data platform",
+        "data pipeline",
+        "data warehouse",
+        "data lake",
+        "data lakehouse",
+        "data product",
+        "data governance",
+        "data quality",
+        "data engineering",
+        "business intelligence",
+        "data analytics platform",
+        "observability platform",
+        "etl pipeline",
+        "data modeling",
+        "databricks",
+        "snowflake",
+        "clickhouse",
+    ],
+    "defense": [
+        "defense contractor",
+        "defense tech",
+        "aerospace defense",
+        "military technology",
+        "government contractor",
+    ],
+    "devtools": [
+        "developer tool",
+        "developer experience",
+        "ci/cd pipeline",
+        "code review platform",
+        "api platform",
+        "sdk development",
+        "source control",
+        "build system",
+        "package manager",
+        "devops platform",
+    ],
+    "ecommerce": [
+        "online retail",
+        "e-commerce platform",
+        "shopping platform",
+        "direct-to-consumer",
+        "online store",
+        "product catalog",
+        "shopify",
+        "woocommerce",
+    ],
+    "edtech": [
+        "e-learning",
+        "learning management system",
+        "education technology",
+        "online education",
+        "courseware platform",
+        "student platform",
+        "classroom technology",
+        "tutoring platform",
+    ],
+    "energy": [
+        "oil and gas",
+        "energy management",
+        "smart grid",
+        "power generation",
+        "energy trading",
+        "utility company",
+    ],
+    "fintech": [
+        "payment processing",
+        "digital banking",
+        "lending platform",
+        "wealth management",
+        "trading platform",
+        "insurance technology",
+        "credit platform",
+        "neobank",
+        "blockchain platform",
+        "cryptocurrency exchange",
+        "defi protocol",
+        "financial institution",
+        "financial services",
+    ],
+    "food_bev": [
+        "food delivery",
+        "restaurant tech",
+        "meal kit",
+        "food safety platform",
+        "precision agriculture",
+        "grocery platform",
+        "agritech platform",
+    ],
+    "gaming": [
+        "video game",
+        "game engine",
+        "game studio",
+        "game development",
+        "interactive entertainment",
+        "mobile game",
+        "esports platform",
+        "unity developer",
+        "unreal engine",
+    ],
+    "govtech": [
+        "government technology",
+        "civic tech",
+        "public sector platform",
+        "e-government",
+        "regulatory technology",
+    ],
+    "healthtech": [
+        "digital health",
+        "telemedicine platform",
+        "electronic health record",
+        "patient platform",
+        "medical device software",
+        "telehealth",
+        "health platform",
+        "clinical software",
+    ],
+    "hr_tech": [
+        "recruiting platform",
+        "talent acquisition",
+        "workforce management",
+        "hr platform",
+        "applicant tracking",
+        "people analytics",
+        "employee engagement",
+        "payroll platform",
+        "training management",
+        "learning and development",
+    ],
+    "infra": [
+        "cloud infrastructure",
+        "container orchestration",
+        "kubernetes",
+        "terraform",
+        "cloud platform",
+        "infrastructure as code",
+        "load balancer",
+        "bare metal hosting",
+        "cdn provider",
+    ],
+    "legal_tech": [
+        "legal tech",
+        "contract management",
+        "compliance platform",
+        "e-discovery",
+        "case management",
+        "document automation",
+        "legal ai",
+    ],
+    "logistics": [
+        "supply chain",
+        "last mile delivery",
+        "warehouse management",
+        "freight platform",
+        "transportation management",
+        "fulfillment platform",
+        "3pl platform",
+    ],
+    "manufacturing": [
+        "industrial iot",
+        "factory automation",
+        "manufacturing tech",
+        "quality control system",
+        "production line",
+        "robotics platform",
+        "scada system",
+    ],
+    "marketplace": [
+        "two-sided marketplace",
+        "classifieds platform",
+        "gig economy",
+        "platform economy",
+        "peer to peer",
+        "rental platform",
+        "buyer and seller",
+    ],
+    "media": [
+        "content platform",
+        "streaming platform",
+        "digital media",
+        "publishing platform",
+        "video platform",
+        "podcast platform",
+        "content management system",
+        "editorial platform",
+        "media company",
+    ],
+    "retail": [
+        "retail technology",
+        "point of sale",
+        "pos system",
+        "in-store technology",
+        "omnichannel retail",
+        "inventory management",
+        "store operations",
+        "merchandising platform",
+    ],
+    "saas": [
+        "b2b software",
+        "b2b platform",
+        "enterprise software",
+        "subscription platform",
+        "crm platform",
+        "erp system",
+        "productivity software",
+    ],
+    "telecom": [
+        "telecommunications",
+        "network operator",
+        "mobile network",
+        "fiber optic",
+        "5g network",
+        "voip platform",
+        "connectivity platform",
+    ],
+    "travel": [
+        "travel tech",
+        "booking platform",
+        "hospitality platform",
+        "hotel management",
+        "airline technology",
+        "reservation system",
+        "tourism platform",
+    ],
 }
 
 # City → country normalisation for country_weights scoring.
 _CITY_TO_COUNTRY: dict[str, str] = {
     # Spain
-    "barcelona": "spain", "madrid": "spain", "valencia": "spain",
-    "bilbao": "spain", "seville": "spain", "sevilla": "spain",
+    "barcelona": "spain",
+    "madrid": "spain",
+    "valencia": "spain",
+    "bilbao": "spain",
+    "seville": "spain",
+    "sevilla": "spain",
     # France
-    "paris": "france", "lyon": "france", "marseille": "france", "toulouse": "france",
+    "paris": "france",
+    "lyon": "france",
+    "marseille": "france",
+    "toulouse": "france",
     # Germany
-    "berlin": "germany", "munich": "germany", "münchen": "germany",
-    "hamburg": "germany", "frankfurt": "germany", "cologne": "germany", "köln": "germany",
+    "berlin": "germany",
+    "munich": "germany",
+    "münchen": "germany",
+    "hamburg": "germany",
+    "frankfurt": "germany",
+    "cologne": "germany",
+    "köln": "germany",
     # Netherlands
-    "amsterdam": "netherlands", "rotterdam": "netherlands", "utrecht": "netherlands",
+    "amsterdam": "netherlands",
+    "rotterdam": "netherlands",
+    "utrecht": "netherlands",
     # UK
-    "london": "uk", "manchester": "uk", "edinburgh": "uk", "bristol": "uk",
+    "london": "uk",
+    "manchester": "uk",
+    "edinburgh": "uk",
+    "bristol": "uk",
     # Portugal
-    "lisbon": "portugal", "porto": "portugal", "lisboa": "portugal",
+    "lisbon": "portugal",
+    "porto": "portugal",
+    "lisboa": "portugal",
     # Italy
-    "milan": "italy", "rome": "italy", "milano": "italy", "roma": "italy",
+    "milan": "italy",
+    "rome": "italy",
+    "milano": "italy",
+    "roma": "italy",
     # Sweden
-    "stockholm": "sweden", "gothenburg": "sweden",
+    "stockholm": "sweden",
+    "gothenburg": "sweden",
     # Denmark
     "copenhagen": "denmark",
     # Belgium
-    "brussels": "belgium", "bruxelles": "belgium",
+    "brussels": "belgium",
+    "bruxelles": "belgium",
     # Ireland
     "dublin": "ireland",
     # Switzerland
-    "zurich": "switzerland", "zürich": "switzerland", "geneva": "switzerland",
+    "zurich": "switzerland",
+    "zürich": "switzerland",
+    "geneva": "switzerland",
     # Austria
-    "vienna": "austria", "wien": "austria",
+    "vienna": "austria",
+    "wien": "austria",
     # Poland
-    "warsaw": "poland", "krakow": "poland",
+    "warsaw": "poland",
+    "krakow": "poland",
     # Czech Republic
     "prague": "czech republic",
     # Finland
@@ -292,6 +562,7 @@ def _load_profile_yaml_from_db(profile_id: str, profile_path: Path) -> dict | No
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
     try:
         from api.db.queries import get_profile_yaml_by_profile_id  # avoid circular import at module level
+
         stored_yaml = get_profile_yaml_by_profile_id(db_path, profile_id)
         if not stored_yaml:
             return None
@@ -300,13 +571,15 @@ def _load_profile_yaml_from_db(profile_id: str, profile_path: Path) -> dict | No
         profile_path.write_text(stored_yaml)
         logger.info(
             "Restored profile YAML from DB for profile_id=%r → %s",
-            profile_id, profile_path,
+            profile_id,
+            profile_path,
         )
         return yaml.safe_load(stored_yaml)
     except Exception as exc:
         logger.error(
             "Failed to restore profile YAML from DB for profile_id=%r: %s",
-            profile_id, exc,
+            profile_id,
+            exc,
         )
         return None
 
@@ -334,13 +607,16 @@ def load_profile_data(profile_id: str | None) -> dict | None:
             logger.warning(
                 "Profile YAML not found for profile_id=%r at %s and not in DB — "
                 "heuristic scoring disabled for this user",
-                profile_id, profile_path,
+                profile_id,
+                profile_path,
             )
             return None
     except Exception as exc:
         logger.error(
             "Failed to load profile YAML for profile_id=%r at %s: %s",
-            profile_id, profile_path, exc,
+            profile_id,
+            profile_path,
+            exc,
         )
         return None
 
@@ -351,6 +627,7 @@ def load_profile_data(profile_id: str | None) -> dict | None:
     # Auto-derive home regions via country-converter
     try:
         from api.geo import derive_home_regions
+
         home_regions = derive_home_regions(home_locations)
     except Exception as exc:
         logger.warning("derive_home_regions failed for profile_id=%r: %s", profile_id, exc)
@@ -382,9 +659,7 @@ def load_profile_data(profile_id: str | None) -> dict | None:
         "home_regions": home_regions,
         "languages": [lang.lower() for lang in user_block.get("languages", [])],
         "location_preference": (user_block.get("location_preference") or "b").lower(),
-        "country_weights": {
-            k.lower(): int(v) for k, v in (target_block.get("country_weights") or {}).items()
-        },
+        "country_weights": {k.lower(): int(v) for k, v in (target_block.get("country_weights") or {}).items()},
         "company_type_weights": {
             k.lower(): int(v) for k, v in (target_block.get("company_type_weights") or {}).items()
         },
@@ -399,11 +674,13 @@ def _infer_domain(parsed: dict) -> str:
     if domain != "other":
         return domain
 
-    all_text = " ".join([
-        parsed.get("responsibilities_summary", ""),
-        " ".join(parsed.get("must_have_skills") or []),
-        " ".join(parsed.get("technical_stack") or []),
-    ]).lower()
+    all_text = " ".join(
+        [
+            parsed.get("responsibilities_summary", ""),
+            " ".join(parsed.get("must_have_skills") or []),
+            " ".join(parsed.get("technical_stack") or []),
+        ]
+    ).lower()
 
     best_domain = "other"
     best_count = 0
@@ -420,9 +697,7 @@ _SEMANTIC_DOMAIN_THRESHOLD = 0.75
 _SEMANTIC_DOMAIN_MAX = 15
 
 
-def _semantic_domain_score(
-    profile: dict, parsed: dict, job: dict, db_path: str | None
-) -> int:
+def _semantic_domain_score(profile: dict, parsed: dict, job: dict, db_path: str | None) -> int:
     """Semantic domain scoring when enum and keyword detection both fail.
 
     Fires only when _infer_domain() returns 'other' (cascade: enum → keywords → semantic).
@@ -439,11 +714,16 @@ def _semantic_domain_score(
         return 0
 
     # Build job domain text from stable signals
-    job_text = " ".join(filter(None, [
-        job.get("company", ""),
-        parsed.get("domain", ""),
-        job.get("title", ""),
-    ])).strip()
+    job_text = " ".join(
+        filter(
+            None,
+            [
+                job.get("company", ""),
+                parsed.get("domain", ""),
+                job.get("title", ""),
+            ],
+        )
+    ).strip()
     if not job_text:
         return 0
 
@@ -492,7 +772,9 @@ def precompute_skill_lookup(
 
 
 def _score_skills(
-    profile: dict, parsed: dict, db_path: str | None,
+    profile: dict,
+    parsed: dict,
+    db_path: str | None,
     skill_lookup: dict[str, SkillMatch] | None = None,
 ) -> int:
     """Score skills dimension (0-30).
@@ -505,37 +787,29 @@ def _score_skills(
     """
     profile_skills = profile.get("skills", [])
     must_have_list = parsed.get("must_have_skills") or []
-    nice_list = list(set(
-        (parsed.get("nice_to_have_skills") or [])
-        + (parsed.get("technical_stack") or [])
-    ))
+    nice_list = list(set((parsed.get("nice_to_have_skills") or []) + (parsed.get("technical_stack") or [])))
 
     if skill_lookup is not None:
         # Pre-computed batch lookup — O(1) per skill
         must_pts = sum(
-            5 if (m := skill_lookup.get(s.strip().lower().replace("-", " "))) and m.status == "matched"
-            else 2 if m and m.status == "partial"
+            5
+            if (m := skill_lookup.get(s.strip().lower().replace("-", " "))) and m.status == "matched"
+            else 2
+            if m and m.status == "partial"
             else 0
             for s in must_have_list
         )
         nice_pts = sum(
-            3 if (m := skill_lookup.get(s.strip().lower().replace("-", " "))) and m.status == "matched"
-            else 0
+            3 if (m := skill_lookup.get(s.strip().lower().replace("-", " "))) and m.status == "matched" else 0
             for s in nice_list
         )
     elif db_path and profile_skills:
         # Semantic matching via embeddings
         must_results = match_skills(profile_skills, must_have_list, db_path)
-        must_pts = sum(
-            5 if m.status == "matched" else 2 if m.status == "partial" else 0
-            for m in must_results
-        )
+        must_pts = sum(5 if m.status == "matched" else 2 if m.status == "partial" else 0 for m in must_results)
 
         nice_results = match_skills(profile_skills, nice_list, db_path)
-        nice_pts = sum(
-            3 if m.status == "matched" else 0
-            for m in nice_results
-        )
+        nice_pts = sum(3 if m.status == "matched" else 0 for m in nice_results)
     else:
         # Substring fallback (current behavior, also used when no db_path)
         norm_must = [s.lower().replace("-", " ") for s in must_have_list]
@@ -547,16 +821,16 @@ def _score_skills(
         norm_profile = [s.replace("-", " ") for s in profile_skills]
 
         must_pts = sum(5 for skill in norm_profile if skill in norm_must)
-        nice_pts = sum(
-            3 for skill in norm_profile
-            if skill in nice_text and skill not in norm_must
-        )
+        nice_pts = sum(3 for skill in norm_profile if skill in nice_text and skill not in norm_must)
 
     return min(20, must_pts) + min(10, nice_pts)
 
 
 def heuristic_score(
-    profile: dict, parsed: dict, job: dict, is_reloc: bool,
+    profile: dict,
+    parsed: dict,
+    job: dict,
+    is_reloc: bool,
     db_path: str | None = None,
     skill_lookup: dict[str, SkillMatch] | None = None,
     domain_override: str | None = None,
@@ -650,13 +924,9 @@ def heuristic_score(
     # ── Country weights (±10) ───────────────────────────────────────────────
     country_weights = profile.get("country_weights", {})
     if country_weights:
-        locations_mentioned = [
-            loc.lower() for loc in (parsed.get("locations_mentioned") or [])
-        ]
+        locations_mentioned = [loc.lower() for loc in (parsed.get("locations_mentioned") or [])]
         # Normalise city names → country names
-        normalized_locs = {
-            _CITY_TO_COUNTRY.get(loc, loc) for loc in locations_mentioned
-        }
+        normalized_locs = {_CITY_TO_COUNTRY.get(loc, loc) for loc in locations_mentioned}
         # Remote jobs are accessible from any preferred location
         if loc_type == "remote":
             normalized_locs.add("remote")
@@ -670,12 +940,14 @@ def heuristic_score(
         exp_req = parsed.get("experience_requirements") or ""
         if isinstance(exp_req, list):
             exp_req = " ".join(exp_req)
-        lang_text = " ".join([
-            exp_req,
-            parsed.get("responsibilities_summary") or "",
-            job.get("title") or "",
-            (job.get("description") or "")[:1000],
-        ]).lower()
+        lang_text = " ".join(
+            [
+                exp_req,
+                parsed.get("responsibilities_summary") or "",
+                job.get("title") or "",
+                (job.get("description") or "")[:1000],
+            ]
+        ).lower()
         lang_bonus = 0
         for lang in languages:
             signals = _LANG_SIGNALS.get(lang.lower())
@@ -704,7 +976,10 @@ def heuristic_score(
 
 
 def hybrid_score(
-    profile: dict, parsed: dict, job: dict, is_reloc: bool,
+    profile: dict,
+    parsed: dict,
+    job: dict,
+    is_reloc: bool,
     technical_grade: str | None = None,
     profile_grade: str | None = None,
     db_path: str | None = None,
@@ -723,7 +998,10 @@ def hybrid_score(
     For unscored jobs: omit grades → defaults add +20 (neutral LLM signal).
     """
     det = heuristic_score(
-        profile, parsed, job, is_reloc,
+        profile,
+        parsed,
+        job,
+        is_reloc,
         db_path=db_path,
         skill_lookup=skill_lookup,
         domain_override=domain_override,

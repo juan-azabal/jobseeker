@@ -58,9 +58,7 @@ class TestIngestV2GradeStorage:
         }
         ingest_from_list(db, [job], profile_id="juan")
         con = sqlite3.connect(db)
-        row = con.execute(
-            "SELECT technical_grade FROM user_job_scores WHERE job_id LIKE 'v2-001%'"
-        ).fetchone()
+        row = con.execute("SELECT technical_grade FROM user_job_scores WHERE job_id LIKE 'v2-001%'").fetchone()
         con.close()
         assert row is not None
         assert row[0] == "A"
@@ -79,9 +77,7 @@ class TestIngestV2GradeStorage:
         }
         ingest_from_list(db, [job], profile_id="juan")
         con = sqlite3.connect(db)
-        row = con.execute(
-            "SELECT profile_grade FROM user_job_scores WHERE job_id LIKE 'v2-002%'"
-        ).fetchone()
+        row = con.execute("SELECT profile_grade FROM user_job_scores WHERE job_id LIKE 'v2-002%'").fetchone()
         con.close()
         assert row is not None
         assert row[0] == "C"
@@ -100,9 +96,7 @@ class TestIngestV2GradeStorage:
         }
         ingest_from_list(db, [job], profile_id="juan")
         con = sqlite3.connect(db)
-        row = con.execute(
-            "SELECT scored_v2 FROM user_job_scores WHERE job_id LIKE 'v2-003%'"
-        ).fetchone()
+        row = con.execute("SELECT scored_v2 FROM user_job_scores WHERE job_id LIKE 'v2-003%'").fetchone()
         con.close()
         assert row is not None
         assert row[0] == 1
@@ -131,8 +125,8 @@ class TestIngestV1BackwardCompat:
         con.close()
         assert row is not None
         assert row[0] == 75
-        assert row[1] == 0         # scored_v2 unchanged
-        assert row[2] is None      # no grades
+        assert row[1] == 0  # scored_v2 unchanged
+        assert row[2] is None  # no grades
 
     def test_no_rag_score_no_user_row(self, tmp_path):
         """Jobs without rag_score → no row in user_job_scores."""
@@ -140,8 +134,6 @@ class TestIngestV1BackwardCompat:
         job = _base_job("norag-001")
         ingest_from_list(db, [job], profile_id="juan")
         con = sqlite3.connect(db)
-        row = con.execute(
-            "SELECT 1 FROM user_job_scores WHERE job_id LIKE 'norag-001%'"
-        ).fetchone()
+        row = con.execute("SELECT 1 FROM user_job_scores WHERE job_id LIKE 'norag-001%'").fetchone()
         con.close()
         assert row is None

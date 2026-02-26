@@ -47,12 +47,15 @@ class TestMigration017RoleFunction:
         """After migration, role_function should be populated from parsed JSON when present."""
         con = sqlite3.connect(db_path)
         parsed = json.dumps({"domain": "saas", "role_function": "product"})
-        con.execute("""
+        con.execute(
+            """
             INSERT INTO jobs (job_id, title, company, location, url,
                               location_type, domain, parsed, first_seen, last_seen, ingested_at)
             VALUES ('rf-test-2', 'PM', 'Acme', 'Remote', 'https://x.com',
                     'remote', 'saas', ?, '2026-01-01', '2026-01-01', '2026-01-01T00:00:00')
-        """, (parsed,))
+        """,
+            (parsed,),
+        )
         con.commit()
 
         # Simulate the migration backfill

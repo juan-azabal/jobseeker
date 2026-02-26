@@ -1,4 +1,5 @@
 """Tests for api/cv/docx_builder.py — Phase 6 skill-quality formatting."""
+
 import pytest
 import tempfile
 from pathlib import Path
@@ -112,13 +113,14 @@ Job search CRM with AI-powered CV tailoring. FastAPI, React, SQLite. github.com/
 
 # --- Color constants (mirror docx_builder) ---
 _COLOR_ACCENT = RGBColor(0x1F, 0x4E, 0x79)
-_COLOR_TITLE  = RGBColor(0x44, 0x44, 0x44)
-_COLOR_MUTED  = RGBColor(0x55, 0x55, 0x55)
+_COLOR_TITLE = RGBColor(0x44, 0x44, 0x44)
+_COLOR_MUTED = RGBColor(0x55, 0x55, 0x55)
 
 
 def _build(markdown: str) -> Path:
     """Helper: run build_docx and return path."""
     from api.cv.docx_builder import build_docx
+
     with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
         output_path = f.name
     build_docx(markdown, output_path)
@@ -151,6 +153,7 @@ def _find_paras_by_bold_color(doc: Document, bold: bool, color: RGBColor):
 
 
 # ── Existing core tests (still valid) ───────────────────────────────────────
+
 
 def test_output_file_exists_and_has_content():
     """build_docx() creates a non-empty .docx file."""
@@ -187,16 +190,20 @@ def test_name_paragraph_contains_candidate_name():
 def test_section_count_matches_sections():
     """Document must have exactly 7 section header paragraphs."""
     SECTION_NAMES = {
-        "Summary", "Selected Impact", "Core Skills", "Projects",
-        "Work Experience", "Education and Certifications", "Languages",
+        "Summary",
+        "Selected Impact",
+        "Core Skills",
+        "Projects",
+        "Work Experience",
+        "Education and Certifications",
+        "Languages",
     }
     path = _build(SAMPLE_MARKDOWN)
     try:
         doc = Document(str(path))
         header_paras = [p for p in doc.paragraphs if p.text.strip() in SECTION_NAMES]
         assert len(header_paras) == 7, (
-            f"Expected 7 section headers, found {len(header_paras)}: "
-            f"{[p.text for p in header_paras]}"
+            f"Expected 7 section headers, found {len(header_paras)}: {[p.text for p in header_paras]}"
         )
     finally:
         path.unlink(missing_ok=True)
@@ -210,13 +217,8 @@ def test_bullets_use_list_style_not_unicode():
         unicode_bullets = {"•", "◦", "▪", "–", "→"}
         for para in doc.paragraphs:
             for char in unicode_bullets:
-                assert char not in para.text, (
-                    f"Unicode bullet '{char}' found in: {para.text[:60]}"
-                )
-        list_paras = [
-            p for p in doc.paragraphs
-            if "List" in p.style.name or "Bullet" in p.style.name
-        ]
+                assert char not in para.text, f"Unicode bullet '{char}' found in: {para.text[:60]}"
+        list_paras = [p for p in doc.paragraphs if "List" in p.style.name or "Bullet" in p.style.name]
         assert len(list_paras) > 0, "No List Bullet paragraphs found"
     finally:
         path.unlink(missing_ok=True)
@@ -283,6 +285,7 @@ def test_preamble_stripped():
 def test_empty_markdown_raises_value_error():
     """Empty or whitespace-only markdown must raise ValueError."""
     from api.cv.docx_builder import build_docx
+
     with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
         output_path = f.name
     try:
@@ -295,6 +298,7 @@ def test_empty_markdown_raises_value_error():
 def test_malformed_markdown_no_heading_raises_value_error():
     """Markdown with no # heading raises ValueError."""
     from api.cv.docx_builder import build_docx
+
     with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
         output_path = f.name
     try:
@@ -305,6 +309,7 @@ def test_malformed_markdown_no_heading_raises_value_error():
 
 
 # ── Phase 6 formatting spec tests ───────────────────────────────────────────
+
 
 def test_name_paragraph_20pt_bold_accent_color():
     """Name: 20pt, bold, color #1F4E79."""
@@ -317,9 +322,7 @@ def test_name_paragraph_20pt_bold_accent_color():
         run = name_para.runs[0]
         assert run.font.bold is True, "Name run should be bold"
         assert run.font.color.type is not None, "Name run should have explicit color"
-        assert run.font.color.rgb == _COLOR_ACCENT, (
-            f"Name color should be #1F4E79, got {run.font.color.rgb}"
-        )
+        assert run.font.color.rgb == _COLOR_ACCENT, f"Name color should be #1F4E79, got {run.font.color.rgb}"
     finally:
         path.unlink(missing_ok=True)
 
@@ -327,8 +330,13 @@ def test_name_paragraph_20pt_bold_accent_color():
 def test_section_headers_12pt_bold_accent_color():
     """Section headers (##): 12pt, bold, color #1F4E79."""
     SECTION_NAMES = {
-        "Summary", "Selected Impact", "Core Skills", "Projects",
-        "Work Experience", "Education and Certifications", "Languages",
+        "Summary",
+        "Selected Impact",
+        "Core Skills",
+        "Projects",
+        "Work Experience",
+        "Education and Certifications",
+        "Languages",
     }
     path = _build(SAMPLE_MARKDOWN)
     try:
@@ -343,9 +351,7 @@ def test_section_headers_12pt_bold_accent_color():
                 f"Header '{para.text}' not 12pt (got {run.font.size})"
             )
             assert run.font.color.type is not None
-            assert run.font.color.rgb == _COLOR_ACCENT, (
-                f"Header '{para.text}' color wrong"
-            )
+            assert run.font.color.rgb == _COLOR_ACCENT, f"Header '{para.text}' color wrong"
     finally:
         path.unlink(missing_ok=True)
 
@@ -393,22 +399,15 @@ def test_italic_context_lines_present():
     path = _build(SAMPLE_MARKDOWN)
     try:
         doc = Document(str(path))
-        italic_paras = [
-            p for p in doc.paragraphs
-            if any(r.font.italic for r in p.runs)
-        ]
-        assert len(italic_paras) >= 2, (
-            f"Expected at least 2 italic context lines, found {len(italic_paras)}"
-        )
+        italic_paras = [p for p in doc.paragraphs if any(r.font.italic for r in p.runs)]
+        assert len(italic_paras) >= 2, f"Expected at least 2 italic context lines, found {len(italic_paras)}"
         for para in italic_paras:
             italic_run = next(r for r in para.runs if r.font.italic)
             assert italic_run.font.size and abs(italic_run.font.size.pt - 10.0) < 0.5, (
                 f"Context line not 10pt: {para.text[:50]}"
             )
             assert italic_run.font.color.type is not None
-            assert italic_run.font.color.rgb == _COLOR_MUTED, (
-                f"Context line color should be #555555: {para.text[:50]}"
-            )
+            assert italic_run.font.color.rgb == _COLOR_MUTED, f"Context line color should be #555555: {para.text[:50]}"
     finally:
         path.unlink(missing_ok=True)
 
@@ -420,43 +419,28 @@ def test_company_date_line_tab_stop_accent_company_muted_date():
     The date is always the last run; role (if present) is not bold.
     """
     from docx.oxml.ns import qn
+
     path = _build(SAMPLE_MARKDOWN)
     try:
         doc = Document(str(path))
         # Company/date lines contain a tab character
         tab_paras = [p for p in doc.paragraphs if "\t" in p.text]
-        assert len(tab_paras) >= 2, (
-            f"Expected at least 2 company/date lines, found {len(tab_paras)}"
-        )
+        assert len(tab_paras) >= 2, f"Expected at least 2 company/date lines, found {len(tab_paras)}"
         for para in tab_paras:
             # Has tab stop in XML
             pPr = para._p.pPr
-            assert pPr is not None and pPr.find(qn("w:tabs")) is not None, (
-                f"No <w:tabs> XML in: {para.text[:60]}"
-            )
-            assert len(para.runs) >= 2, (
-                f"Expected ≥2 runs in company line, found {len(para.runs)}: {para.text[:60]}"
-            )
+            assert pPr is not None and pPr.find(qn("w:tabs")) is not None, f"No <w:tabs> XML in: {para.text[:60]}"
+            assert len(para.runs) >= 2, f"Expected ≥2 runs in company line, found {len(para.runs)}: {para.text[:60]}"
             # First run: company name — accent color, NOT bold
             run_company = para.runs[0]
-            assert run_company.font.bold is not True, (
-                f"Company run1 must not be bold: {para.text[:60]}"
-            )
-            assert run_company.font.color.type is not None, (
-                f"Company run1 must have explicit color: {para.text[:60]}"
-            )
-            assert run_company.font.color.rgb == _COLOR_ACCENT, (
-                f"Company run1 color must be #1F4E79: {para.text[:60]}"
-            )
+            assert run_company.font.bold is not True, f"Company run1 must not be bold: {para.text[:60]}"
+            assert run_company.font.color.type is not None, f"Company run1 must have explicit color: {para.text[:60]}"
+            assert run_company.font.color.rgb == _COLOR_ACCENT, f"Company run1 color must be #1F4E79: {para.text[:60]}"
             # Last run: \tdate — not bold, muted color
             date_run = para.runs[-1]
-            assert date_run.font.bold is not True, (
-                f"Date run should not be bold: {para.text[:60]}"
-            )
+            assert date_run.font.bold is not True, f"Date run should not be bold: {para.text[:60]}"
             assert date_run.font.color.type is not None
-            assert date_run.font.color.rgb == _COLOR_MUTED, (
-                f"Date color should be #555555: {para.text[:60]}"
-            )
+            assert date_run.font.color.rgb == _COLOR_MUTED, f"Date color should be #555555: {para.text[:60]}"
     finally:
         path.unlink(missing_ok=True)
 
@@ -468,27 +452,22 @@ def test_core_skills_theme_first_run_accent_color():
         doc = Document(str(path))
         # Core Skills themes: first run accent color (not bold) + second run normal
         theme_paras = [
-            p for p in doc.paragraphs
+            p
+            for p in doc.paragraphs
             if len(p.runs) >= 2
             and p.runs[0].font.bold is not True
-            and (
-                p.runs[0].font.color.type is not None
-                and p.runs[0].font.color.rgb == _COLOR_ACCENT
-            )
+            and (p.runs[0].font.color.type is not None and p.runs[0].font.color.rgb == _COLOR_ACCENT)
             and p.runs[1].font.bold is not True
             and ":" in p.runs[0].text
         ]
         assert len(theme_paras) >= 2, (
-            f"Expected at least 2 Core Skills theme lines (accent color + normal prose), "
-            f"found {len(theme_paras)}"
+            f"Expected at least 2 Core Skills theme lines (accent color + normal prose), found {len(theme_paras)}"
         )
         for para in theme_paras:
             # Both runs should be 11pt
             for run in para.runs[:2]:
                 if run.font.size:
-                    assert abs(run.font.size.pt - 11.0) < 0.5, (
-                        f"Core Skills run not 11pt: {para.text[:50]}"
-                    )
+                    assert abs(run.font.size.pt - 11.0) < 0.5, f"Core Skills run not 11pt: {para.text[:50]}"
     finally:
         path.unlink(missing_ok=True)
 
@@ -516,9 +495,7 @@ def test_project_url_run_10pt_muted():
                     except Exception:
                         pass
         assert url_run is not None, "No project URL run found"
-        assert url_run.font.size and abs(url_run.font.size.pt - 10.0) < 0.5, (
-            f"Project URL run not 10pt: {url_run.text}"
-        )
+        assert url_run.font.size and abs(url_run.font.size.pt - 10.0) < 0.5, f"Project URL run not 10pt: {url_run.text}"
         assert url_run.font.color.type is not None
         assert url_run.font.color.rgb == _COLOR_MUTED, "Project URL color should be #555555"
     finally:
@@ -531,12 +508,10 @@ def test_total_bold_paragraphs_under_15():
     try:
         doc = Document(str(path))
         bold_paras = [
-            p for p in doc.paragraphs
-            if p.runs and all(r.font.bold is True for r in p.runs if r.text.strip())
+            p for p in doc.paragraphs if p.runs and all(r.font.bold is True for r in p.runs if r.text.strip())
         ]
         assert len(bold_paras) < 15, (
-            f"Too many all-bold paragraphs: {len(bold_paras)} "
-            f"(expected < 15 — headers and company lines only)"
+            f"Too many all-bold paragraphs: {len(bold_paras)} (expected < 15 — headers and company lines only)"
         )
     finally:
         path.unlink(missing_ok=True)
@@ -554,9 +529,7 @@ def test_only_expected_colors_in_document():
                     if run.font.color.type is None:
                         continue  # black / no explicit color — OK
                     rgb = run.font.color.rgb
-                    assert rgb in ALLOWED, (
-                        f"Unexpected color {rgb!r} in paragraph: '{para.text[:50]}'"
-                    )
+                    assert rgb in ALLOWED, f"Unexpected color {rgb!r} in paragraph: '{para.text[:50]}'"
                 except Exception as exc:
                     # Theme-inherited colors: ignore
                     if "rgb" in str(exc).lower():

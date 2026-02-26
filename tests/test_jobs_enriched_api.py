@@ -45,20 +45,31 @@ def authed_client(tmp_path, monkeypatch):
     monkeypatch.setenv("DB_PATH", db_path)
     ingest_from_list(db_path, [_make_enriched_job()])
     # Add a job without enriched fields too
-    ingest_from_list(db_path, [{
-        "id": "plain-001",
-        "title": "Senior PM",
-        "company": "Beta",
-        "location": "Remote",
-        "job_url": "https://example.com/job/plain-001",
-        "is_remote": True,
-        "date_posted": "2026-01-15",
-        "parsed": {"domain": "saas"},
-    }])
-    user = upsert_user(db_path, {
-        "google_id": "g_test", "email": "t@t.com",
-        "name": "T", "avatar_url": None, "profile_id": None,
-    })
+    ingest_from_list(
+        db_path,
+        [
+            {
+                "id": "plain-001",
+                "title": "Senior PM",
+                "company": "Beta",
+                "location": "Remote",
+                "job_url": "https://example.com/job/plain-001",
+                "is_remote": True,
+                "date_posted": "2026-01-15",
+                "parsed": {"domain": "saas"},
+            }
+        ],
+    )
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g_test",
+            "email": "t@t.com",
+            "name": "T",
+            "avatar_url": None,
+            "profile_id": None,
+        },
+    )
     create_session(db_path, "test_tok", user["id"], "2099-01-01T00:00:00")
     c = TestClient(app)
     c.cookies.set("jsk", "test_tok")

@@ -3,6 +3,7 @@ import time
 from pathlib import Path
 
 from dotenv import load_dotenv
+
 load_dotenv()  # Must be before route imports — auth.py reads env vars at module level.
 # NOTE: no override=True — Railway env vars must always take precedence over any .env file.
 
@@ -84,9 +85,11 @@ def on_startup():
     logger.info("JobSeeker starting up", db_path=db_path, db_exists=db_exists)
 
     critical_vars = [
-        "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
         "INGEST_API_KEY",
-        "GH_ACTIONS_TOKEN", "GH_REPO",
+        "GH_ACTIONS_TOKEN",
+        "GH_REPO",
     ]
     missing = [v for v in critical_vars if not os.environ.get(v)]
     if missing:

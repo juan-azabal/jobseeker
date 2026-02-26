@@ -19,25 +19,25 @@ from models import RawJob
 # Source priority: lower number = higher priority (ATS > structured > social > generic)
 SOURCE_RANK: dict[str, int] = {
     "greenhouse": 1,
-    "lever":      2,
-    "ashby":      3,
-    "wttj":       4,
-    "linkedin":   5,
-    "indeed":     6,
-    "glassdoor":  7,
-    "google":     8,
+    "lever": 2,
+    "ashby": 3,
+    "wttj": 4,
+    "linkedin": 5,
+    "indeed": 6,
+    "glassdoor": 7,
+    "google": 8,
 }
 
 
 # For each field group, the preferred source order (first = highest priority)
 FIELD_GROUPS: dict[str, list[str]] = {
-    "description":   ["greenhouse", "lever", "ashby", "linkedin", "wttj", "indeed", "glassdoor", "google"],
-    "salary":        ["wttj", "indeed", "glassdoor", "linkedin", "google", "greenhouse", "lever", "ashby"],
-    "company_meta":  ["indeed", "glassdoor", "linkedin", "wttj", "greenhouse", "lever", "ashby", "google"],
-    "job_level":     ["linkedin", "indeed", "wttj", "greenhouse", "lever", "ashby", "glassdoor", "google"],
-    "remote_type":   ["wttj", "linkedin", "indeed", "glassdoor", "google", "greenhouse", "lever", "ashby"],
+    "description": ["greenhouse", "lever", "ashby", "linkedin", "wttj", "indeed", "glassdoor", "google"],
+    "salary": ["wttj", "indeed", "glassdoor", "linkedin", "google", "greenhouse", "lever", "ashby"],
+    "company_meta": ["indeed", "glassdoor", "linkedin", "wttj", "greenhouse", "lever", "ashby", "google"],
+    "job_level": ["linkedin", "indeed", "wttj", "greenhouse", "lever", "ashby", "glassdoor", "google"],
+    "remote_type": ["wttj", "linkedin", "indeed", "glassdoor", "google", "greenhouse", "lever", "ashby"],
     "org_structure": ["greenhouse", "lever", "ashby", "wttj", "linkedin", "indeed", "glassdoor", "google"],
-    "location":      ["indeed", "linkedin", "glassdoor", "google", "wttj", "greenhouse", "lever", "ashby"],
+    "location": ["indeed", "linkedin", "glassdoor", "google", "wttj", "greenhouse", "lever", "ashby"],
 }
 
 # Which group each field belongs to (fields not listed use SOURCE_RANK directly)
@@ -45,20 +45,30 @@ FIELD_TO_GROUP: dict[str, str] = {
     # description group
     "description": "description",
     # salary group
-    "min_amount": "salary", "max_amount": "salary", "currency": "salary",
-    "interval": "salary", "salary_source": "salary",
+    "min_amount": "salary",
+    "max_amount": "salary",
+    "currency": "salary",
+    "interval": "salary",
+    "salary_source": "salary",
     # company_meta group
-    "company_industry": "company_meta", "company_employees_label": "company_meta",
-    "company_revenue_label": "company_meta", "company_url": "company_meta",
+    "company_industry": "company_meta",
+    "company_employees_label": "company_meta",
+    "company_revenue_label": "company_meta",
+    "company_url": "company_meta",
     "company_logo": "company_meta",
     # job_level group
     "job_level": "job_level",
     # remote_type group (WTTJ knows remote best + has experience data)
-    "remote_type": "remote_type", "experience_min": "remote_type", "experience_max": "remote_type",
+    "remote_type": "remote_type",
+    "experience_min": "remote_type",
+    "experience_max": "remote_type",
     # org_structure group
-    "departments": "org_structure", "team": "org_structure",
+    "departments": "org_structure",
+    "team": "org_structure",
     # location group
-    "country": "location", "city": "location", "state": "location",
+    "country": "location",
+    "city": "location",
+    "state": "location",
     # locations_structured group (list field — unioned, but WTTJ has it)
     "locations_structured": "location",
 }
@@ -185,10 +195,10 @@ def _merge_group_of_jobs(jobs: list[RawJob]) -> RawJob:
 
     # Collect all fields to merge
     kwargs: dict = {
-        "id":      base.id,
-        "title":   base.title,
+        "id": base.id,
+        "title": base.title,
         "company": base.company,
-        "source":  base.source,
+        "source": base.source,
         "sources": sorted(jobs_by_source.keys(), key=_source_priority),
     }
 

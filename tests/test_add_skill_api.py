@@ -44,10 +44,16 @@ def authed_client_with_profile(tmp_path, monkeypatch):
         f.write(yaml_content)
 
     # Create user with profile_id
-    user = upsert_user(db_path, {
-        "google_id": "g_skill", "email": "test@test.com",
-        "name": "Test User", "avatar_url": None, "profile_id": "testuser",
-    })
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g_skill",
+            "email": "test@test.com",
+            "name": "Test User",
+            "avatar_url": None,
+            "profile_id": "testuser",
+        },
+    )
     # Store YAML in DB too
     save_user_profile_yaml(db_path, user["id"], yaml_content)
     create_session(db_path, "skill_tok", user["id"], "2099-01-01T00:00:00")
@@ -88,6 +94,7 @@ def test_add_skill_persists_to_yaml(authed_client_with_profile):
 def test_add_skill_persists_to_db(authed_client_with_profile):
     client, db_path, yaml_path = authed_client_with_profile
     from api.db.queries import get_user_profile_yaml
+
     client.post("/api/onboard/profile/skills", json={"skill": "kafka"})
     # Verify persisted to DB
     stored = get_user_profile_yaml(db_path, 1)

@@ -33,6 +33,7 @@ class TestJuanProfile:
     def setup_method(self):
         _reset_rubric_cache()
         import copy
+
         self.profile = copy.deepcopy(BASELINE_PROFILE)
         self.rubric = _build_scoring_prompt(self.profile)
 

@@ -1,5 +1,4 @@
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -40,7 +39,8 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None 
             logger.warning(
                 "profile_id=%r not found in users table — RAG scores will NOT be stored "
                 "(db=%s). User must log in at least once before scores can be saved.",
-                profile_id, db_path,
+                profile_id,
+                db_path,
             )
         else:
             logger.info("Resolved profile_id=%r → user_id=%d", profile_id, user_id)
@@ -111,8 +111,12 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None 
                 if is_v2:
                     # v2 rubric: store categorical grades; numeric score computed at query time
                     upsert_user_job_score(
-                        db_path, user_id, job_id,
-                        score=0, tier="C", scored_json=scored_json,
+                        db_path,
+                        user_id,
+                        job_id,
+                        score=0,
+                        tier="C",
+                        scored_json=scored_json,
                         technical_grade=rag.get("technical_depth"),
                         profile_grade=rag.get("profile_evidence"),
                         scored_v2=1,

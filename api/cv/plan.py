@@ -10,6 +10,7 @@ Usage:
 
 Output schema: see _PLAN_SCHEMA docstring in build_cv_plan().
 """
+
 import json
 import re
 from datetime import datetime
@@ -18,72 +19,149 @@ from datetime import datetime
 
 # ── Known technical tools (for key_tools extraction) ─────────────────────
 
-_KNOWN_TOOLS: frozenset[str] = frozenset({
-    "sql", "python", "r", "java", "scala", "go", "rust", "c++", "c#",
-    "javascript", "typescript", "react", "node",
-    "dbt", "kafka", "flink", "spark", "airflow", "luigi", "prefect",
-    "dagster", "fivetran", "airbyte",
-    "snowflake", "bigquery", "redshift", "databricks", "clickhouse",
-    "postgresql", "mysql", "mongodb", "redis", "elasticsearch",
-    "s3", "aws", "gcp", "azure", "docker", "kubernetes", "terraform",
-    "tableau", "looker", "metabase", "superset", "power bi",
-    "amplitude", "mixpanel", "segment", "snowplow", "ga4",
-    "google analytics", "excel", "salesforce", "hubspot",
-    "mlflow", "tensorflow", "pytorch", "scikit-learn",
-    "pandas", "numpy", "datadog", "grafana", "prometheus",
-    "git", "jira", "figma", "sap",
-})
+_KNOWN_TOOLS: frozenset[str] = frozenset(
+    {
+        "sql",
+        "python",
+        "r",
+        "java",
+        "scala",
+        "go",
+        "rust",
+        "c++",
+        "c#",
+        "javascript",
+        "typescript",
+        "react",
+        "node",
+        "dbt",
+        "kafka",
+        "flink",
+        "spark",
+        "airflow",
+        "luigi",
+        "prefect",
+        "dagster",
+        "fivetran",
+        "airbyte",
+        "snowflake",
+        "bigquery",
+        "redshift",
+        "databricks",
+        "clickhouse",
+        "postgresql",
+        "mysql",
+        "mongodb",
+        "redis",
+        "elasticsearch",
+        "s3",
+        "aws",
+        "gcp",
+        "azure",
+        "docker",
+        "kubernetes",
+        "terraform",
+        "tableau",
+        "looker",
+        "metabase",
+        "superset",
+        "power bi",
+        "amplitude",
+        "mixpanel",
+        "segment",
+        "snowplow",
+        "ga4",
+        "google analytics",
+        "excel",
+        "salesforce",
+        "hubspot",
+        "mlflow",
+        "tensorflow",
+        "pytorch",
+        "scikit-learn",
+        "pandas",
+        "numpy",
+        "datadog",
+        "grafana",
+        "prometheus",
+        "git",
+        "jira",
+        "figma",
+        "sap",
+    }
+)
 
 # ── Dimension guidance (deterministic lookup) ─────────────────────────────
 
 _DIMENSION_INSTRUCTIONS: dict[str, dict[str, str]] = {
     "domain_fit": {
-        "high":   "Lead with domain-proof bullets. Match terminology directly to JD.",
+        "high": "Lead with domain-proof bullets. Match terminology directly to JD.",
         "medium": "Surface domain experience; draw parallels to JD vertical.",
-        "low":    "Reframe adjacent experience; acknowledge domain gap honestly.",
+        "low": "Reframe adjacent experience; acknowledge domain gap honestly.",
     },
     "seniority_fit": {
-        "high":   "Maintain seniority level from source. Never downgrade title or years.",
+        "high": "Maintain seniority level from source. Never downgrade title or years.",
         "medium": "Emphasize scope and ownership; avoid junior-sounding language.",
-        "low":    "Lead with strategic impact; minimize hands-on tactical details.",
+        "low": "Lead with strategic impact; minimize hands-on tactical details.",
     },
     "technical_depth": {
-        "high":   "Include technical mechanisms in bullets. Name the stack.",
+        "high": "Include technical mechanisms in bullets. Name the stack.",
         "medium": "Balance technical and business language.",
-        "low":    "Lead with outcomes. Technical details are secondary.",
+        "low": "Lead with outcomes. Technical details are secondary.",
     },
     "profile_evidence": {
-        "high":   "Emphasize concrete, verifiable evidence. Include metrics.",
+        "high": "Emphasize concrete, verifiable evidence. Include metrics.",
         "medium": "Supplement every claim with a specific example.",
-        "low":    "Strengthen each claim with at least one concrete example.",
+        "low": "Strengthen each claim with at least one concrete example.",
     },
     "strategic_impact": {
-        "high":   "Highlight platform-level and cross-functional strategic wins.",
+        "high": "Highlight platform-level and cross-functional strategic wins.",
         "medium": "Reframe tactical wins as strategic outcomes where honest.",
-        "low":    "Reframe as platform-level thinking; avoid task lists.",
+        "low": "Reframe as platform-level thinking; avoid task lists.",
     },
 }
 
 # ── Consultancy / in-house detection ─────────────────────────────────────
 
 _CONSULTANCY_SIGNALS = [
-    "consulting", "consultant", "our clients", "client engagements",
-    "client projects", "embedded in client", "embedded at client",
-    "client-facing", "client teams", "for our clients",
-    "service to clients", "advisory", "outsource", "managed service",
+    "consulting",
+    "consultant",
+    "our clients",
+    "client engagements",
+    "client projects",
+    "embedded in client",
+    "embedded at client",
+    "client-facing",
+    "client teams",
+    "for our clients",
+    "service to clients",
+    "advisory",
+    "outsource",
+    "managed service",
     # weaker signals (need 2 hits to trigger on their own)
-    "clients,", "clients.", "clients ", "our customers",
+    "clients,",
+    "clients.",
+    "clients ",
+    "our customers",
 ]
 _IN_HOUSE_SIGNALS = [
-    "we are building", "we build", "our platform", "our product",
-    "our engineering team", "join our team", "our mission is",
-    "we are a startup", "we are scaling", "product-led",
+    "we are building",
+    "we build",
+    "our platform",
+    "our product",
+    "our engineering team",
+    "join our team",
+    "our mission is",
+    "we are a startup",
+    "we are scaling",
+    "product-led",
 ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Public API
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 def build_cv_plan(job: dict, reference_files: dict) -> dict:
     """Build a CV generation plan from scored job data + reference files.
@@ -102,23 +180,23 @@ def build_cv_plan(job: dict, reference_files: dict) -> dict:
     This function never raises — missing data produces conservative defaults.
     """
     parsed, scored = _parse_job_blobs(job)
-    profile_text   = reference_files.get("master-cv-profile.md", "")
+    profile_text = reference_files.get("master-cv-profile.md", "")
     experience_text = reference_files.get("master-cv-experience.md", "")
 
-    jd_text  = parsed.get("description", "") or ""
+    jd_text = parsed.get("description", "") or ""
     location = (parsed.get("locations_mentioned") or [""])[0]
 
     return {
-        "jd_context":       _build_jd_context(parsed, jd_text, location),
-        "score_summary":    _build_score_summary(scored),
-        "strengths":        scored.get("strengths", []),
-        "gaps":             scored.get("gaps", []),
+        "jd_context": _build_jd_context(parsed, jd_text, location),
+        "score_summary": _build_score_summary(scored),
+        "strengths": scored.get("strengths", []),
+        "gaps": scored.get("gaps", []),
         "bullet_allocation": _build_bullet_allocation(
             _parse_companies_from_experience(experience_text),
             experience_text,
             parsed,
         ),
-        "source_facts":     _extract_source_facts(profile_text, experience_text),
+        "source_facts": _extract_source_facts(profile_text, experience_text),
     }
 
 
@@ -126,8 +204,10 @@ def build_cv_plan(job: dict, reference_files: dict) -> dict:
 # JD context
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 def _parse_job_blobs(job: dict) -> tuple[dict, dict]:
     """Decode `parsed` and `scored` JSON fields from the job dict."""
+
     def _decode(value) -> dict:
         if isinstance(value, dict):
             return value
@@ -143,13 +223,13 @@ def _parse_job_blobs(job: dict) -> tuple[dict, dict]:
 
 def _build_jd_context(parsed: dict, jd_text: str, location: str) -> dict:
     return {
-        "company_type":           _detect_company_type(jd_text),
-        "business_model":         _detect_business_model(parsed, jd_text),
-        "vertical":               parsed.get("domain", "unknown"),
-        "location":               location,
-        "seniority_read":         parsed.get("seniority", "unknown"),
-        "key_tools":              _extract_key_tools(parsed),
-        "team_signals":           _extract_team_signals(jd_text),
+        "company_type": _detect_company_type(jd_text),
+        "business_model": _detect_business_model(parsed, jd_text),
+        "vertical": parsed.get("domain", "unknown"),
+        "location": location,
+        "seniority_read": parsed.get("seniority", "unknown"),
+        "key_tools": _extract_key_tools(parsed),
+        "team_signals": _extract_team_signals(jd_text),
         "location_language_hints": _location_language_hints([location]),
     }
 
@@ -158,7 +238,7 @@ def _detect_company_type(jd_text: str) -> str:
     """Heuristic: detect company type from JD keyword patterns."""
     text = jd_text.lower()
     consultancy_hits = sum(1 for s in _CONSULTANCY_SIGNALS if s in text)
-    in_house_hits    = sum(1 for s in _IN_HOUSE_SIGNALS if s in text)
+    in_house_hits = sum(1 for s in _IN_HOUSE_SIGNALS if s in text)
 
     if consultancy_hits >= 2:
         return "consultancy"
@@ -170,7 +250,7 @@ def _detect_company_type(jd_text: str) -> str:
 
 
 def _detect_business_model(parsed: dict, jd_text: str) -> str:
-    text   = jd_text.lower()
+    text = jd_text.lower()
     domain = (parsed.get("domain") or "").lower()
     if "marketplace" in text or "marketplace" in domain:
         return "marketplace"
@@ -227,8 +307,16 @@ def _extract_team_signals(jd_text: str) -> str:
     """Extract rough team-size / org-structure signals from JD text."""
     text_lower = jd_text.lower()
     signals = []
-    for phrase in ("cross-functional", "embedded", "multi-team", "global team",
-                   "distributed team", "matrixed", "squad", "tribe"):
+    for phrase in (
+        "cross-functional",
+        "embedded",
+        "multi-team",
+        "global team",
+        "distributed team",
+        "matrixed",
+        "squad",
+        "tribe",
+    ):
         if phrase in text_lower:
             signals.append(phrase)
     return ", ".join(signals) if signals else ""
@@ -237,6 +325,7 @@ def _extract_team_signals(jd_text: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════
 # Score summary
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 def _classify_score_level(score: int | float) -> str:
     if score >= 16:
@@ -253,14 +342,14 @@ def _build_score_summary(scored: dict) -> dict:
         level = _classify_score_level(score)
         dim_instructions = _DIMENSION_INSTRUCTIONS.get(dim, {})
         dimension_guidance[dim] = {
-            "score":       score,
-            "level":       level,
+            "score": score,
+            "level": level,
             "instruction": dim_instructions.get(level, ""),
         }
     return {
-        "total":               scored.get("score", 0),
-        "breakdown":           breakdown,
-        "dimension_guidance":  dimension_guidance,
+        "total": scored.get("score", 0),
+        "breakdown": breakdown,
+        "dimension_guidance": dimension_guidance,
     }
 
 
@@ -268,11 +357,12 @@ def _build_score_summary(scored: dict) -> dict:
 # Source facts
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 def _extract_source_facts(profile_text: str, experience_text: str) -> dict:
     return {
-        "title":            _extract_title(profile_text),
+        "title": _extract_title(profile_text),
         "years_experience": _extract_years(experience_text),
-        "languages":        _extract_languages(profile_text),
+        "languages": _extract_languages(profile_text),
         "core_skills_themes": _extract_core_skills_themes(profile_text),
     }
 
@@ -284,8 +374,15 @@ def _extract_title(profile: str) -> str:
     a seniority keyword).
     """
     SENIORITY_KEYWORDS = (
-        "Product Manager", "Director", "VP", "Head of", "Lead",
-        "Engineer", "Analyst", "Consultant", "Designer",
+        "Product Manager",
+        "Director",
+        "VP",
+        "Head of",
+        "Lead",
+        "Engineer",
+        "Analyst",
+        "Consultant",
+        "Designer",
     )
     in_contact = False
     for line in profile.splitlines():
@@ -393,6 +490,7 @@ def _extract_core_skills_themes(profile: str) -> list[str]:
 # Bullet allocation
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 def _parse_companies_from_experience(experience: str) -> list[str]:
     """Extract company names from '### Company, City' section headers."""
     companies: list[str] = []
@@ -410,10 +508,7 @@ def _parse_companies_from_experience(experience: str) -> list[str]:
 
 def _build_required_tokens(parsed: dict) -> frozenset[str]:
     """Build a set of meaningful tokens from JD requirements."""
-    raw = (
-        (parsed.get("must_have_skills") or [])
-        + (parsed.get("technical_stack") or [])
-    )
+    raw = (parsed.get("must_have_skills") or []) + (parsed.get("technical_stack") or [])
     tokens: set[str] = set()
     for item in raw:
         for token in item.lower().split():
@@ -451,13 +546,13 @@ def _compute_company_relevance(
 
     company_text = _get_company_text(company_name, experience)
     matched = sum(1 for t in required_tokens if t in company_text)
-    ratio   = matched / len(required_tokens)
+    ratio = matched / len(required_tokens)
 
     if ratio >= 0.12:
-        return "high",   f"{matched} JD skills/tools found in role"
+        return "high", f"{matched} JD skills/tools found in role"
     if ratio >= 0.05:
         return "medium", f"{matched} JD skills/tools found in role"
-    return "low",        "limited overlap with JD requirements"
+    return "low", "limited overlap with JD requirements"
 
 
 def _build_bullet_allocation(
@@ -481,9 +576,7 @@ def _build_bullet_allocation(
     # Score each company
     scored: list[tuple[str, str, str]] = []  # (company, relevance, reason)
     for company in companies:
-        relevance, reason = _compute_company_relevance(
-            company, experience, required_tokens
-        )
+        relevance, reason = _compute_company_relevance(company, experience, required_tokens)
         scored.append((company, relevance, reason))
 
     # Sort: high first, then medium, then low (preserve order within tier)
@@ -492,7 +585,7 @@ def _build_bullet_allocation(
 
     # Assign budgets with total cap
     _BASE_BUDGET = {"high": 3, "medium": 2, "low": 1}
-    _MAX_TOTAL   = 12
+    _MAX_TOTAL = 12
     total = 0
     allocation: dict[str, dict] = {}
 
@@ -503,9 +596,9 @@ def _build_bullet_allocation(
         else:
             budget = min(_BASE_BUDGET[relevance], remaining)
         allocation[company] = {
-            "budget":    budget,
+            "budget": budget,
             "relevance": relevance,
-            "because":   reason,
+            "because": reason,
         }
         total += budget
 

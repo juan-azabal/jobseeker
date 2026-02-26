@@ -16,17 +16,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 def _make_mock_post(captured_bodies: list):
     """Return a mock requests.post that captures request bodies and returns empty hits."""
+
     def mock_post(url, json=None, headers=None, timeout=None):
         captured_bodies.append(json or {})
         mock = MagicMock()
         mock.raise_for_status.return_value = None
         mock.json.return_value = {"hits": [], "nbHits": 0}
         return mock
+
     return mock_post
 
 
 class TestWTTJGeographicFilter:
-
     def test_filter_includes_all_target_country_codes(self):
         """Filter string must include each country in target_countries."""
         from wttj_scraper import run_wttj_scraper
@@ -117,5 +118,5 @@ class TestWTTJGeographicFilter:
             nl_pos = f.find("offices.country_code:NL")
             assert es_pos >= 0 and nl_pos >= 0
             # OR should appear between them (not AND)
-            between = f[min(es_pos, nl_pos):max(es_pos, nl_pos)]
+            between = f[min(es_pos, nl_pos) : max(es_pos, nl_pos)]
             assert " OR " in between, f"Expected OR between country codes, got: {between}"

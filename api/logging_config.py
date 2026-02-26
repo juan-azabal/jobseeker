@@ -10,6 +10,7 @@ Console mode (development): human-readable output via ConsoleRenderer.
 
 The ``_out`` parameter is a testing hook; in production always omit it.
 """
+
 import logging
 import os
 import sys
@@ -24,9 +25,7 @@ from structlog.types import EventDict, WrappedLogger
 # ---------------------------------------------------------------------------
 
 
-def _rename_event_to_message(
-    logger: WrappedLogger, method: str, event_dict: EventDict
-) -> EventDict:
+def _rename_event_to_message(logger: WrappedLogger, method: str, event_dict: EventDict) -> EventDict:
     """Rename structlog's default 'event' key to 'message' for Railway compatibility."""
     event_dict["message"] = event_dict.pop("event")
     return event_dict

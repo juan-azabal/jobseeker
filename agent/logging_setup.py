@@ -10,6 +10,7 @@ Output format:
   - JSON  when CI=true or LOG_FORMAT=json (GitHub Actions)
   - Human-readable ConsoleRenderer otherwise (local dev)
 """
+
 import os
 
 import structlog
@@ -21,10 +22,7 @@ def configure_logging() -> None:
     Safe to call multiple times — subsequent calls are no-ops if structlog
     is already configured (structlog caches its configuration).
     """
-    is_json = (
-        os.environ.get("CI") == "true"
-        or os.environ.get("LOG_FORMAT", "").lower() == "json"
-    )
+    is_json = os.environ.get("CI") == "true" or os.environ.get("LOG_FORMAT", "").lower() == "json"
 
     shared_processors = [
         structlog.stdlib.add_log_level,
@@ -35,11 +33,7 @@ def configure_logging() -> None:
         structlog.processors.format_exc_info,
     ]
 
-    renderer = (
-        structlog.processors.JSONRenderer()
-        if is_json
-        else structlog.dev.ConsoleRenderer(colors=True)
-    )
+    renderer = structlog.processors.JSONRenderer() if is_json else structlog.dev.ConsoleRenderer(colors=True)
 
     structlog.configure(
         processors=shared_processors + [renderer],

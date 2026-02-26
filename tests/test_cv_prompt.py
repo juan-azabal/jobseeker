@@ -1,4 +1,5 @@
 """Tests for api/cv/prompt.py — CV prompt builder."""
+
 import json
 import pytest
 from pathlib import Path
@@ -12,24 +13,28 @@ SAMPLE_JOB = {
     "url": "https://example.com/job/123",
     "score": 75,
     "tier": "A",
-    "parsed": json.dumps({
-        "description": "We are looking for a Senior PM to lead our data platform team. "
-                       "You will define the roadmap, work with engineering, and drive KPIs."
-    }),
-    "scored": json.dumps({
-        "rag_score": {
-            "total": 75,
-            "breakdown": {
-                "domain_fit": 20,
-                "seniority_fit": 18,
-                "skills_match": 15,
-                "location_fit": 12,
-                "language_fit": 10,
-            },
-            "strengths": ["Strong data background", "Proven PM experience"],
-            "gaps": [{"issue": "No fintech experience", "severity": "low"}],
+    "parsed": json.dumps(
+        {
+            "description": "We are looking for a Senior PM to lead our data platform team. "
+            "You will define the roadmap, work with engineering, and drive KPIs."
         }
-    }),
+    ),
+    "scored": json.dumps(
+        {
+            "rag_score": {
+                "total": 75,
+                "breakdown": {
+                    "domain_fit": 20,
+                    "seniority_fit": 18,
+                    "skills_match": 15,
+                    "location_fit": 12,
+                    "language_fit": 10,
+                },
+                "strengths": ["Strong data background", "Proven PM experience"],
+                "gaps": [{"issue": "No fintech experience", "severity": "low"}],
+            }
+        }
+    ),
 }
 
 
@@ -51,6 +56,7 @@ def test_system_prompt_contains_all_four_sections(monkeypatch, mock_references_d
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
@@ -69,6 +75,7 @@ def test_system_prompt_contains_output_contract(monkeypatch, mock_references_dir
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
@@ -85,6 +92,7 @@ def test_system_prompt_no_bold_markers_in_format_example(monkeypatch, mock_refer
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
@@ -100,6 +108,7 @@ def test_system_prompt_contains_italic_context_line_instruction(monkeypatch, moc
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
@@ -115,14 +124,13 @@ def test_system_prompt_contains_tab_date_format(monkeypatch, mock_references_dir
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
 
     # Must mention TAB as the separator between role and date
-    assert "TAB" in system or "\t" in system, (
-        "Prompt must specify tab character as role/date separator"
-    )
+    assert "TAB" in system or "\t" in system, "Prompt must specify tab character as role/date separator"
 
 
 def test_system_prompt_contains_anti_slop_rules(monkeypatch, mock_references_dir):
@@ -131,13 +139,12 @@ def test_system_prompt_contains_anti_slop_rules(monkeypatch, mock_references_dir
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
 
-    assert "strong track record" in system.lower(), (
-        "Prompt must explicitly prohibit 'strong track record'"
-    )
+    assert "strong track record" in system.lower(), "Prompt must explicitly prohibit 'strong track record'"
 
 
 def test_system_prompt_contains_limits_clause_requirement(monkeypatch, mock_references_dir):
@@ -146,6 +153,7 @@ def test_system_prompt_contains_limits_clause_requirement(monkeypatch, mock_refe
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
@@ -171,6 +179,7 @@ def test_system_prompt_is_substantial(monkeypatch, mock_references_dir):
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
@@ -183,6 +192,7 @@ def test_user_prompt_contains_job_data(monkeypatch, mock_references_dir):
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
@@ -198,6 +208,7 @@ def test_user_prompt_with_full_text_key(monkeypatch, mock_references_dir):
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     job = dict(SAMPLE_JOB)
@@ -213,6 +224,7 @@ def test_user_prompt_with_body_key(monkeypatch, mock_references_dir):
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     job = dict(SAMPLE_JOB)
@@ -228,6 +240,7 @@ def test_missing_jd_raises_value_error(monkeypatch, mock_references_dir):
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     job = dict(SAMPLE_JOB)
@@ -251,6 +264,7 @@ def test_missing_reference_file_raises_file_not_found(monkeypatch, tmp_path):
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     with pytest.raises(FileNotFoundError, match="master-cv-experience.md"):
@@ -263,6 +277,7 @@ def test_user_cv_included_when_provided(monkeypatch, mock_references_dir):
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "My personal cv content here.")
@@ -275,6 +290,7 @@ def test_system_prompt_contains_volume_rules(monkeypatch, mock_references_dir):
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
@@ -286,12 +302,8 @@ def test_system_prompt_contains_volume_rules(monkeypatch, mock_references_dir):
     assert "12 bullet" in system_lower or "12 bullets" in system_lower, (
         "Prompt must specify a total Work Experience bullet cap (12 bullets max)"
     )
-    assert "3 page" in system_lower or "3-page" in system_lower, (
-        "Prompt must set a hard page cap (3 pages)"
-    )
-    assert "1.5" in system and "page" in system_lower, (
-        "Prompt must reference 1.5 pages as minimum threshold"
-    )
+    assert "3 page" in system_lower or "3-page" in system_lower, "Prompt must set a hard page cap (3 pages)"
+    assert "1.5" in system and "page" in system_lower, "Prompt must reference 1.5 pages as minimum threshold"
 
 
 def test_system_prompt_contains_selected_impact_volume(monkeypatch, mock_references_dir):
@@ -300,13 +312,12 @@ def test_system_prompt_contains_selected_impact_volume(monkeypatch, mock_referen
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
 
-    assert "4-5" in system or "4–5" in system, (
-        "Prompt must specify 4-5 bullets for Selected Impact"
-    )
+    assert "4-5" in system or "4–5" in system, "Prompt must specify 4-5 bullets for Selected Impact"
 
 
 def test_system_prompt_selected_impact_example_has_five_bullets(monkeypatch, mock_references_dir):
@@ -315,6 +326,7 @@ def test_system_prompt_selected_impact_example_has_five_bullets(monkeypatch, moc
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
@@ -322,14 +334,11 @@ def test_system_prompt_selected_impact_example_has_five_bullets(monkeypatch, moc
     # Count bullet lines in the Selected Impact section of the output contract
     # (between "## Selected Impact" and the next "##")
     import re
-    impact_block = re.search(
-        r"## Selected Impact\s*(.*?)(?=##|\Z)", system, re.DOTALL
-    )
+
+    impact_block = re.search(r"## Selected Impact\s*(.*?)(?=##|\Z)", system, re.DOTALL)
     assert impact_block is not None, "Selected Impact section not found in system prompt"
     bullets = [l for l in impact_block.group(1).splitlines() if l.strip().startswith("-")]
-    assert len(bullets) >= 4, (
-        f"Selected Impact example must have ≥4 bullets, found {len(bullets)}"
-    )
+    assert len(bullets) >= 4, f"Selected Impact example must have ≥4 bullets, found {len(bullets)}"
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -375,6 +384,7 @@ def test_build_cv_prompts_with_plan_user_contains_plan_json(monkeypatch, mock_re
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
@@ -390,6 +400,7 @@ def test_build_cv_prompts_with_plan_user_contains_jd_text(monkeypatch, mock_refe
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
@@ -397,31 +408,27 @@ def test_build_cv_prompts_with_plan_user_contains_jd_text(monkeypatch, mock_refe
     assert "data platform team" in user  # from parsed.description
 
 
-def test_build_cv_prompts_with_plan_system_contains_bullet_allocation_instruction(
-    monkeypatch, mock_references_dir
-):
+def test_build_cv_prompts_with_plan_system_contains_bullet_allocation_instruction(monkeypatch, mock_references_dir):
     """System prompt with plan must mention following the bullet allocation."""
     monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
 
-    assert "bullet allocation" in system.lower(), (
-        "System prompt must instruct LLM to follow the bullet allocation plan"
-    )
+    assert "bullet allocation" in system.lower(), "System prompt must instruct LLM to follow the bullet allocation plan"
 
 
-def test_build_cv_prompts_with_plan_system_contains_source_fidelity_rules(
-    monkeypatch, mock_references_dir
-):
+def test_build_cv_prompts_with_plan_system_contains_source_fidelity_rules(monkeypatch, mock_references_dir):
     """System prompt with plan must include source fidelity rules (never downgrade)."""
     monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
@@ -432,31 +439,27 @@ def test_build_cv_prompts_with_plan_system_contains_source_fidelity_rules(
     )
 
 
-def test_build_cv_prompts_with_plan_system_contains_chain_of_thought_instruction(
-    monkeypatch, mock_references_dir
-):
+def test_build_cv_prompts_with_plan_system_contains_chain_of_thought_instruction(monkeypatch, mock_references_dir):
     """System prompt with plan must instruct LLM to output an <analysis> block first."""
     monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
 
-    assert "<analysis>" in system, (
-        "System prompt must instruct LLM to output chain-of-thought <analysis> block"
-    )
+    assert "<analysis>" in system, "System prompt must instruct LLM to output chain-of-thought <analysis> block"
 
 
-def test_build_cv_prompts_with_plan_system_contains_consultancy_instruction(
-    monkeypatch, mock_references_dir
-):
+def test_build_cv_prompts_with_plan_system_contains_consultancy_instruction(monkeypatch, mock_references_dir):
     """System prompt with plan must mention consulting adaptability requirement."""
     monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
@@ -467,14 +470,13 @@ def test_build_cv_prompts_with_plan_system_contains_consultancy_instruction(
     )
 
 
-def test_build_cv_prompts_with_plan_user_no_separate_strengths_section(
-    monkeypatch, mock_references_dir
-):
+def test_build_cv_prompts_with_plan_user_no_separate_strengths_section(monkeypatch, mock_references_dir):
     """User prompt with plan must NOT re-list strengths/gaps separately (they're in the plan)."""
     monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
@@ -482,19 +484,16 @@ def test_build_cv_prompts_with_plan_user_no_separate_strengths_section(
     assert "## Candidate Strengths" not in user, (
         "With a plan, strengths are inside the plan JSON — not a separate section"
     )
-    assert "## Gaps to address" not in user, (
-        "With a plan, gaps are inside the plan JSON — not a separate section"
-    )
+    assert "## Gaps to address" not in user, "With a plan, gaps are inside the plan JSON — not a separate section"
 
 
-def test_build_cv_prompts_with_plan_user_no_separate_score_breakdown(
-    monkeypatch, mock_references_dir
-):
+def test_build_cv_prompts_with_plan_user_no_separate_score_breakdown(monkeypatch, mock_references_dir):
     """User prompt with plan must NOT re-list the score breakdown separately."""
     monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
@@ -510,6 +509,7 @@ def test_build_cv_prompts_with_plan_user_cv_still_included(monkeypatch, mock_ref
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "My personal CV context.", SAMPLE_PLAN)
@@ -523,6 +523,7 @@ def test_build_cv_prompts_backward_compat_no_plan_arg(monkeypatch, mock_referenc
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
@@ -537,6 +538,7 @@ def test_build_cv_prompts_backward_compat_none_plan(monkeypatch, mock_references
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", None)
@@ -551,6 +553,7 @@ def test_build_cv_prompts_backward_compat_empty_plan(monkeypatch, mock_reference
 
     import importlib
     import api.cv.prompt as prompt_module
+
     importlib.reload(prompt_module)
 
     system, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", {})

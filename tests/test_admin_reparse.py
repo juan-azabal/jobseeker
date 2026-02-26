@@ -25,12 +25,14 @@ def _make_job(
         "url": f"https://example.com/{job_id}",
         "location_type": "remote",
         "domain": domain,
-        "parsed": json.dumps({
-            "domain": parsed_domain,
-            "responsibilities_summary": responsibilities,
-            "must_have_skills": [],
-            "technical_stack": [],
-        }),
+        "parsed": json.dumps(
+            {
+                "domain": parsed_domain,
+                "responsibilities_summary": responsibilities,
+                "must_have_skills": [],
+                "technical_stack": [],
+            }
+        ),
         "first_seen": "2026-01-01",
         "last_seen": "2026-01-01",
         "ingested_at": "2026-01-01T00:00:00",
@@ -44,13 +46,16 @@ def admin_client(tmp_path, monkeypatch):
     init_db(db_path)
     monkeypatch.setenv("DB_PATH", db_path)
 
-    user = upsert_user(db_path, {
-        "google_id": "g_admin",
-        "email": "admin@test.com",
-        "name": "Admin",
-        "avatar_url": None,
-        "profile_id": "admin",
-    })
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g_admin",
+            "email": "admin@test.com",
+            "name": "Admin",
+            "avatar_url": None,
+            "profile_id": "admin",
+        },
+    )
     # Grant admin privileges
     conn = sqlite3.connect(db_path)
     conn.execute("UPDATE users SET is_admin = 1 WHERE id = ?", (user["id"],))
@@ -69,10 +74,15 @@ class TestReparseDomainsEndpoint:
         client, db_path = admin_client
 
         # Insert a job with domain='other' but text that matches 'game' keywords
-        upsert_job(db_path, _make_job(
-            "j1", domain="other", parsed_domain="other",
-            responsibilities="video game development for mobile gaming studio",
-        ))
+        upsert_job(
+            db_path,
+            _make_job(
+                "j1",
+                domain="other",
+                parsed_domain="other",
+                responsibilities="video game development for mobile gaming studio",
+            ),
+        )
 
         resp = client.post("/api/admin/reparse-domains")
         assert resp.status_code == 200
@@ -90,18 +100,31 @@ class TestReparseDomainsEndpoint:
         """Reparse must NOT mutate the parsed JSON — only jobs.domain column."""
         client, db_path = admin_client
 
-        original_parsed = json.dumps({
-            "domain": "other",
-            "responsibilities_summary": "video game development for mobile gaming studio",
-            "must_have_skills": [],
-            "technical_stack": [],
-        })
+        original_parsed = json.dumps(
+            {
+                "domain": "other",
+                "responsibilities_summary": "video game development for mobile gaming studio",
+                "must_have_skills": [],
+                "technical_stack": [],
+            }
+        )
         conn = sqlite3.connect(db_path)
         conn.execute(
             "INSERT INTO jobs (job_id, title, company, location, url, location_type, domain, parsed, first_seen, last_seen, ingested_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("j2", "Game Dev", "GameCo", "Remote", "https://x.com/j2", "remote",
-             "other", original_parsed, "2026-01-01", "2026-01-01", "2026-01-01T00:00:00"),
+            (
+                "j2",
+                "Game Dev",
+                "GameCo",
+                "Remote",
+                "https://x.com/j2",
+                "remote",
+                "other",
+                original_parsed,
+                "2026-01-01",
+                "2026-01-01",
+                "2026-01-01T00:00:00",
+            ),
         )
         conn.commit()
         conn.close()
@@ -119,10 +142,15 @@ class TestReparseDomainsEndpoint:
         """Jobs that still infer to 'other' are counted but not written."""
         client, db_path = admin_client
 
-        upsert_job(db_path, _make_job(
-            "j3", domain="other", parsed_domain="other",
-            responsibilities="generic consulting advisory strategy",
-        ))
+        upsert_job(
+            db_path,
+            _make_job(
+                "j3",
+                domain="other",
+                parsed_domain="other",
+                responsibilities="generic consulting advisory strategy",
+            ),
+        )
 
         resp = client.post("/api/admin/reparse-domains")
         data = resp.json()
@@ -138,10 +166,15 @@ class TestReparseDomainsEndpoint:
         """Running reparse twice produces the same result: second run sees 0 'other' jobs."""
         client, db_path = admin_client
 
-        upsert_job(db_path, _make_job(
-            "j4", domain="other", parsed_domain="other",
-            responsibilities="video game development for mobile gaming studio",
-        ))
+        upsert_job(
+            db_path,
+            _make_job(
+                "j4",
+                domain="other",
+                parsed_domain="other",
+                responsibilities="video game development for mobile gaming studio",
+            ),
+        )
 
         resp1 = client.post("/api/admin/reparse-domains")
         assert resp1.json()["reclassified"] == 1
@@ -168,10 +201,16 @@ class TestReparseDomainsEndpoint:
         init_db(db_path)
         monkeypatch.setenv("DB_PATH", db_path)
 
-        user = upsert_user(db_path, {
-            "google_id": "g_user", "email": "user@test.com",
-            "name": "User", "avatar_url": None, "profile_id": None,
-        })
+        user = upsert_user(
+            db_path,
+            {
+                "google_id": "g_user",
+                "email": "user@test.com",
+                "name": "User",
+                "avatar_url": None,
+                "profile_id": None,
+            },
+        )
         create_session(db_path, "user_tok", user["id"], "2099-01-01T00:00:00")
         c = TestClient(app)
         c.cookies.set("jsk", "user_tok")
@@ -185,14 +224,24 @@ class TestReparseDomainsPreview:
         """GET /reparse-domains/preview returns domain_other_count and sample list."""
         client, db_path = admin_client
 
-        upsert_job(db_path, _make_job(
-            "p1", domain="other", parsed_domain="other",
-            responsibilities="video game development for mobile gaming studio",
-        ))
-        upsert_job(db_path, _make_job(
-            "p2", domain="other", parsed_domain="other",
-            responsibilities="generic consulting services",
-        ))
+        upsert_job(
+            db_path,
+            _make_job(
+                "p1",
+                domain="other",
+                parsed_domain="other",
+                responsibilities="video game development for mobile gaming studio",
+            ),
+        )
+        upsert_job(
+            db_path,
+            _make_job(
+                "p2",
+                domain="other",
+                parsed_domain="other",
+                responsibilities="generic consulting services",
+            ),
+        )
 
         resp = client.get("/api/admin/reparse-domains/preview")
         assert resp.status_code == 200
@@ -209,10 +258,15 @@ class TestReparseDomainsPreview:
         """Preview must not change any database rows."""
         client, db_path = admin_client
 
-        upsert_job(db_path, _make_job(
-            "p3", domain="other", parsed_domain="other",
-            responsibilities="video game development for mobile gaming studio",
-        ))
+        upsert_job(
+            db_path,
+            _make_job(
+                "p3",
+                domain="other",
+                parsed_domain="other",
+                responsibilities="video game development for mobile gaming studio",
+            ),
+        )
 
         client.get("/api/admin/reparse-domains/preview")
 
@@ -226,10 +280,15 @@ class TestReparseDomainsPreview:
         client, db_path = admin_client
 
         for i in range(10):
-            upsert_job(db_path, _make_job(
-                f"s{i}", domain="other", parsed_domain="other",
-                responsibilities="video game development for mobile gaming studio",
-            ))
+            upsert_job(
+                db_path,
+                _make_job(
+                    f"s{i}",
+                    domain="other",
+                    parsed_domain="other",
+                    responsibilities="video game development for mobile gaming studio",
+                ),
+            )
 
         resp = client.get("/api/admin/reparse-domains/preview")
         data = resp.json()
@@ -264,10 +323,16 @@ class TestDomainCorrections:
         upsert_job(db_path, _make_job("c2", domain="other", parsed_domain="other"))
 
         # Insert a user
-        user = upsert_user(db_path, {
-            "google_id": "g_corr", "email": "corr@test.com",
-            "name": "Corr", "avatar_url": None, "profile_id": None,
-        })
+        user = upsert_user(
+            db_path,
+            {
+                "google_id": "g_corr",
+                "email": "corr@test.com",
+                "name": "Corr",
+                "avatar_url": None,
+                "profile_id": None,
+            },
+        )
 
         conn = sqlite3.connect(db_path)
         # Two corrections: other → game
@@ -297,10 +362,16 @@ class TestDomainCorrections:
         # Job with parsed domain = 'game'
         upsert_job(db_path, _make_job("d1", domain="gaming", parsed_domain="gaming"))
 
-        user = upsert_user(db_path, {
-            "google_id": "g_same", "email": "same@test.com",
-            "name": "Same", "avatar_url": None, "profile_id": None,
-        })
+        user = upsert_user(
+            db_path,
+            {
+                "google_id": "g_same",
+                "email": "same@test.com",
+                "name": "Same",
+                "avatar_url": None,
+                "profile_id": None,
+            },
+        )
 
         conn = sqlite3.connect(db_path)
         # "Correction" that matches parsed domain — should NOT appear
@@ -324,14 +395,26 @@ class TestDomainCorrections:
         upsert_job(db_path, _make_job("e2", parsed_domain="other"))
         upsert_job(db_path, _make_job("e3", parsed_domain="other"))
 
-        u1 = upsert_user(db_path, {
-            "google_id": "g_u1", "email": "u1@test.com", "name": "U1",
-            "avatar_url": None, "profile_id": None,
-        })
-        u2 = upsert_user(db_path, {
-            "google_id": "g_u2", "email": "u2@test.com", "name": "U2",
-            "avatar_url": None, "profile_id": None,
-        })
+        u1 = upsert_user(
+            db_path,
+            {
+                "google_id": "g_u1",
+                "email": "u1@test.com",
+                "name": "U1",
+                "avatar_url": None,
+                "profile_id": None,
+            },
+        )
+        u2 = upsert_user(
+            db_path,
+            {
+                "google_id": "g_u2",
+                "email": "u2@test.com",
+                "name": "U2",
+                "avatar_url": None,
+                "profile_id": None,
+            },
+        )
 
         conn = sqlite3.connect(db_path)
         conn.execute(

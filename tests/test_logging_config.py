@@ -2,6 +2,7 @@
 
 Test-first per Phase 14 plan: these must FAIL before implementation.
 """
+
 import io
 import json
 

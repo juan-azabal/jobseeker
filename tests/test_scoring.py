@@ -151,9 +151,7 @@ class TestInferDomain:
             "technical_stack": [],
         }
         result = _infer_domain(p)
-        assert result == "fintech", (
-            f"Expected 'fintech' for financial compliance JD, got '{result}'"
-        )
+        assert result == "fintech", f"Expected 'fintech' for financial compliance JD, got '{result}'"
 
     def test_hr_tech_for_corporate_training(self):
         """'corporate training management system' → hr_tech.
@@ -168,9 +166,7 @@ class TestInferDomain:
             "technical_stack": [],
         }
         result = _infer_domain(p)
-        assert result == "hr_tech", (
-            f"Expected 'hr_tech' for corporate training JD, got '{result}'"
-        )
+        assert result == "hr_tech", f"Expected 'hr_tech' for corporate training JD, got '{result}'"
 
 
 # ---------------------------------------------------------------------------
@@ -206,9 +202,7 @@ class TestHeuristicScore:
     def test_red_flags_reduce_score(self):
         profile = _make_profile()
         parsed_clean = _make_parsed()
-        parsed_flags = _make_parsed(
-            red_flags=["requires relocation", "visa required", "entry level"]
-        )
+        parsed_flags = _make_parsed(red_flags=["requires relocation", "visa required", "entry level"])
         job = {"location": "Remote"}
         score_clean = heuristic_score(profile, parsed_clean, job, False)
         score_flags = heuristic_score(profile, parsed_flags, job, False)

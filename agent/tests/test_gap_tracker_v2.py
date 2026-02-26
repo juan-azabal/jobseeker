@@ -49,10 +49,14 @@ class TestGapTrackerV2Score:
     def test_v2_score_non_zero(self):
         """v2 rag_score must produce a non-zero score (not 0 as in the bug)."""
         with tempfile.TemporaryDirectory() as d:
-            job = _make_job(rag_score={
-                "technical_depth": "A", "profile_evidence": "B",
-                "strengths": [], "gaps": [],
-            })
+            job = _make_job(
+                rag_score={
+                    "technical_depth": "A",
+                    "profile_evidence": "B",
+                    "strengths": [],
+                    "gaps": [],
+                }
+            )
             append_gap_history([job], PROFILE, history_dir=d)
             entries = _read_entries(d)
         assert len(entries) == 1
@@ -61,10 +65,14 @@ class TestGapTrackerV2Score:
     def test_v2_a_a_scores_40(self):
         """v2 A+A → 20+20=40 points."""
         with tempfile.TemporaryDirectory() as d:
-            job = _make_job(rag_score={
-                "technical_depth": "A", "profile_evidence": "A",
-                "strengths": [], "gaps": [],
-            })
+            job = _make_job(
+                rag_score={
+                    "technical_depth": "A",
+                    "profile_evidence": "A",
+                    "strengths": [],
+                    "gaps": [],
+                }
+            )
             append_gap_history([job], PROFILE, history_dir=d)
             entries = _read_entries(d)
         assert entries[0]["score"] == 40
@@ -72,10 +80,14 @@ class TestGapTrackerV2Score:
     def test_v2_b_c_scores_17(self):
         """v2 B+C → 12+5=17 points."""
         with tempfile.TemporaryDirectory() as d:
-            job = _make_job(rag_score={
-                "technical_depth": "B", "profile_evidence": "C",
-                "strengths": [], "gaps": [],
-            })
+            job = _make_job(
+                rag_score={
+                    "technical_depth": "B",
+                    "profile_evidence": "C",
+                    "strengths": [],
+                    "gaps": [],
+                }
+            )
             append_gap_history([job], PROFILE, history_dir=d)
             entries = _read_entries(d)
         assert entries[0]["score"] == 17
@@ -83,10 +95,14 @@ class TestGapTrackerV2Score:
     def test_v2_unknown_grades_use_default(self):
         """Unknown/None grades use default of 10 each → score = 20."""
         with tempfile.TemporaryDirectory() as d:
-            job = _make_job(rag_score={
-                "technical_depth": None, "profile_evidence": None,
-                "strengths": [], "gaps": [],
-            })
+            job = _make_job(
+                rag_score={
+                    "technical_depth": None,
+                    "profile_evidence": None,
+                    "strengths": [],
+                    "gaps": [],
+                }
+            )
             append_gap_history([job], PROFILE, history_dir=d)
             entries = _read_entries(d)
         assert entries[0]["score"] == 20

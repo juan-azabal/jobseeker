@@ -34,6 +34,7 @@ def test_me_no_cookie_returns_401():
 
 def test_login_redirects():
     from fastapi.responses import RedirectResponse
+
     with patch("api.routes.auth.oauth") as mock_oauth:
         mock_client = MagicMock()
         mock_client.authorize_redirect = AsyncMock(
@@ -58,10 +59,17 @@ def test_me_with_valid_session(tmp_path, monkeypatch):
     monkeypatch.setenv("DB_PATH", db_path)
 
     from api.db.queries import upsert_user, create_session
-    user = upsert_user(db_path, {
-        "google_id": "g_test", "email": "u@e.com",
-        "name": "U", "avatar_url": None, "profile_id": None,
-    })
+
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g_test",
+            "email": "u@e.com",
+            "name": "U",
+            "avatar_url": None,
+            "profile_id": None,
+        },
+    )
     create_session(db_path, "valid_token", user["id"], "2099-01-01T00:00:00")
 
     c = TestClient(app)

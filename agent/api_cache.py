@@ -63,8 +63,7 @@ def fetch_existing_parsed(
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = json.loads(resp.read())
         return body.get("jobs", {})
-    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError,
-            OSError, TimeoutError) as exc:
+    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, OSError, TimeoutError) as exc:
         print(f"⚠  DB cache lookup failed (continuing without): {exc}")
         return {}
     except Exception as exc:

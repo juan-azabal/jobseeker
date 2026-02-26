@@ -24,7 +24,6 @@ def _job(**kwargs) -> dict:
 
 
 class TestSeniority:
-
     def test_mid_senior_maps_to_senior(self):
         from preseed import preseed_parsed
 
@@ -94,7 +93,6 @@ class TestSeniority:
 
 
 class TestLocationType:
-
     def test_fulltime_maps_to_remote(self):
         from preseed import preseed_parsed
 
@@ -121,16 +119,19 @@ class TestLocationType:
 
 
 class TestSalary:
-
     def test_salary_formatted_from_min_max(self):
         """Both min and max → 'min - max currency/interval'."""
         from preseed import preseed_parsed
 
-        result = preseed_parsed(_job(
-            min_amount=80000.0, max_amount=100000.0,
-            currency="EUR", interval="yearly",
-            salary_source="direct_data",
-        ))
+        result = preseed_parsed(
+            _job(
+                min_amount=80000.0,
+                max_amount=100000.0,
+                currency="EUR",
+                interval="yearly",
+                salary_source="direct_data",
+            )
+        )
         sal = result.get("salary_mentioned", "")
         assert "80" in sal
         assert "100" in sal
@@ -140,11 +141,15 @@ class TestSalary:
         """Only min → formatted with min only."""
         from preseed import preseed_parsed
 
-        result = preseed_parsed(_job(
-            min_amount=90000.0, max_amount=None,
-            currency="USD", interval="yearly",
-            salary_source="direct_data",
-        ))
+        result = preseed_parsed(
+            _job(
+                min_amount=90000.0,
+                max_amount=None,
+                currency="USD",
+                interval="yearly",
+                salary_source="direct_data",
+            )
+        )
         assert result.get("salary_mentioned") is not None
         assert "90" in result.get("salary_mentioned", "")
 
@@ -152,34 +157,42 @@ class TestSalary:
         """salary_source != 'direct_data' → salary not pre-seeded."""
         from preseed import preseed_parsed
 
-        result = preseed_parsed(_job(
-            min_amount=80000.0, max_amount=100000.0,
-            currency="EUR", interval="yearly",
-            salary_source="description",
-        ))
+        result = preseed_parsed(
+            _job(
+                min_amount=80000.0,
+                max_amount=100000.0,
+                currency="EUR",
+                interval="yearly",
+                salary_source="description",
+            )
+        )
         assert "salary_mentioned" not in result
 
     def test_salary_not_seeded_when_no_amount(self):
         from preseed import preseed_parsed
 
-        result = preseed_parsed(_job(
-            min_amount=None, max_amount=None,
-            salary_source="direct_data",
-        ))
+        result = preseed_parsed(
+            _job(
+                min_amount=None,
+                max_amount=None,
+                salary_source="direct_data",
+            )
+        )
         assert "salary_mentioned" not in result
 
     def test_salary_not_seeded_when_no_salary_source(self):
         """No salary_source → salary not pre-seeded (conservative)."""
         from preseed import preseed_parsed
 
-        result = preseed_parsed(_job(
-            min_amount=80000.0,
-        ))
+        result = preseed_parsed(
+            _job(
+                min_amount=80000.0,
+            )
+        )
         assert "salary_mentioned" not in result
 
 
 class TestDomain:
-
     def test_fintech_from_company_industry(self):
         from preseed import preseed_parsed
 
@@ -220,7 +233,6 @@ class TestDomain:
 
 
 class TestExperience:
-
     def test_experience_min_max_both_seeded(self):
         from preseed import preseed_parsed
 
@@ -244,17 +256,18 @@ class TestExperience:
 
 
 class TestLocations:
-
     def test_locations_from_structured(self):
         """locations_structured → flat list of city/country strings."""
         from preseed import preseed_parsed
 
-        result = preseed_parsed(_job(
-            locations_structured=[
-                {"city": "Barcelona", "country_code": "ES"},
-                {"city": "Madrid", "country_code": "ES"},
-            ]
-        ))
+        result = preseed_parsed(
+            _job(
+                locations_structured=[
+                    {"city": "Barcelona", "country_code": "ES"},
+                    {"city": "Madrid", "country_code": "ES"},
+                ]
+            )
+        )
         locs = result.get("locations_mentioned", [])
         assert "Barcelona" in locs
         assert "Madrid" in locs
@@ -277,18 +290,19 @@ class TestLocations:
         """Duplicate location strings removed."""
         from preseed import preseed_parsed
 
-        result = preseed_parsed(_job(
-            locations_structured=[
-                {"city": "Barcelona", "country_code": "ES"},
-                {"city": "Barcelona", "country_code": "ES"},
-            ]
-        ))
+        result = preseed_parsed(
+            _job(
+                locations_structured=[
+                    {"city": "Barcelona", "country_code": "ES"},
+                    {"city": "Barcelona", "country_code": "ES"},
+                ]
+            )
+        )
         locs = result.get("locations_mentioned", [])
         assert locs.count("Barcelona") == 1
 
 
 class TestEmpty:
-
     def test_no_structured_fields_returns_empty(self):
         """Job with no structured data → empty preseed dict."""
         from preseed import preseed_parsed

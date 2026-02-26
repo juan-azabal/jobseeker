@@ -33,23 +33,38 @@ class TestIsUsOnly:
         assert _is_us_only({"location": "Remote", "description": ""}) is False
 
     def test_us_work_auth_in_description(self):
-        assert _is_us_only({
-            "location": "Remote",
-            "description": "Must be authorized to work in the United States",
-        }) is True
+        assert (
+            _is_us_only(
+                {
+                    "location": "Remote",
+                    "description": "Must be authorized to work in the United States",
+                }
+            )
+            is True
+        )
 
     def test_unable_to_sponsor_with_us_context(self):
-        assert _is_us_only({
-            "location": "Remote",
-            "description": "We are unable to sponsor visa sponsorship at this time",
-        }) is True
+        assert (
+            _is_us_only(
+                {
+                    "location": "Remote",
+                    "description": "We are unable to sponsor visa sponsorship at this time",
+                }
+            )
+            is True
+        )
 
     def test_unable_to_sponsor_without_us_context(self):
         # "unable to sponsor" alone without US signals → not US-only
-        assert _is_us_only({
-            "location": "Remote, Europe",
-            "description": "We are unable to sponsor at this time",
-        }) is False
+        assert (
+            _is_us_only(
+                {
+                    "location": "Remote, Europe",
+                    "description": "We are unable to sponsor at this time",
+                }
+            )
+            is False
+        )
 
     def test_nationwide(self):
         assert _is_us_only({"location": "Nationwide", "description": ""}) is True
@@ -58,10 +73,15 @@ class TestIsUsOnly:
         assert _is_us_only({"location": "", "description": ""}) is False
 
     def test_e_verify_in_description(self):
-        assert _is_us_only({
-            "location": "Remote",
-            "description": "All candidates must pass E-Verify upon hire",
-        }) is True
+        assert (
+            _is_us_only(
+                {
+                    "location": "Remote",
+                    "description": "All candidates must pass E-Verify upon hire",
+                }
+            )
+            is True
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -71,30 +91,22 @@ class TestIsUsOnly:
 
 class TestIsRelevantTitle:
     def test_pm_keyword_passes(self):
-        ok, reason = _is_relevant_title(
-            "senior product manager", ["product manager"], []
-        )
+        ok, reason = _is_relevant_title("senior product manager", ["product manager"], [])
         assert ok is True
         assert reason is None
 
     def test_no_pm_keyword_fails(self):
-        ok, reason = _is_relevant_title(
-            "data engineer", ["product manager"], []
-        )
+        ok, reason = _is_relevant_title("data engineer", ["product manager"], [])
         assert ok is False
         assert "no PM keyword" in reason
 
     def test_excluded_term_fails(self):
-        ok, reason = _is_relevant_title(
-            "project manager", ["manager"], ["project manager"]
-        )
+        ok, reason = _is_relevant_title("project manager", ["manager"], ["project manager"])
         assert ok is False
         assert "excluded" in reason
 
     def test_product_owner_passes(self):
-        ok, _ = _is_relevant_title(
-            "product owner - data", ["product manager", "product owner"], []
-        )
+        ok, _ = _is_relevant_title("product owner - data", ["product manager", "product owner"], [])
         assert ok is True
 
 
@@ -218,40 +230,30 @@ class TestPrefilterJobs:
 
     def test_passes_good_pm_job(self, prefs_file, empty_applied, empty_seen):
         jobs = [self._make_job()]
-        passed, rejected, stats = prefilter_jobs(
-            jobs, prefs_file, empty_applied, empty_seen
-        )
+        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, empty_seen)
         assert len(passed) == 1
 
     def test_rejects_non_pm_title(self, prefs_file, empty_applied, empty_seen):
         jobs = [self._make_job(title="Data Engineer")]
-        passed, rejected, stats = prefilter_jobs(
-            jobs, prefs_file, empty_applied, empty_seen
-        )
+        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, empty_seen)
         assert len(passed) == 0
         assert stats["no_pm_keyword"] == 1
 
     def test_rejects_excluded_company(self, prefs_file, empty_applied, empty_seen):
         jobs = [self._make_job(company="BadCo")]
-        passed, rejected, stats = prefilter_jobs(
-            jobs, prefs_file, empty_applied, empty_seen
-        )
+        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, empty_seen)
         assert len(passed) == 0
         assert stats["excluded_company"] == 1
 
     def test_rejects_deal_breaker(self, prefs_file, empty_applied, empty_seen):
         jobs = [self._make_job(title="Intern Product Manager")]
-        passed, rejected, stats = prefilter_jobs(
-            jobs, prefs_file, empty_applied, empty_seen
-        )
+        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, empty_seen)
         assert len(passed) == 0
         assert stats["deal_breaker"] == 1
 
     def test_rejects_us_only(self, prefs_file, empty_applied, empty_seen):
         jobs = [self._make_job(location="San Francisco, CA")]
-        passed, rejected, stats = prefilter_jobs(
-            jobs, prefs_file, empty_applied, empty_seen
-        )
+        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, empty_seen)
         assert len(passed) == 0
         assert stats["us_only"] == 1
 
@@ -259,9 +261,7 @@ class TestPrefilterJobs:
         seen_file = tmp_path / "seen.txt"
         seen_file.write_text("j1\n")
         jobs = [self._make_job()]
-        passed, rejected, stats = prefilter_jobs(
-            jobs, prefs_file, empty_applied, str(seen_file)
-        )
+        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, str(seen_file))
         assert len(passed) == 0
         assert stats["already_seen"] == 1
 
@@ -269,7 +269,10 @@ class TestPrefilterJobs:
         # Job in New York (US-flagged), but if user lives there it should pass
         jobs = [self._make_job(location="New York, NY")]
         passed, rejected, stats = prefilter_jobs(
-            jobs, prefs_file, empty_applied, empty_seen,
+            jobs,
+            prefs_file,
+            empty_applied,
+            empty_seen,
             home_locations=["new york"],
         )
         assert len(passed) == 1
@@ -279,8 +282,6 @@ class TestPrefilterJobs:
             self._make_job(id="j1"),
             self._make_job(id="j2", title="Data Engineer"),
         ]
-        passed, rejected, stats = prefilter_jobs(
-            jobs, prefs_file, empty_applied, empty_seen
-        )
+        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, empty_seen)
         assert stats["total"] == 2
         assert stats["passed"] == 1

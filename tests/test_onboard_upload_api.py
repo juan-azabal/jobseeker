@@ -12,10 +12,16 @@ def authed_client(tmp_path, monkeypatch):
     db_path = str(tmp_path / "test.db")
     init_db(db_path)
     monkeypatch.setenv("DB_PATH", db_path)
-    user = upsert_user(db_path, {
-        "google_id": "g_t", "email": "t@t.com",
-        "name": "T", "avatar_url": None, "profile_id": None,
-    })
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g_t",
+            "email": "t@t.com",
+            "name": "T",
+            "avatar_url": None,
+            "profile_id": None,
+        },
+    )
     create_session(db_path, "tok", user["id"], "2099-01-01T00:00:00")
     c = TestClient(app)
     c.cookies.set("jsk", "tok")
@@ -27,7 +33,13 @@ def test_upload_cv_200(authed_client, tmp_path):
     with patch("api.routes.onboard.docx_to_markdown", return_value="# Alice\n\nSenior PM"):
         resp = authed_client.post(
             "/api/onboard/upload-cv",
-            files={"file": ("cv.docx", io.BytesIO(docx_content), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+            files={
+                "file": (
+                    "cv.docx",
+                    io.BytesIO(docx_content),
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                )
+            },
         )
     assert resp.status_code == 200
     data = resp.json()
@@ -56,6 +68,12 @@ def test_upload_cv_unauthenticated():
     c = TestClient(app)
     resp = c.post(
         "/api/onboard/upload-cv",
-        files={"file": ("cv.docx", io.BytesIO(b"x"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        files={
+            "file": (
+                "cv.docx",
+                io.BytesIO(b"x"),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
     )
     assert resp.status_code == 401

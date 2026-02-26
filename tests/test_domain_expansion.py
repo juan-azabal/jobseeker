@@ -188,19 +188,41 @@ class TestNewDomainsInKeywords:
     """All 30 canonical domains exist in _DOMAIN_KEYWORDS with non-empty keyword lists."""
 
     CANONICAL_DOMAINS = [
-        "adtech", "ai_ml", "automotive", "biotech", "climate", "construction",
-        "cybersecurity", "data", "defense", "devtools", "ecommerce", "edtech",
-        "energy", "fintech", "food_bev", "gaming", "govtech", "healthtech",
-        "hr_tech", "infra", "legal_tech", "logistics", "manufacturing",
-        "marketplace", "media", "retail", "saas", "telecom", "travel",
+        "adtech",
+        "ai_ml",
+        "automotive",
+        "biotech",
+        "climate",
+        "construction",
+        "cybersecurity",
+        "data",
+        "defense",
+        "devtools",
+        "ecommerce",
+        "edtech",
+        "energy",
+        "fintech",
+        "food_bev",
+        "gaming",
+        "govtech",
+        "healthtech",
+        "hr_tech",
+        "infra",
+        "legal_tech",
+        "logistics",
+        "manufacturing",
+        "marketplace",
+        "media",
+        "retail",
+        "saas",
+        "telecom",
+        "travel",
     ]
 
     def test_all_canonical_domains_have_keywords(self):
         for domain in self.CANONICAL_DOMAINS:
             assert domain in _DOMAIN_KEYWORDS, f"Missing domain: {domain}"
-            assert len(_DOMAIN_KEYWORDS[domain]) >= 3, (
-                f"Domain {domain} has fewer than 3 keywords"
-            )
+            assert len(_DOMAIN_KEYWORDS[domain]) >= 3, f"Domain {domain} has fewer than 3 keywords"
 
     def test_gaming_keywords_exist(self):
         assert "gaming" in _DOMAIN_KEYWORDS
@@ -277,9 +299,20 @@ class TestValidDomains:
 
     def test_all_new_domains_in_valid_domains(self):
         new_domains = [
-            "automotive", "biotech", "construction", "cybersecurity", "defense",
-            "energy", "food_bev", "gaming", "govtech", "healthtech",
-            "manufacturing", "retail", "telecom", "travel",
+            "automotive",
+            "biotech",
+            "construction",
+            "cybersecurity",
+            "defense",
+            "energy",
+            "food_bev",
+            "gaming",
+            "govtech",
+            "healthtech",
+            "manufacturing",
+            "retail",
+            "telecom",
+            "travel",
         ]
         for d in new_domains:
             assert d in VALID_DOMAINS, f"Missing from VALID_DOMAINS: {d}"

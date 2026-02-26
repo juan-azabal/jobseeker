@@ -17,14 +17,19 @@ from api.main import app
 _PROFILE = {
     "domains": {"saas": 10},
     "seniority": {
-        "junior": 6, "mid": 10, "senior": 15,
-        "staff": 10, "principal": 6, "director": 4, "vp": 4,
+        "junior": 6,
+        "mid": 10,
+        "senior": 15,
+        "staff": 10,
+        "principal": 6,
+        "director": 4,
+        "vp": 4,
     },
     "skills": [],
     "home_locations": [],
     "home_regions": [],
     "languages": [],
-    "location_preference": "a",   # remote-only — avoids geo scoring noise
+    "location_preference": "a",  # remote-only — avoids geo scoring noise
     "country_weights": {},
     "company_type_weights": {},
     "role_function": None,
@@ -41,14 +46,16 @@ _JOB = {
     "url": "https://example.com/parity",
     "location_type": "remote",
     "domain": "other",
-    "parsed": json.dumps({
-        "domain": "other",
-        "seniority": "senior",
-        "must_have_skills": [],
-        "nice_to_have_skills": [],
-        "technical_stack": [],
-        "red_flags": [],
-    }),
+    "parsed": json.dumps(
+        {
+            "domain": "other",
+            "seniority": "senior",
+            "must_have_skills": [],
+            "nice_to_have_skills": [],
+            "technical_stack": [],
+            "red_flags": [],
+        }
+    ),
     "first_seen": "2026-01-01",
     "last_seen": "2026-01-01",
     "ingested_at": "2026-01-01T10:00:00",
@@ -62,10 +69,16 @@ def parity_client(tmp_path, monkeypatch):
     upsert_job(db_path, _JOB)
     monkeypatch.setenv("DB_PATH", db_path)
 
-    user = upsert_user(db_path, {
-        "google_id": "g_parity", "email": "parity@test.com",
-        "name": "Parity", "avatar_url": None, "profile_id": "parity_user",
-    })
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g_parity",
+            "email": "parity@test.com",
+            "name": "Parity",
+            "avatar_url": None,
+            "profile_id": "parity_user",
+        },
+    )
     create_session(db_path, "parity_tok", user["id"], "2099-01-01T00:00:00")
 
     # User corrects domain: "other" → "saas" (preferred domain, weight 10)
@@ -107,6 +120,4 @@ def test_domain_override_is_applied_not_ignored(parity_client):
     # Expected minimum: at least the domain contribution makes score > 0.
     detail_resp = parity_client.get("/api/jobs/parity-001")
     assert detail_resp.status_code == 200
-    assert detail_resp.json()["score"] > 0, (
-        "Score should be > 0 when domain_override points to a preferred domain"
-    )
+    assert detail_resp.json()["score"] > 0, "Score should be > 0 when domain_override points to a preferred domain"

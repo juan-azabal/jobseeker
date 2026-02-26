@@ -51,7 +51,7 @@ def _make_job(title: str = "Senior PM", company: str = "Riot Games") -> dict:
 # For testing: game domain and game job point in the same direction
 _GAME_VEC = [1.0, 0.0, 0.0]
 _DATA_VEC = [0.0, 1.0, 0.0]
-_GAME_JOB_VEC = [0.95, 0.1, 0.0]   # cosine ≈ 0.995 with GAME_VEC → ≥ 0.75
+_GAME_JOB_VEC = [0.95, 0.1, 0.0]  # cosine ≈ 0.995 with GAME_VEC → ≥ 0.75
 _GENERIC_JOB_VEC = [0.1, 0.1, 0.98]  # cosine ≈ 0.14 with GAME_VEC → < 0.75
 
 
@@ -78,13 +78,13 @@ class TestSemanticDomainScore:
         job = _make_job("Senior PM", "Riot Games")
         job_text = "Riot Games other Senior PM"
 
-        with patch("api.embeddings.get_embeddings_batch") as mock_emb, \
-             patch("api.embeddings.cosine_similarity") as mock_cos:
+        with (
+            patch("api.embeddings.get_embeddings_batch") as mock_emb,
+            patch("api.embeddings.cosine_similarity") as mock_cos,
+        ):
             mock_emb.return_value = _make_embedding_map(job_text, _GAME_JOB_VEC)
             # Simulate: game sim = 0.90, data sim = 0.10
-            mock_cos.side_effect = lambda a, b: (
-                0.90 if b == _GAME_VEC else 0.10
-            )
+            mock_cos.side_effect = lambda a, b: 0.90 if b == _GAME_VEC else 0.10
             score = _semantic_domain_score(profile, parsed, job, db_path="fake.db")
 
         # score = int(-25 * 0.90) = -22, clamped to -15
@@ -97,13 +97,13 @@ class TestSemanticDomainScore:
         job = _make_job("Senior Data PM", "DataCo")
         job_text = "DataCo other Senior Data PM"
 
-        with patch("api.embeddings.get_embeddings_batch") as mock_emb, \
-             patch("api.embeddings.cosine_similarity") as mock_cos:
+        with (
+            patch("api.embeddings.get_embeddings_batch") as mock_emb,
+            patch("api.embeddings.cosine_similarity") as mock_cos,
+        ):
             mock_emb.return_value = _make_embedding_map(job_text, _DATA_VEC)
             # Simulate: game sim = 0.05, data sim = 0.90
-            mock_cos.side_effect = lambda a, b: (
-                0.90 if b == _DATA_VEC else 0.05
-            )
+            mock_cos.side_effect = lambda a, b: 0.90 if b == _DATA_VEC else 0.05
             score = _semantic_domain_score(profile, parsed, job, db_path="fake.db")
 
         # score = int(15 * 0.90) = 13, clamped to [−15, 15] → 13
@@ -116,8 +116,10 @@ class TestSemanticDomainScore:
         job = _make_job("Strategy Consultant", "McKinsey")
         job_text = "McKinsey other Strategy Consultant"
 
-        with patch("api.embeddings.get_embeddings_batch") as mock_emb, \
-             patch("api.embeddings.cosine_similarity") as mock_cos:
+        with (
+            patch("api.embeddings.get_embeddings_batch") as mock_emb,
+            patch("api.embeddings.cosine_similarity") as mock_cos,
+        ):
             mock_emb.return_value = _make_embedding_map(job_text, _GENERIC_JOB_VEC)
             mock_cos.return_value = 0.40  # below threshold
             score = _semantic_domain_score(profile, parsed, job, db_path="fake.db")

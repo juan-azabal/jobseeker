@@ -87,7 +87,7 @@ def _flatten_job(job, home_locations=None, home_regions=None) -> dict:
     if rag_strengths:
         strength = rag_strengths[0].get("claim", "")
     if not strength:
-        skills = (parsed.get("must_have_skills") or [])
+        skills = parsed.get("must_have_skills") or []
         strength = skills[0] if skills else ""
 
     # Gap: first RAG gap, or empty
@@ -99,16 +99,16 @@ def _flatten_job(job, home_locations=None, home_regions=None) -> dict:
     salary_eur = job.get("_salary_eur", 0) or 0
 
     return {
-        "title":          job.get("title", ""),
-        "company":        job.get("company", ""),
-        "location":       job.get("location") or "",
-        "location_type":  parsed.get("location_type") or "unknown",
+        "title": job.get("title", ""),
+        "company": job.get("company", ""),
+        "location": job.get("location") or "",
+        "location_type": parsed.get("location_type") or "unknown",
         "requires_reloc": _is_reloc(job, home_locations, home_regions),
         "salary_display": _salary_display(salary_eur),
-        "score":          job.get("_display_score", 0),
-        "strength":       strength,
-        "gap":            gap,
-        "url":            job.get("job_url", "#"),
+        "score": job.get("_display_score", 0),
+        "strength": strength,
+        "gap": gap,
+        "url": job.get("job_url", "#"),
     }
 
 
@@ -121,6 +121,7 @@ def _sort_key(job_flat: dict):
     sal = 0
     if sal_str:
         import re
+
         m = re.search(r"(\d+)", sal_str)
         if m:
             sal = -int(m.group(1))
@@ -145,6 +146,7 @@ def _build_context(jobs, rejected_stats, run_meta, profile=None):
     home_regions = None
     if profile:
         from geo import derive_home_regions
+
         home_locations = profile.get("user", {}).get("home_locations")
         home_regions = derive_home_regions([loc.lower() for loc in (home_locations or [])])
 
@@ -156,6 +158,7 @@ def _build_context(jobs, rejected_stats, run_meta, profile=None):
             j["_salary_eur"] = _extract_max_salary_eur(j)
         if "_display_score" not in j:
             from main import _grade_to_points
+
             j["_fit_score"] = _heuristic_score(j)
             rag = j.get("rag_score")
             if rag is None:
@@ -168,12 +171,23 @@ def _build_context(jobs, rejected_stats, run_meta, profile=None):
                 j["_display_score"] = min(100, max(0, j["_fit_score"] + tech_pts + prof_pts))
 
     # Split tiers and flatten
-    tier_a_raw = sorted([j for j in parsed_jobs if j["_display_score"] >= 50],
-                        key=lambda j: (1 if _is_reloc(j, home_locations, home_regions) else 0, -j["_display_score"], -j.get("_salary_eur", 0)))
-    tier_b_raw = sorted([j for j in parsed_jobs if 30 <= j["_display_score"] < 50],
-                        key=lambda j: (1 if _is_reloc(j, home_locations, home_regions) else 0, -j["_display_score"], -j.get("_salary_eur", 0)))
-    tier_c_raw = sorted([j for j in parsed_jobs if j["_display_score"] < 30],
-                        key=lambda j: -j["_display_score"])
+    tier_a_raw = sorted(
+        [j for j in parsed_jobs if j["_display_score"] >= 50],
+        key=lambda j: (
+            1 if _is_reloc(j, home_locations, home_regions) else 0,
+            -j["_display_score"],
+            -j.get("_salary_eur", 0),
+        ),
+    )
+    tier_b_raw = sorted(
+        [j for j in parsed_jobs if 30 <= j["_display_score"] < 50],
+        key=lambda j: (
+            1 if _is_reloc(j, home_locations, home_regions) else 0,
+            -j["_display_score"],
+            -j.get("_salary_eur", 0),
+        ),
+    )
+    tier_c_raw = sorted([j for j in parsed_jobs if j["_display_score"] < 30], key=lambda j: -j["_display_score"])
 
     tier_a = [_flatten_job(j, home_locations, home_regions) for j in tier_a_raw]
     tier_b = [_flatten_job(j, home_locations, home_regions) for j in tier_b_raw]
@@ -183,17 +197,17 @@ def _build_context(jobs, rejected_stats, run_meta, profile=None):
     n_prefiltered = rejected_stats.get("total", 0) - rejected_stats.get("passed", 0)
 
     return {
-        "date":          run_meta.get("date", date.today().strftime("%d %b %Y")),
-        "headline":      headline,
-        "n_apply":       len(tier_a),
-        "n_review":      len(tier_b),
-        "n_skip":        len(tier_c),
+        "date": run_meta.get("date", date.today().strftime("%d %b %Y")),
+        "headline": headline,
+        "n_apply": len(tier_a),
+        "n_review": len(tier_b),
+        "n_skip": len(tier_c),
         "n_prefiltered": n_prefiltered,
-        "tier_a":        tier_a,
-        "tier_b":        tier_b,
-        "tier_c":        tier_c,
+        "tier_a": tier_a,
+        "tier_b": tier_b,
+        "tier_c": tier_c,
         "rejected_stats": rejected_stats,
-        "run_meta":      run_meta,
+        "run_meta": run_meta,
     }
 
 
@@ -220,7 +234,7 @@ def send_digest(
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
 
-    gmail_address  = os.getenv("GMAIL_ADDRESS")
+    gmail_address = os.getenv("GMAIL_ADDRESS")
     gmail_password = os.getenv("GMAIL_APP_PASSWORD")
 
     # Prefer email from profile; fall back to NOTIFY_EMAIL env var for backward compat
@@ -257,8 +271,8 @@ def send_digest(
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"]    = f"JobAgent <{gmail_address}>"
-        msg["To"]      = to_email
+        msg["From"] = f"JobAgent <{gmail_address}>"
+        msg["To"] = to_email
         msg.attach(MIMEText(html_body, "html"))
 
         with smtplib.SMTP("smtp.gmail.com", 587) as server:

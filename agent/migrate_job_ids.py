@@ -16,7 +16,6 @@ non-null parsed fields.
 import argparse
 import json
 import sqlite3
-import sys
 
 from scraper import make_job_id
 

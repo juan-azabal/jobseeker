@@ -115,8 +115,7 @@ def _search_wttj_algolia(queries) -> list[RawJob]:
 
                 # source_category from new_profession sub_category_reference
                 new_profession = h.get("new_profession") or {}
-                source_cat = (new_profession.get("sub_category_reference")
-                              if isinstance(new_profession, dict) else None)
+                source_cat = new_profession.get("sub_category_reference") if isinstance(new_profession, dict) else None
 
                 job_id = make_job_id(title, company)
                 if job_id not in all_jobs:
@@ -248,17 +247,25 @@ def run_wttj_scraper(target_countries: list[str] | None = None):
     _FILTER = f"{_PM} AND {_GEO}"
 
     queries = [
-        {"term": "data",         "filters": _FILTER, "results_wanted": 40},
-        {"term": "platform",     "filters": _FILTER, "results_wanted": 40},
-        {"term": "analytics",    "filters": _FILTER, "results_wanted": 30},
+        {"term": "data", "filters": _FILTER, "results_wanted": 40},
+        {"term": "platform", "filters": _FILTER, "results_wanted": 40},
+        {"term": "analytics", "filters": _FILTER, "results_wanted": 30},
         {"term": "AI machine learning", "filters": _FILTER, "results_wanted": 30},
-        {"term": "adtech advertising",  "filters": _FILTER, "results_wanted": 30},
-        {"term": "principal staff",     "filters": _FILTER, "results_wanted": 25},
+        {"term": "adtech advertising", "filters": _FILTER, "results_wanted": 30},
+        {"term": "principal staff", "filters": _FILTER, "results_wanted": 25},
     ]
 
     google_queries = [
-        {"google_search_term": "site:welcometothejungle.com product manager data Spain OR remote", "results_wanted": 15, "hours_old": 168},
-        {"google_search_term": "site:welcometothejungle.com senior product manager platform Europe OR remote", "results_wanted": 15, "hours_old": 168},
+        {
+            "google_search_term": "site:welcometothejungle.com product manager data Spain OR remote",
+            "results_wanted": 15,
+            "hours_old": 168,
+        },
+        {
+            "google_search_term": "site:welcometothejungle.com senior product manager platform Europe OR remote",
+            "results_wanted": 15,
+            "hours_old": 168,
+        },
     ]
 
     print("\nSearching Welcome to the Jungle...")

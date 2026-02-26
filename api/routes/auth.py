@@ -6,10 +6,10 @@ from typing import Annotated
 
 import structlog
 from authlib.integrations.starlette_client import OAuth
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from api.db.queries import create_session, delete_session, get_session, get_user_by_google_id, upsert_user, set_user_admin
+from api.db.queries import create_session, delete_session, upsert_user, set_user_admin
 from api.middleware.auth import get_current_user
 from api.analytics import identify_user
 
@@ -56,13 +56,18 @@ async def callback(request: Request):
     userinfo = token.get("userinfo") or {}
 
     email = userinfo.get("email")
-    user = upsert_user(_db_path(), {
-        "google_id": userinfo.get("sub"),
-        "email": email,
-        "name": userinfo.get("name"),
-        "avatar_url": userinfo.get("picture"),
-        "profile_id": uuid.uuid4().hex[:8],  # only used for new users; existing users keep their profile_id via COALESCE
-    })
+    user = upsert_user(
+        _db_path(),
+        {
+            "google_id": userinfo.get("sub"),
+            "email": email,
+            "name": userinfo.get("name"),
+            "avatar_url": userinfo.get("picture"),
+            "profile_id": uuid.uuid4().hex[
+                :8
+            ],  # only used for new users; existing users keep their profile_id via COALESCE
+        },
+    )
 
     # Auto-promote users whose email is listed in ADMIN_EMAILS env var (idempotent)
     admin_emails = {e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}

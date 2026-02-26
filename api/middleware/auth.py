@@ -3,7 +3,7 @@ from typing import Annotated
 
 import structlog
 from fastapi import Depends, HTTPException, Request
-from api.db.queries import get_session, get_user_by_google_id, get_user_by_id
+from api.db.queries import get_session, get_user_by_id
 
 logger = structlog.get_logger(__name__)
 

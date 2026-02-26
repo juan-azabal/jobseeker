@@ -3,6 +3,7 @@
 GET /api/health       — liveness: always 200 while process is alive.
 GET /api/health/ready — readiness: DB + critical env vars. 503 on failure.
 """
+
 import os
 import sqlite3
 

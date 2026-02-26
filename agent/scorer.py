@@ -30,10 +30,7 @@ def _get_scoring_rubric() -> str:
         with open(_SCORING_RUBRIC_PATH) as f:
             content = f.read()
         # Strip markdown header lines and HTML comments
-        lines = [
-            line for line in content.splitlines()
-            if not line.startswith("#") and not line.startswith("<!--")
-        ]
+        lines = [line for line in content.splitlines() if not line.startswith("#") and not line.startswith("<!--")]
         _SCORING_RUBRIC_CACHE = "\n".join(lines).strip()
     return _SCORING_RUBRIC_CACHE
 
@@ -50,9 +47,8 @@ def _build_scoring_prompt(profile: dict) -> str:
         seniority = {k.lower(): int(v) for k, v in stored_sw.items()}
     else:
         from user_config import compute_seniority_weights
-        seniority = compute_seniority_weights(
-            target.get("level", ""), target.get("track", "ic")
-        )
+
+        seniority = compute_seniority_weights(target.get("level", ""), target.get("track", "ic"))
 
     # Role type from profile; fallback to generic "professional"
     role_type = target.get("role_type", "professional")
@@ -69,7 +65,7 @@ def _build_scoring_prompt(profile: dict) -> str:
     top_domains = sorted(domains.items(), key=lambda x: -x[1])
     core_domains = [d for d, s in top_domains if s >= 12]
     adjacent_domains = [d for d, s in top_domains if 6 <= s < 12]
-    penalty_domains = [d for d, s in top_domains if s < 0]
+    _penalty_domains = [d for d, s in top_domains if s < 0]  # reserved for future penalty clause
     core_str = ", ".join(core_domains) if core_domains else "tech"
 
     # Adjacent clause: if adjacent domains exist, list them; otherwise omit
@@ -107,8 +103,7 @@ def _build_scoring_prompt(profile: dict) -> str:
     # Substitute only the known placeholders; leave JSON braces in the rubric untouched.
     rubric = _get_scoring_rubric()
     return (
-        rubric
-        .replace("{name}", name)
+        rubric.replace("{name}", name)
         .replace("{role_type}", role_type)
         .replace("{core_str}", core_str)
         .replace("{adjacent_clause}", adjacent_clause)
@@ -172,24 +167,21 @@ def _build_scoring_input(job, chunks):
     parsed = job.get("parsed", {})
 
     jd_summary = f"""## Job Description (parsed)
-Title: {job.get('title', '?')}
-Company: {job.get('company', '?')}
-Location: {job.get('location', '?')} ({parsed.get('location_type', '?')})
-Seniority: {parsed.get('seniority', '?')}
-Domain: {parsed.get('domain', '?')}
-Salary: {parsed.get('salary_mentioned', 'not mentioned')}
+Title: {job.get("title", "?")}
+Company: {job.get("company", "?")}
+Location: {job.get("location", "?")} ({parsed.get("location_type", "?")})
+Seniority: {parsed.get("seniority", "?")}
+Domain: {parsed.get("domain", "?")}
+Salary: {parsed.get("salary_mentioned", "not mentioned")}
 
-Must-have skills: {', '.join(parsed.get('must_have_skills') or [])}
-Nice-to-have: {', '.join(parsed.get('nice_to_have_skills') or [])}
-Technical stack: {', '.join(parsed.get('technical_stack') or [])}
-Responsibilities: {parsed.get('responsibilities_summary', '')}
-Red flags: {', '.join(parsed.get('red_flags') or [])}
-Key phrases: {', '.join(parsed.get('key_phrases') or [])}"""
+Must-have skills: {", ".join(parsed.get("must_have_skills") or [])}
+Nice-to-have: {", ".join(parsed.get("nice_to_have_skills") or [])}
+Technical stack: {", ".join(parsed.get("technical_stack") or [])}
+Responsibilities: {parsed.get("responsibilities_summary", "")}
+Red flags: {", ".join(parsed.get("red_flags") or [])}
+Key phrases: {", ".join(parsed.get("key_phrases") or [])}"""
 
-    profile_context = "\n\n---\n\n".join([
-        f"[{c['source']} / {c['section']}]\n{c['text']}"
-        for c in chunks
-    ])
+    profile_context = "\n\n---\n\n".join([f"[{c['source']} / {c['section']}]\n{c['text']}" for c in chunks])
 
     return f"""{jd_summary}
 
@@ -233,12 +225,15 @@ def score_job(job, collection, profile: dict, n_chunks=8):
     if os.environ.get("POSTHOG_API_KEY"):
         try:
             from posthog.ai.openai import OpenAI as _PhOpenAI  # noqa: PLC0415
+
             client = _PhOpenAI()
         except Exception:
             from openai import OpenAI  # noqa: PLC0415
+
             client = OpenAI()
     else:
         from openai import OpenAI  # noqa: PLC0415
+
         client = OpenAI()
     max_retries = 4
     for attempt in range(max_retries):
@@ -296,10 +291,7 @@ def score_all(jobs, collection, profile: dict, max_workers=2):
     errors = 0
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {
-            executor.submit(score_job, job, collection, profile): job
-            for job in scoreable
-        }
+        futures = {executor.submit(score_job, job, collection, profile): job for job in scoreable}
         done = 0
         for future in as_completed(futures):
             done += 1

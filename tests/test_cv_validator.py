@@ -1,4 +1,5 @@
 """Tests for api/cv/validator.py — programmatic CV source-fidelity validator (Step 6.4)."""
+
 import pytest
 from api.cv.validator import validate_cv, build_fix_prompt
 
@@ -78,6 +79,7 @@ Spanish (native) | English (advanced) | French (basic)
 # Clean CV passes
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def test_clean_cv_passes():
     """A CV matching all source_facts constraints returns passed=True with no errors."""
     result = validate_cv(_CLEAN_CV, PLAN)
@@ -99,14 +101,13 @@ def test_validate_cv_returns_required_keys():
 # Error: title_downgraded
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def test_title_downgraded_detected():
     """CV with 'Product Manager' in title line when source says 'Senior PM' → error."""
     cv = _CLEAN_CV.replace("Senior Product Manager\nBarcelona", "Product Manager\nBarcelona")
     result = validate_cv(cv, PLAN)
     codes = [e["code"] for e in result["errors"]]
-    assert "title_downgraded" in codes, (
-        f"Expected 'title_downgraded' error, got errors: {result['errors']}"
-    )
+    assert "title_downgraded" in codes, f"Expected 'title_downgraded' error, got errors: {result['errors']}"
 
 
 def test_title_correct_no_error():
@@ -127,14 +128,13 @@ def test_title_downgraded_blocks_passing():
 # Error: years_downgraded
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def test_years_downgraded_detected():
     """CV with '7+ years' when source says '10+' → error years_downgraded."""
     cv = _CLEAN_CV.replace("10+ years", "7+ years")
     result = validate_cv(cv, PLAN)
     codes = [e["code"] for e in result["errors"]]
-    assert "years_downgraded" in codes, (
-        f"Expected 'years_downgraded' error, got errors: {result['errors']}"
-    )
+    assert "years_downgraded" in codes, f"Expected 'years_downgraded' error, got errors: {result['errors']}"
 
 
 def test_years_correct_no_error():
@@ -157,6 +157,7 @@ def test_years_not_mentioned_no_error():
 # ══════════════════════════════════════════════════════════════════════════
 # Error: slop_detected
 # ══════════════════════════════════════════════════════════════════════════
+
 
 def test_slop_strong_track_record_detected():
     """CV with 'strong track record' → error slop_detected."""
@@ -213,6 +214,7 @@ def test_no_slop_no_error():
 # Warning: missing_language
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def test_missing_language_warning_when_language_absent():
     """CV missing 'French' when source_facts has it → warning missing_language."""
     cv = _CLEAN_CV.replace(
@@ -221,9 +223,7 @@ def test_missing_language_warning_when_language_absent():
     )
     result = validate_cv(cv, PLAN)
     codes = [w["code"] for w in result["warnings"]]
-    assert "missing_language" in codes, (
-        f"Expected 'missing_language' warning, got: {result['warnings']}"
-    )
+    assert "missing_language" in codes, f"Expected 'missing_language' warning, got: {result['warnings']}"
 
 
 def test_all_languages_present_no_warning():
@@ -236,6 +236,7 @@ def test_all_languages_present_no_warning():
 # ══════════════════════════════════════════════════════════════════════════
 # Warning: missing_theme
 # ══════════════════════════════════════════════════════════════════════════
+
 
 def test_missing_theme_warning_when_theme_absent():
     """CV missing a Core Skills theme from source_facts → warning missing_theme."""
@@ -261,6 +262,7 @@ def test_all_themes_present_no_warning():
 # Warning: no_consulting_mention
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def test_no_consulting_mention_warning_for_consultancy_job():
     """Plan with company_type='consultancy' but no consulting mention → warning."""
     cv = """# John Doe
@@ -277,9 +279,7 @@ Spanish (native) | English (advanced) | French (basic)
 """
     result = validate_cv(cv, PLAN)
     codes = [w["code"] for w in result["warnings"]]
-    assert "no_consulting_mention" in codes, (
-        f"Expected 'no_consulting_mention' warning, got: {result['warnings']}"
-    )
+    assert "no_consulting_mention" in codes, f"Expected 'no_consulting_mention' warning, got: {result['warnings']}"
 
 
 def test_consulting_mention_present_no_warning():
@@ -318,6 +318,7 @@ Spanish (native) | English (advanced)
 # Warning: gerund_start
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def test_gerund_start_warning_detected():
     """Bullet starting with a gerund ('- Leading the...') → warning gerund_start."""
     cv = _CLEAN_CV.replace(
@@ -326,9 +327,7 @@ def test_gerund_start_warning_detected():
     )
     result = validate_cv(cv, PLAN)
     codes = [w["code"] for w in result["warnings"]]
-    assert "gerund_start" in codes, (
-        f"Expected 'gerund_start' warning, got: {result['warnings']}"
-    )
+    assert "gerund_start" in codes, f"Expected 'gerund_start' warning, got: {result['warnings']}"
 
 
 def test_no_gerund_start_no_warning():
@@ -341,6 +340,7 @@ def test_no_gerund_start_no_warning():
 # ══════════════════════════════════════════════════════════════════════════
 # Graceful degradation
 # ══════════════════════════════════════════════════════════════════════════
+
 
 def test_empty_plan_does_not_crash():
     """validate_cv with an empty plan returns a result without raising."""
@@ -374,14 +374,13 @@ def test_passed_true_when_only_warnings():
         "Spanish (native) | English (advanced)",
     )
     result = validate_cv(cv, PLAN)
-    assert result["passed"] is True, (
-        "Warnings alone must not fail validation (passed should be True)"
-    )
+    assert result["passed"] is True, "Warnings alone must not fail validation (passed should be True)"
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # build_fix_prompt
 # ══════════════════════════════════════════════════════════════════════════
+
 
 def test_build_fix_prompt_returns_tuple():
     """build_fix_prompt returns a (system, user) string tuple."""

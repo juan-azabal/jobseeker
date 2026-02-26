@@ -2,6 +2,7 @@
 
 Test-first per Phase 14 plan: these must FAIL before implementation.
 """
+
 import os
 from unittest.mock import patch
 
@@ -12,6 +13,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture()
 def client():
     from api.main import app
+
     return TestClient(app)
 
 
@@ -37,6 +39,7 @@ def test_readiness_200_with_valid_db_and_env(tmp_path, client):
     db = tmp_path / "test.db"
     # Create a minimal valid SQLite file
     import sqlite3
+
     conn = sqlite3.connect(str(db))
     conn.execute("CREATE TABLE _ping (id INTEGER)")
     conn.close()
@@ -60,6 +63,7 @@ def test_readiness_response_has_per_check_results(tmp_path, client):
     """Response includes individual pass/fail for db and critical env vars."""
     db = tmp_path / "test.db"
     import sqlite3
+
     sqlite3.connect(str(db)).close()
 
     env = {
@@ -102,6 +106,7 @@ def test_readiness_503_when_critical_env_missing(tmp_path, client):
     """Returns 503 when a critical env var is absent."""
     db = tmp_path / "test.db"
     import sqlite3
+
     sqlite3.connect(str(db)).close()
 
     # Remove INGEST_API_KEY
@@ -130,6 +135,7 @@ def test_readiness_200_without_optional_vars(tmp_path, client):
     """Missing OPENAI_API_KEY / POSTHOG_API_KEY must NOT cause 503."""
     db = tmp_path / "test.db"
     import sqlite3
+
     sqlite3.connect(str(db)).close()
 
     env = {
@@ -150,6 +156,7 @@ def test_readiness_warns_about_optional_vars(tmp_path, client):
     """Response includes warnings for missing optional vars."""
     db = tmp_path / "test.db"
     import sqlite3
+
     sqlite3.connect(str(db)).close()
 
     env = {

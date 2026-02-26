@@ -6,27 +6,42 @@ from api.main import app
 
 JOBS = [
     {
-        "job_id": "a1", "title": "Senior PM", "company": "Acme",
-        "location": "Paris, FR", "url": "https://ex.com/1",
-        "location_type": "hybrid", "domain": "data",
-        "parsed": '{}',
-        "first_seen": "2026-02-23", "last_seen": "2026-02-23",
+        "job_id": "a1",
+        "title": "Senior PM",
+        "company": "Acme",
+        "location": "Paris, FR",
+        "url": "https://ex.com/1",
+        "location_type": "hybrid",
+        "domain": "data",
+        "parsed": "{}",
+        "first_seen": "2026-02-23",
+        "last_seen": "2026-02-23",
         "ingested_at": "2026-02-23T10:00:00",
     },
     {
-        "job_id": "b1", "title": "ML PM", "company": "Beta",
-        "location": "Remote", "url": "https://ex.com/2",
-        "location_type": "remote", "domain": "ml",
-        "parsed": '{}',
-        "first_seen": "2026-02-20", "last_seen": "2026-02-20",
+        "job_id": "b1",
+        "title": "ML PM",
+        "company": "Beta",
+        "location": "Remote",
+        "url": "https://ex.com/2",
+        "location_type": "remote",
+        "domain": "ml",
+        "parsed": "{}",
+        "first_seen": "2026-02-20",
+        "last_seen": "2026-02-20",
         "ingested_at": "2026-02-20T10:00:00",
     },
     {
-        "job_id": "c1", "title": "Growth PM", "company": "Gamma",
-        "location": "Amsterdam", "url": "https://ex.com/3",
-        "location_type": "onsite", "domain": "growth",
-        "parsed": '{}',
-        "first_seen": "2026-02-01", "last_seen": "2026-02-01",
+        "job_id": "c1",
+        "title": "Growth PM",
+        "company": "Gamma",
+        "location": "Amsterdam",
+        "url": "https://ex.com/3",
+        "location_type": "onsite",
+        "domain": "growth",
+        "parsed": "{}",
+        "first_seen": "2026-02-01",
+        "last_seen": "2026-02-01",
         "ingested_at": "2026-02-01T10:00:00",
     },
 ]
@@ -46,13 +61,19 @@ def authed_client(tmp_path, monkeypatch):
     for j in JOBS:
         upsert_job(db_path, j)
     monkeypatch.setenv("DB_PATH", db_path)
-    user = upsert_user(db_path, {
-        "google_id": "g_test", "email": "t@t.com",
-        "name": "T", "avatar_url": None, "profile_id": None,
-    })
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g_test",
+            "email": "t@t.com",
+            "name": "T",
+            "avatar_url": None,
+            "profile_id": None,
+        },
+    )
     # Insert per-user scores
     for job_id, score, tier in USER_SCORES:
-        upsert_user_job_score(db_path, user["id"], job_id, score, tier, '{}')
+        upsert_user_job_score(db_path, user["id"], job_id, score, tier, "{}")
     create_session(db_path, "test_tok", user["id"], "2099-01-01T00:00:00")
     c = TestClient(app)
     c.cookies.set("jsk", "test_tok")

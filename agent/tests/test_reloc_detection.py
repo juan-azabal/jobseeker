@@ -52,6 +52,7 @@ def _make_remote_job(title, location="", restriction=""):
 # Auto-derived regions via country-converter
 # ---------------------------------------------------------------------------
 
+
 class TestDeriveHomeRegions:
     """Region auto-derivation from country-converter."""
 
@@ -102,6 +103,7 @@ class TestDeriveHomeRegions:
 # ---------------------------------------------------------------------------
 # Country-pinned remote: should be reloc for Spain-based user
 # ---------------------------------------------------------------------------
+
 
 class TestCountryPinnedRemoteIsReloc:
     """Jobs pinned to a specific non-Spain country should require relocation."""
@@ -192,6 +194,7 @@ class TestCountryPinnedRemoteIsReloc:
 # Hybrid/onsite in non-Spain should also be reloc (pre-existing behavior)
 # ---------------------------------------------------------------------------
 
+
 class TestHybridOnsiteNonSpainIsReloc:
     """Hybrid/onsite outside Spain should still be reloc."""
 
@@ -202,10 +205,16 @@ class TestHybridOnsiteNonSpainIsReloc:
         job = {
             "title": "Senior PM",
             "location": "Kyiv, Ukraine",
-            "parsed": {"location_type": "hybrid", "domain": "data",
-                        "seniority": "senior", "must_have_skills": [],
-                        "nice_to_have_skills": [], "technical_stack": [],
-                        "responsibilities_summary": "", "red_flags": []},
+            "parsed": {
+                "location_type": "hybrid",
+                "domain": "data",
+                "seniority": "senior",
+                "must_have_skills": [],
+                "nice_to_have_skills": [],
+                "technical_stack": [],
+                "responsibilities_summary": "",
+                "red_flags": [],
+            },
         }
         assert _is_reloc(job) is True
 
@@ -213,10 +222,16 @@ class TestHybridOnsiteNonSpainIsReloc:
         job = {
             "title": "Senior PM",
             "location": "Paris, France",
-            "parsed": {"location_type": "hybrid", "domain": "data",
-                        "seniority": "senior", "must_have_skills": [],
-                        "nice_to_have_skills": [], "technical_stack": [],
-                        "responsibilities_summary": "", "red_flags": []},
+            "parsed": {
+                "location_type": "hybrid",
+                "domain": "data",
+                "seniority": "senior",
+                "must_have_skills": [],
+                "nice_to_have_skills": [],
+                "technical_stack": [],
+                "responsibilities_summary": "",
+                "red_flags": [],
+            },
         }
         assert _is_reloc(job) is True
 
@@ -224,6 +239,7 @@ class TestHybridOnsiteNonSpainIsReloc:
 # ---------------------------------------------------------------------------
 # Non-reloc: jobs accessible from Spain
 # ---------------------------------------------------------------------------
+
 
 class TestAccessibleFromSpainIsNotReloc:
     """Remote jobs accessible from Spain should NOT be reloc."""
@@ -266,10 +282,16 @@ class TestAccessibleFromSpainIsNotReloc:
         job = {
             "title": "Senior PM",
             "location": "Barcelona, Spain (hybrid)",
-            "parsed": {"location_type": "hybrid", "domain": "data",
-                        "seniority": "senior", "must_have_skills": [],
-                        "nice_to_have_skills": [], "technical_stack": [],
-                        "responsibilities_summary": "", "red_flags": []},
+            "parsed": {
+                "location_type": "hybrid",
+                "domain": "data",
+                "seniority": "senior",
+                "must_have_skills": [],
+                "nice_to_have_skills": [],
+                "technical_stack": [],
+                "responsibilities_summary": "",
+                "red_flags": [],
+            },
         }
         assert _is_reloc(job) is False
 
@@ -277,6 +299,7 @@ class TestAccessibleFromSpainIsNotReloc:
 # ---------------------------------------------------------------------------
 # Cross-user: US user should see EU-only as reloc, global as not reloc
 # ---------------------------------------------------------------------------
+
 
 class TestUSUserReloc:
     """A US-based user should see EU-restricted jobs as relocation."""
@@ -318,6 +341,7 @@ class TestUSUserReloc:
 # ---------------------------------------------------------------------------
 # Heuristic score: country-pinned remote should get 0 location bonus
 # ---------------------------------------------------------------------------
+
 
 class TestHeuristicScoreRelocPenalty:
     """Country-pinned remote jobs should NOT get the +10 remote bonus."""

@@ -92,9 +92,7 @@ class TestNegativeDomainInHeuristic:
         }
         game_score = heuristic_score(profile, game_parsed, _make_job(), is_reloc=False)
         data_score = heuristic_score(profile, data_parsed, _make_job(), is_reloc=False)
-        assert game_score < data_score, (
-            f"Gaming job ({game_score}) should score lower than data job ({data_score})"
-        )
+        assert game_score < data_score, f"Gaming job ({game_score}) should score lower than data job ({data_score})"
 
 
 class TestDomainInferenceWithNegativeWeight:
@@ -135,8 +133,7 @@ class TestDomainInferenceWithNegativeWeight:
 
         # gaming:-25 should not produce a higher score than having no weight for gaming
         assert score_with_negative <= score_without_weight, (
-            f"Negative game weight ({score_with_negative}) should not exceed "
-            f"no-weight score ({score_without_weight})"
+            f"Negative game weight ({score_with_negative}) should not exceed no-weight score ({score_without_weight})"
         )
 
 

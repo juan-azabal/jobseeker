@@ -26,12 +26,15 @@ def _make_db(tmp_path):
 
 def _insert_job(db_path, job_id="job-g-001"):
     con = sqlite3.connect(db_path)
-    con.execute("""
+    con.execute(
+        """
         INSERT INTO jobs (job_id, title, company, location, url, location_type, domain,
                           first_seen, last_seen, ingested_at)
         VALUES (?, 'PM', 'Acme', 'Remote', 'https://x.com', 'remote', 'saas',
                 '2026-01-01', '2026-01-01', '2026-01-01T00:00:00')
-    """, (job_id,))
+    """,
+        (job_id,),
+    )
     con.commit()
     con.close()
 
@@ -43,8 +46,15 @@ class TestGetUserJobScoreReturnsGrades:
         db, uid = _make_db(tmp_path)
         _insert_job(db, "qg-001")
         upsert_user_job_score(
-            db, uid, "qg-001", score=0, tier="C", scored_json=None,
-            technical_grade="A", profile_grade="B", scored_v2=1,
+            db,
+            uid,
+            "qg-001",
+            score=0,
+            tier="C",
+            scored_json=None,
+            technical_grade="A",
+            profile_grade="B",
+            scored_v2=1,
         )
         row = get_user_job_score(db, uid, "qg-001")
         assert row is not None
@@ -54,8 +64,15 @@ class TestGetUserJobScoreReturnsGrades:
         db, uid = _make_db(tmp_path)
         _insert_job(db, "qg-002")
         upsert_user_job_score(
-            db, uid, "qg-002", score=0, tier="C", scored_json=None,
-            technical_grade="B", profile_grade="C", scored_v2=1,
+            db,
+            uid,
+            "qg-002",
+            score=0,
+            tier="C",
+            scored_json=None,
+            technical_grade="B",
+            profile_grade="C",
+            scored_v2=1,
         )
         row = get_user_job_score(db, uid, "qg-002")
         assert row["profile_grade"] == "C"
@@ -64,8 +81,15 @@ class TestGetUserJobScoreReturnsGrades:
         db, uid = _make_db(tmp_path)
         _insert_job(db, "qg-003")
         upsert_user_job_score(
-            db, uid, "qg-003", score=0, tier="C", scored_json=None,
-            technical_grade="A", profile_grade="A", scored_v2=1,
+            db,
+            uid,
+            "qg-003",
+            score=0,
+            tier="C",
+            scored_json=None,
+            technical_grade="A",
+            profile_grade="A",
+            scored_v2=1,
         )
         row = get_user_job_score(db, uid, "qg-003")
         assert row["scored_v2"] == 1
@@ -88,8 +112,15 @@ class TestGetJobsReturnsGrades:
         db, uid = _make_db(tmp_path)
         _insert_job(db, "jlg-001")
         upsert_user_job_score(
-            db, uid, "jlg-001", score=0, tier="C", scored_json=None,
-            technical_grade="A", profile_grade="B", scored_v2=1,
+            db,
+            uid,
+            "jlg-001",
+            score=0,
+            tier="C",
+            scored_json=None,
+            technical_grade="A",
+            profile_grade="B",
+            scored_v2=1,
         )
         jobs = get_jobs(db, user_id=uid)
         assert len(jobs) == 1
@@ -99,8 +130,15 @@ class TestGetJobsReturnsGrades:
         db, uid = _make_db(tmp_path)
         _insert_job(db, "jlg-002")
         upsert_user_job_score(
-            db, uid, "jlg-002", score=0, tier="C", scored_json=None,
-            technical_grade="B", profile_grade="C", scored_v2=1,
+            db,
+            uid,
+            "jlg-002",
+            score=0,
+            tier="C",
+            scored_json=None,
+            technical_grade="B",
+            profile_grade="C",
+            scored_v2=1,
         )
         jobs = get_jobs(db, user_id=uid)
         assert jobs[0]["ujs_profile_grade"] == "C"
@@ -109,8 +147,15 @@ class TestGetJobsReturnsGrades:
         db, uid = _make_db(tmp_path)
         _insert_job(db, "jlg-003")
         upsert_user_job_score(
-            db, uid, "jlg-003", score=0, tier="C", scored_json=None,
-            technical_grade="A", profile_grade="A", scored_v2=1,
+            db,
+            uid,
+            "jlg-003",
+            score=0,
+            tier="C",
+            scored_json=None,
+            technical_grade="A",
+            profile_grade="A",
+            scored_v2=1,
         )
         jobs = get_jobs(db, user_id=uid)
         assert jobs[0]["ujs_scored_v2"] == 1

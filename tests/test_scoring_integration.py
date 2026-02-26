@@ -120,23 +120,17 @@ class TestDomainRankingOrder:
     """Games rank below data/saas; data ranks highest."""
 
     def _score(self, parsed: dict, company: str = "Acme") -> int:
-        return heuristic_score(
-            MIXED_PROFILE, parsed, _make_job(company), is_reloc=False, db_path=None
-        )
+        return heuristic_score(MIXED_PROFILE, parsed, _make_job(company), is_reloc=False, db_path=None)
 
     def test_data_job_scores_highest(self):
         data_score = self._score(DATA_JOB_PARSED, "DataCo")
         saas_score = self._score(SAAS_JOB_PARSED, "SaasCo")
-        assert data_score > saas_score, (
-            f"Data job ({data_score}) should outscore SaaS job ({saas_score})"
-        )
+        assert data_score > saas_score, f"Data job ({data_score}) should outscore SaaS job ({saas_score})"
 
     def test_game_job_ranks_below_saas(self):
         saas_score = self._score(SAAS_JOB_PARSED, "SaasCo")
         game_score = self._score(GAME_JOB_PARSED, "Riot Games")
-        assert game_score < saas_score, (
-            f"Game job ({game_score}) should rank below SaaS job ({saas_score})"
-        )
+        assert game_score < saas_score, f"Game job ({game_score}) should rank below SaaS job ({saas_score})"
 
     def test_game_job_as_other_also_penalized(self):
         """Old-enum game job (domain='other' + keywords) gets penalized same as enum game."""
@@ -149,8 +143,7 @@ class TestDomainRankingOrder:
         )
         # And comparable to each other (same domain penalty applied)
         assert abs(game_enum_score - game_other_score) <= 5, (
-            f"game enum ({game_enum_score}) and game-as-other ({game_other_score}) "
-            "should produce similar scores"
+            f"game enum ({game_enum_score}) and game-as-other ({game_other_score}) should produce similar scores"
         )
 
     def test_negative_domain_score_clamped_nonnegative(self):
@@ -162,9 +155,7 @@ class TestNewDomainClassification:
     """New enum values are correctly classified and scored."""
 
     def _score(self, parsed: dict) -> int:
-        return heuristic_score(
-            MIXED_PROFILE, parsed, _make_job("Acme"), is_reloc=False, db_path=None
-        )
+        return heuristic_score(MIXED_PROFILE, parsed, _make_job("Acme"), is_reloc=False, db_path=None)
 
     def test_climate_job_neutral_score(self):
         # climate not in MIXED_PROFILE domains → weight 0 → neutral score
@@ -226,16 +217,21 @@ class TestSkillsAndDomainInteraction:
         }
 
         game_score = heuristic_score(
-            profile_with_game_skills, game_parsed_with_skills,
-            _make_job("GameCo"), is_reloc=False, db_path=None,
+            profile_with_game_skills,
+            game_parsed_with_skills,
+            _make_job("GameCo"),
+            is_reloc=False,
+            db_path=None,
         )
         saas_score = heuristic_score(
-            profile_with_game_skills, saas_no_skills,
-            _make_job("SaasCo"), is_reloc=False, db_path=None,
+            profile_with_game_skills,
+            saas_no_skills,
+            _make_job("SaasCo"),
+            is_reloc=False,
+            db_path=None,
         )
         # game: -25 + seniority: +15 + skills: +10 + loc: +10 = +10
         # saas: +10 + seniority: +15 + skills: 0 + loc: +10 = +35
         assert game_score < saas_score, (
-            f"Game job with skills ({game_score}) should rank below "
-            f"SaaS job without skills ({saas_score})"
+            f"Game job with skills ({game_score}) should rank below SaaS job without skills ({saas_score})"
         )

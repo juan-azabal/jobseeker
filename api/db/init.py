@@ -11,16 +11,12 @@ def init_db(db_path: str) -> None:
     con.row_factory = sqlite3.Row
 
     # Track applied migrations so each runs exactly once (idempotent restarts).
-    con.execute(
-        "CREATE TABLE IF NOT EXISTS _migrations (filename TEXT PRIMARY KEY, applied_at TEXT)"
-    )
+    con.execute("CREATE TABLE IF NOT EXISTS _migrations (filename TEXT PRIMARY KEY, applied_at TEXT)")
     con.commit()
 
     migration_files = sorted(MIGRATIONS_DIR.glob("*.sql"))
     for mf in migration_files:
-        row = con.execute(
-            "SELECT 1 FROM _migrations WHERE filename = ?", (mf.name,)
-        ).fetchone()
+        row = con.execute("SELECT 1 FROM _migrations WHERE filename = ?", (mf.name,)).fetchone()
         if row:
             continue  # already applied
         con.executescript(mf.read_text())

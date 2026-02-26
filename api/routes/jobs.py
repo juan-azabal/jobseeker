@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 import structlog
+
 logger = structlog.get_logger(__name__)
 
 import yaml
@@ -15,18 +16,27 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from api.db.queries import (
-    get_jobs, get_job_by_id, get_job_status_by_title,
-    get_user_job_score, get_total_job_count,
-    set_job_applied, set_job_dismissed,
+    get_jobs,
+    get_job_by_id,
+    get_job_status_by_title,
+    get_user_job_score,
+    get_total_job_count,
+    set_job_applied,
+    set_job_dismissed,
     get_user_cv_md,
-    set_domain_override, get_domain_override, get_all_domain_overrides,
+    set_domain_override,
+    get_domain_override,
+    get_all_domain_overrides,
 )
 from api.geo import (
-    derive_home_regions, UNIVERSAL_TERMS,
-    build_region_pattern, matches_region, is_pure_timezone,
+    derive_home_regions,
+    UNIVERSAL_TERMS,
+    build_region_pattern,
+    matches_region,
+    is_pure_timezone,
 )
 from api.middleware.auth import get_current_user
-from api.scoring import compute_tier, heuristic_score, hybrid_score, load_profile_data, precompute_skill_lookup, VALID_DOMAINS
+from api.scoring import compute_tier, hybrid_score, load_profile_data, VALID_DOMAINS
 from api.skill_matcher import match_skills
 from api import analytics
 
@@ -136,13 +146,14 @@ def _score_single_job(
     if not profile:
         return 0
     is_reloc = _compute_reloc(job, home_locations, home_regions) if home_locations else False
-    domain_override = (
-        get_domain_override(db_path, user_id, job.get("job_id", ""))
-        if user_id is not None else None
-    )
+    domain_override = get_domain_override(db_path, user_id, job.get("job_id", "")) if user_id is not None else None
     score = hybrid_score(
-        profile, parsed, job, is_reloc,
-        db_path=db_path, skill_lookup=skill_lookup,
+        profile,
+        parsed,
+        job,
+        is_reloc,
+        db_path=db_path,
+        skill_lookup=skill_lookup,
         domain_override=domain_override,
     )
     if is_reloc and score > 0:
@@ -197,7 +208,10 @@ def _score_and_tier_jobs(
             # No relocation penalty: v2 ingest stores score=0 (not NULL), so the
             # original ujs_score-is-None guard never fired for v2 jobs either.
             score = hybrid_score(
-                profile, job["_parsed_dict"], job, is_reloc,
+                profile,
+                job["_parsed_dict"],
+                job,
+                is_reloc,
                 technical_grade=job.get("ujs_technical_grade"),
                 profile_grade=job.get("ujs_profile_grade"),
                 db_path=_db_path(),
@@ -209,8 +223,13 @@ def _score_and_tier_jobs(
         else:
             # unscored: shared helper (includes relocation penalty)
             score = _score_single_job(
-                job, job["_parsed_dict"], profile, home_locations, home_regions,
-                user_id, _db_path(),
+                job,
+                job["_parsed_dict"],
+                profile,
+                home_locations,
+                home_regions,
+                user_id,
+                _db_path(),
             )
 
         job["score"] = score
@@ -265,9 +284,20 @@ def list_jobs(
 
     # Strip internal fields and post-process enriched fields for response
     _ENRICHED_FIELDS = (
-        "company_url", "company_logo", "company_industry", "company_size",
-        "job_level", "salary_min", "salary_max", "salary_currency",
-        "salary_interval", "salary_source", "country", "city", "remote_type", "sources",
+        "company_url",
+        "company_logo",
+        "company_industry",
+        "company_size",
+        "job_level",
+        "salary_min",
+        "salary_max",
+        "salary_currency",
+        "salary_interval",
+        "salary_source",
+        "country",
+        "city",
+        "remote_type",
+        "sources",
     )
     for job in jobs:
         job.pop("ujs_score", None)
@@ -327,7 +357,10 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
     if ujs and ujs.get("scored_v2") == 1 and profile:
         # v2: hybrid_score with actual LLM grades
         score = hybrid_score(
-            profile, row["parsed"] or {}, row, is_reloc,
+            profile,
+            row["parsed"] or {},
+            row,
+            is_reloc,
             technical_grade=ujs.get("technical_grade"),
             profile_grade=ujs.get("profile_grade"),
             db_path=_db_path(),
@@ -352,8 +385,13 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
     else:
         # unscored: shared helper (includes relocation penalty)
         row["score"] = _score_single_job(
-            row, row["parsed"] or {}, profile, home_locations, home_regions,
-            user["id"], _db_path(),
+            row,
+            row["parsed"] or {},
+            profile,
+            home_locations,
+            home_regions,
+            user["id"],
+            _db_path(),
         )
         row["tier"] = compute_tier(row["score"])
         row["scored"] = None
@@ -377,22 +415,37 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
         except (json.JSONDecodeError, TypeError):
             row["sources"] = []
     _ENRICHED_FIELDS = (
-        "company_url", "company_logo", "company_industry", "company_size",
-        "job_level", "salary_min", "salary_max", "salary_currency",
-        "salary_interval", "salary_source", "country", "city", "remote_type", "sources",
+        "company_url",
+        "company_logo",
+        "company_industry",
+        "company_size",
+        "job_level",
+        "salary_min",
+        "salary_max",
+        "salary_currency",
+        "salary_interval",
+        "salary_source",
+        "country",
+        "city",
+        "remote_type",
+        "sources",
     )
     for field in _ENRICHED_FIELDS:
         if row.get(field) is None:
             row.pop(field, None)
 
-    analytics.capture(user["id"], "job_viewed", {
-        "job_id": job_id,
-        "company": row.get("company"),
-        "domain": row.get("domain"),
-        "rag_score": ujs["score"] if ujs else None,
-        "heuristic_score": row["score"] if not ujs else None,
-        "tier": row.get("tier"),
-    })
+    analytics.capture(
+        user["id"],
+        "job_viewed",
+        {
+            "job_id": job_id,
+            "company": row.get("company"),
+            "domain": row.get("domain"),
+            "rag_score": ujs["score"] if ujs else None,
+            "heuristic_score": row["score"] if not ujs else None,
+            "tier": row.get("tier"),
+        },
+    )
     return row
 
 
@@ -407,10 +460,7 @@ def _compute_skill_matches(row: dict, user: dict) -> dict | None:
 
     parsed = row.get("parsed") or {}
     must_have = parsed.get("must_have_skills") or []
-    nice_to_have = list(set(
-        (parsed.get("nice_to_have_skills") or [])
-        + (parsed.get("technical_stack") or [])
-    ))
+    nice_to_have = list(set((parsed.get("nice_to_have_skills") or []) + (parsed.get("technical_stack") or [])))
 
     if not must_have and not nice_to_have:
         return None
@@ -449,13 +499,17 @@ def apply_job(job_id: str, payload: ApplyPayload, user: dict = Depends(get_curre
         raise HTTPException(status_code=404, detail="Job not found")
     set_job_applied(_db_path(), user["id"], job_id, payload.applied)
     ujs = get_user_job_score(_db_path(), user["id"], job_id)
-    analytics.capture(user["id"], "job_applied", {
-        "job_id": job_id,
-        "company": row.get("company"),
-        "domain": row.get("domain"),
-        "score": ujs["score"] if ujs else None,
-        "tier": ujs["tier"] if ujs else None,
-    })
+    analytics.capture(
+        user["id"],
+        "job_applied",
+        {
+            "job_id": job_id,
+            "company": row.get("company"),
+            "domain": row.get("domain"),
+            "score": ujs["score"] if ujs else None,
+            "tier": ujs["tier"] if ujs else None,
+        },
+    )
     return {"job_id": job_id, "applied": payload.applied}
 
 
@@ -466,13 +520,17 @@ def dismiss_job(job_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Job not found")
     set_job_dismissed(_db_path(), user["id"], job_id)
     ujs = get_user_job_score(_db_path(), user["id"], job_id)
-    analytics.capture(user["id"], "job_dismissed", {
-        "job_id": job_id,
-        "company": row.get("company"),
-        "domain": row.get("domain"),
-        "score": ujs["score"] if ujs else None,
-        "tier": ujs["tier"] if ujs else None,
-    })
+    analytics.capture(
+        user["id"],
+        "job_dismissed",
+        {
+            "job_id": job_id,
+            "company": row.get("company"),
+            "domain": row.get("domain"),
+            "score": ujs["score"] if ujs else None,
+            "tier": ujs["tier"] if ujs else None,
+        },
+    )
     return {"job_id": job_id, "dismissed": True}
 
 
@@ -498,11 +556,15 @@ def set_job_domain_override(
         raise HTTPException(status_code=422, detail=f"Invalid domain: {body.domain!r}")
     old_domain = get_domain_override(_db_path(), user["id"], job_id)
     set_domain_override(_db_path(), user["id"], job_id, body.domain)
-    analytics.capture(user["id"], "domain_overridden", {
-        "job_id": job_id,
-        "old_domain": old_domain,
-        "new_domain": body.domain,
-    })
+    analytics.capture(
+        user["id"],
+        "domain_overridden",
+        {
+            "job_id": job_id,
+            "old_domain": old_domain,
+            "new_domain": body.domain,
+        },
+    )
     return {"ok": True, "domain": body.domain}
 
 
@@ -577,16 +639,14 @@ def generate_cv_endpoint(
     build_docx(cv_markdown, tmp_path)
 
     audit_result = audit_docx(tmp_path)
-    ats_header = (
-        "pass"
-        if audit_result["passed"]
-        else f"fail:{len(audit_result['violations'])} violations"
-    )
+    ats_header = "pass" if audit_result["passed"] else f"fail:{len(audit_result['violations'])} violations"
 
-    cv_validation_header = json.dumps({
-        "passed": validation["passed"],
-        "warning_count": len(validation.get("warnings", [])),
-    })
+    cv_validation_header = json.dumps(
+        {
+            "passed": validation["passed"],
+            "warning_count": len(validation.get("warnings", [])),
+        }
+    )
 
     company_slug = _slugify(row.get("company", "company"))
     title_slug = _slugify(row.get("title", "cv"), max_len=20)
@@ -595,24 +655,29 @@ def generate_cv_endpoint(
     provider = os.environ.get("CV_LLM_PROVIDER", "anthropic")
     model = os.environ.get("CV_LLM_MODEL", "")
     background_tasks.add_task(lambda: Path(tmp_path).unlink(missing_ok=True))
-    background_tasks.add_task(analytics.capture, user["id"], "cv_generated", {
-        "job_id": job_id,
-        "company": row.get("company"),
-        "provider": provider,
-        "model": model,
-        "validation_passed": validation["passed"],
-        "fix_applied": fix_applied,
-        "ats_passed": audit_result["passed"],
-        "ats_violation_count": len(audit_result.get("violations", [])),
-    })
+    background_tasks.add_task(
+        analytics.capture,
+        user["id"],
+        "cv_generated",
+        {
+            "job_id": job_id,
+            "company": row.get("company"),
+            "provider": provider,
+            "model": model,
+            "validation_passed": validation["passed"],
+            "fix_applied": fix_applied,
+            "ats_passed": audit_result["passed"],
+            "ats_violation_count": len(audit_result.get("violations", [])),
+        },
+    )
 
     return FileResponse(
         path=tmp_path,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename=filename,
         headers={
-            "X-ATS-Audit":      ats_header,
-            "X-CV-Validation":  cv_validation_header,
+            "X-ATS-Audit": ats_header,
+            "X-CV-Validation": cv_validation_header,
             "X-CV-Fix-Applied": "true" if fix_applied else "false",
         },
     )

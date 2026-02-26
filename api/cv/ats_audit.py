@@ -9,6 +9,7 @@ Phase 6 additions:
   - Checks for bullet numbering (List style) → missing = VIOLATION "no_real_bullets"
   - Checks for at least 1 tab stop → missing = warning "no_tab_stops"
 """
+
 import re
 from docx import Document
 from docx.oxml.ns import qn
@@ -118,10 +119,7 @@ def audit_docx(path: str) -> dict:
 
         # Detect section headers: "Heading 2" style (Phase 5) OR exact text match
         # against required headers (Phase 6 uses Normal style with explicit formatting)
-        is_section_header = (
-            para.style.name == "Heading 2"
-            or stripped in _REQUIRED_HEADERS
-        )
+        is_section_header = para.style.name == "Heading 2" or stripped in _REQUIRED_HEADERS
         if is_section_header:
             section_count += 1
             for required in _REQUIRED_HEADERS:
@@ -164,9 +162,7 @@ def audit_docx(path: str) -> dict:
                     date_part.strip(),
                 ):
                     if re.search(r"\d{4}", date_part):
-                        violations.append(
-                            f"date_format: unexpected date format: {date_part[:40]}"
-                        )
+                        violations.append(f"date_format: unexpected date format: {date_part[:40]}")
 
     # 4. Missing required headers
     for required in _REQUIRED_HEADERS:
@@ -189,15 +185,13 @@ def audit_docx(path: str) -> dict:
     # no_context_lines → WARNING only
     if italic_count == 0:
         warnings.append(
-            "no_context_lines: no italic paragraphs found "
-            "(expected _role context lines_ under each company)"
+            "no_context_lines: no italic paragraphs found (expected _role context lines_ under each company)"
         )
 
     # no_tab_stops → WARNING only
     if tab_count == 0:
         warnings.append(
-            "no_tab_stops: no paragraphs with tab stops found "
-            "(expected right-aligned dates on company lines)"
+            "no_tab_stops: no paragraphs with tab stops found (expected right-aligned dates on company lines)"
         )
 
     # 6. Stats

@@ -11,6 +11,7 @@ block is automatically stripped by api.cv.llm.generate_cv().
 When cv_plan is None or empty, the function falls back to the legacy prompt
 format for backward compatibility.
 """
+
 import json
 import os
 from pathlib import Path
@@ -359,11 +360,7 @@ def build_cv_prompts(
 
     # ── Plan-aware path ───────────────────────────────────────────────────
     if cv_plan:
-        system_prompt = (
-            reference_content
-            + "\n\n" + _OUTPUT_CONTRACT
-            + "\n\n" + _PLAN_AWARE_RULES
-        )
+        system_prompt = reference_content + "\n\n" + _OUTPUT_CONTRACT + "\n\n" + _PLAN_AWARE_RULES
         user_prompt = _build_plan_aware_user_prompt(job, jd_text, cv_plan, user_cv_markdown)
         return system_prompt, user_prompt
 

@@ -16,15 +16,24 @@ def _reset_scorer():
 
 
 def _make_v2_response(technical_depth="A", profile_evidence="B"):
-    content = json.dumps({
-        "technical_depth": technical_depth,
-        "profile_evidence": profile_evidence,
-        "strengths": [{"claim": "Strong data platform experience", "evidence": "Led Kafka migration"}],
-        "gaps": [{"gap": "No Snowflake experience", "severity": "low", "category": "vendor-specific", "mitigation": "Easy to learn"}],
-        "deal_breakers": [],
-        "talking_points": ["Led cross-team data platform ownership at scale"],
-        "one_line_verdict": "Strong technical fit, minor skill gap in Snowflake",
-    })
+    content = json.dumps(
+        {
+            "technical_depth": technical_depth,
+            "profile_evidence": profile_evidence,
+            "strengths": [{"claim": "Strong data platform experience", "evidence": "Led Kafka migration"}],
+            "gaps": [
+                {
+                    "gap": "No Snowflake experience",
+                    "severity": "low",
+                    "category": "vendor-specific",
+                    "mitigation": "Easy to learn",
+                }
+            ],
+            "deal_breakers": [],
+            "talking_points": ["Led cross-team data platform ownership at scale"],
+            "one_line_verdict": "Strong technical fit, minor skill gap in Snowflake",
+        }
+    )
     mock_msg = MagicMock()
     mock_msg.content = content
     mock_choice = MagicMock()
@@ -36,15 +45,23 @@ def _make_v2_response(technical_depth="A", profile_evidence="B"):
 
 def _make_v1_response(score=75):
     """Legacy v1 response with top-level score."""
-    content = json.dumps({
-        "score": score,
-        "score_breakdown": {"domain_fit": 20, "seniority_fit": 18, "technical_depth": 17, "profile_evidence": 15, "strategic_impact": 5},
-        "strengths": [{"claim": "Good fit", "evidence": "5 years PM"}],
-        "gaps": [],
-        "deal_breakers": [],
-        "talking_points": ["Strong domain match"],
-        "one_line_verdict": "Good fit",
-    })
+    content = json.dumps(
+        {
+            "score": score,
+            "score_breakdown": {
+                "domain_fit": 20,
+                "seniority_fit": 18,
+                "technical_depth": 17,
+                "profile_evidence": 15,
+                "strategic_impact": 5,
+            },
+            "strengths": [{"claim": "Good fit", "evidence": "5 years PM"}],
+            "gaps": [],
+            "deal_breakers": [],
+            "talking_points": ["Strong domain match"],
+            "one_line_verdict": "Good fit",
+        }
+    )
     mock_msg = MagicMock()
     mock_msg.content = content
     mock_choice = MagicMock()
@@ -84,6 +101,7 @@ class TestScorerV2RubricPath:
     def test_build_scoring_prompt_uses_v2(self):
         """Generated prompt must contain v2 grade fields, not score_breakdown."""
         import copy
+
         prompt = scorer._build_scoring_prompt(copy.deepcopy(BASELINE_PROFILE))
         assert "technical_depth" in prompt
         assert "profile_evidence" in prompt
@@ -92,6 +110,7 @@ class TestScorerV2RubricPath:
     def test_build_scoring_prompt_has_no_score_integer(self):
         """v2 prompt must not instruct LLM to produce a top-level score integer."""
         import copy
+
         prompt = scorer._build_scoring_prompt(copy.deepcopy(BASELINE_PROFILE))
         assert '"score":' not in prompt
 
@@ -109,6 +128,7 @@ class TestScoreJobV2Output:
         mock_client.chat.completions.create.return_value = _make_v2_response("A", "B")
 
         import copy
+
         result = scorer.score_job(copy.deepcopy(JOB), MagicMock(), copy.deepcopy(BASELINE_PROFILE))
         assert result["rag_score"] is not None
         assert result["rag_score"]["technical_depth"] == "A"
@@ -124,6 +144,7 @@ class TestScoreJobV2Output:
         mock_client.chat.completions.create.return_value = _make_v2_response("B", "C")
 
         import copy
+
         result = scorer.score_job(copy.deepcopy(JOB), MagicMock(), copy.deepcopy(BASELINE_PROFILE))
         assert "score_breakdown" not in result["rag_score"]
 
@@ -137,6 +158,7 @@ class TestScoreJobV2Output:
         mock_client.chat.completions.create.return_value = _make_v2_response("A", "A")
 
         import copy
+
         result = scorer.score_job(copy.deepcopy(JOB), MagicMock(), copy.deepcopy(BASELINE_PROFILE))
         rs = result["rag_score"]
         assert "strengths" in rs
@@ -155,6 +177,7 @@ class TestScoreJobV2Output:
         mock_client.chat.completions.create.return_value = _make_v1_response(75)
 
         import copy
+
         result = scorer.score_job(copy.deepcopy(JOB), MagicMock(), copy.deepcopy(BASELINE_PROFILE))
         # Must not raise; rag_score dict is preserved as-is
         assert result["rag_score"] is not None
@@ -164,5 +187,6 @@ class TestScoreJobV2Output:
     def test_max_tokens_is_800(self):
         """scorer.py max_tokens must be 800 for v2 (shorter output)."""
         import inspect
+
         src = inspect.getsource(scorer.score_job)
         assert "max_tokens=800" in src

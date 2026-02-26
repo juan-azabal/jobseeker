@@ -11,6 +11,7 @@ def _connect(db_path: str) -> sqlite3.Connection:
 
 # ── Jobs (common data) ────────────────────────────────────────────────────
 
+
 def upsert_job(db_path: str, job: dict[str, Any]) -> None:
     # Ensure all expected keys are present (None for missing fields)
     defaults: dict[str, Any] = {
@@ -244,9 +245,14 @@ def cleanup_old_jobs(db_path: str, days: int = 90) -> int:
 
 # ── Per-user scores ───────────────────────────────────────────────────────
 
+
 def upsert_user_job_score(
-    db_path: str, user_id: int, job_id: str,
-    score: int, tier: str, scored_json: str | None,
+    db_path: str,
+    user_id: int,
+    job_id: str,
+    score: int,
+    tier: str,
+    scored_json: str | None,
     technical_grade: str | None = None,
     profile_grade: str | None = None,
     scored_v2: int = 0,
@@ -268,8 +274,7 @@ def upsert_user_job_score(
           profile_grade   = excluded.profile_grade,
           scored_v2       = excluded.scored_v2
         """,
-        (user_id, job_id, score, tier, scored_json, now,
-         technical_grade, profile_grade, scored_v2),
+        (user_id, job_id, score, tier, scored_json, now, technical_grade, profile_grade, scored_v2),
     )
     con.commit()
     con.close()
@@ -278,16 +283,12 @@ def upsert_user_job_score(
 def get_ingest_status(db_path: str) -> dict:
     """Return aggregate stats useful for monitoring pipeline health."""
     con = _connect(db_path)
-    row = con.execute(
-        "SELECT COUNT(*) AS total_jobs, MAX(ingested_at) AS last_ingested_at FROM jobs"
-    ).fetchone()
+    row = con.execute("SELECT COUNT(*) AS total_jobs, MAX(ingested_at) AS last_ingested_at FROM jobs").fetchone()
     scores_row = con.execute(
         "SELECT COUNT(DISTINCT user_id) AS scored_profiles, COUNT(*) AS total_scored FROM user_job_scores"
     ).fetchone()
     cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).date().isoformat()
-    old_row = con.execute(
-        "SELECT COUNT(*) AS old_jobs FROM jobs WHERE last_seen < ?", (cutoff,)
-    ).fetchone()
+    old_row = con.execute("SELECT COUNT(*) AS old_jobs FROM jobs WHERE last_seen < ?", (cutoff,)).fetchone()
     con.close()
     return {
         "total_jobs": row["total_jobs"],
@@ -300,14 +301,13 @@ def get_ingest_status(db_path: str) -> dict:
 
 def get_user_id_by_profile_id(db_path: str, profile_id: str) -> int | None:
     con = _connect(db_path)
-    row = con.execute(
-        "SELECT id FROM users WHERE profile_id = ?", (profile_id,)
-    ).fetchone()
+    row = con.execute("SELECT id FROM users WHERE profile_id = ?", (profile_id,)).fetchone()
     con.close()
     return row["id"] if row else None
 
 
 # ── User status ───────────────────────────────────────────────────────────
+
 
 def set_domain_override(db_path: str, user_id: int, job_id: str, domain: str | None) -> None:
     """Set or clear the per-user domain override for a job.
@@ -387,6 +387,7 @@ def set_job_applied(db_path: str, user_id: int, job_id: str, applied: bool) -> N
 
 # ── Users ─────────────────────────────────────────────────────────────────
 
+
 def get_user_by_google_id(db_path: str, google_id: str) -> dict | None:
     con = _connect(db_path)
     row = con.execute("SELECT * FROM users WHERE google_id = ?", (google_id,)).fetchone()
@@ -433,6 +434,7 @@ def upsert_user(db_path: str, user: dict[str, Any]) -> dict:
 
 
 # ── Sessions ──────────────────────────────────────────────────────────────
+
 
 def create_session(db_path: str, token: str, user_id: int, expires_at: str) -> None:
     con = _connect(db_path)
@@ -567,6 +569,7 @@ def get_profile_yaml_by_profile_id(db_path: str, profile_id: str) -> str | None:
 
 # ── Skill embeddings cache ────────────────────────────────────────────────
 
+
 def get_cached_embeddings(db_path: str, skills: list[str]) -> dict[str, list[float]]:
     """Bulk fetch cached embeddings from skill_embeddings table."""
     import json as _json
@@ -576,8 +579,7 @@ def get_cached_embeddings(db_path: str, skills: list[str]) -> dict[str, list[flo
     con = _connect(db_path)
     placeholders = ",".join("?" for _ in skills)
     rows = con.execute(
-        f"SELECT skill_text, embedding FROM skill_embeddings "
-        f"WHERE skill_text IN ({placeholders}) AND model = ?",
+        f"SELECT skill_text, embedding FROM skill_embeddings WHERE skill_text IN ({placeholders}) AND model = ?",
         skills + ["text-embedding-3-small"],
     ).fetchall()
     con.close()
@@ -590,8 +592,7 @@ def save_embedding(db_path: str, skill_text: str, embedding: list[float], model:
 
     con = _connect(db_path)
     con.execute(
-        "INSERT OR REPLACE INTO skill_embeddings (skill_text, model, embedding) "
-        "VALUES (?, ?, ?)",
+        "INSERT OR REPLACE INTO skill_embeddings (skill_text, model, embedding) VALUES (?, ?, ?)",
         (skill_text, model, _json.dumps(embedding)),
     )
     con.commit()
@@ -606,8 +607,7 @@ def save_embeddings_batch(db_path: str, items: list[tuple[str, list[float], str]
         return
     con = _connect(db_path)
     con.executemany(
-        "INSERT OR REPLACE INTO skill_embeddings (skill_text, model, embedding) "
-        "VALUES (?, ?, ?)",
+        "INSERT OR REPLACE INTO skill_embeddings (skill_text, model, embedding) VALUES (?, ?, ?)",
         [(text, model, _json.dumps(emb)) for text, emb, model in items],
     )
     con.commit()
@@ -629,6 +629,7 @@ def reset_user_onboarding(db_path: str, user_id: int) -> None:
 
 
 # ── Domain reparse ────────────────────────────────────────────────────────
+
 
 def get_other_domain_jobs(db_path: str) -> list[dict]:
     """Return all jobs where the parsed domain is 'other' or NULL.
@@ -662,6 +663,7 @@ def update_job_domain(db_path: str, job_id: str, domain: str) -> None:
 
 # ── Domain correction analytics ───────────────────────────────────────────
 
+
 def get_domain_corrections(db_path: str) -> list[dict]:
     """Aggregate user domain corrections: cases where user override != parsed domain.
 
@@ -683,7 +685,4 @@ def get_domain_corrections(db_path: str) -> list[dict]:
         """
     ).fetchall()
     con.close()
-    return [
-        {"from": row["parsed_domain"], "to": row["domain_override"], "count": row["cnt"]}
-        for row in rows
-    ]
+    return [{"from": row["parsed_domain"], "to": row["domain_override"], "count": row["cnt"]} for row in rows]

@@ -112,6 +112,7 @@ def matches_region(text: str, region_pattern: re.Pattern | None) -> bool:
 # Timezone abbreviations (derived from pytz at import time)
 # ---------------------------------------------------------------------------
 
+
 def _build_tz_abbreviations() -> frozenset[str]:
     """Extract all timezone abbreviations from pytz (winter + summer variants)."""
     abbrevs: set[str] = set()
@@ -151,6 +152,7 @@ def is_pure_timezone(restriction: str) -> bool:
 # ---------------------------------------------------------------------------
 # Location → language mapping (powered by babel + country-converter)
 # ---------------------------------------------------------------------------
+
 
 def location_to_languages(location_text: str) -> list[str]:
     """Return official language names for a job location string.

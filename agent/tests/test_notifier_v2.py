@@ -15,11 +15,11 @@ from notifier import _build_context
 
 # Minimal globals that _heuristic_score needs to function without a real profile.
 _PATCH_MAIN = {
-    "_DOMAIN_SCORES":    {"saas": 10, "data": 15},
+    "_DOMAIN_SCORES": {"saas": 10, "data": 15},
     "_SENIORITY_SCORES": {"principal": 15, "senior": 8},
-    "_PROFILE_SKILLS":   ["analytics", "kafka"],
-    "_HOME_LOCATIONS":   ["barcelona"],
-    "_HOME_REGIONS":     [],
+    "_PROFILE_SKILLS": ["analytics", "kafka"],
+    "_HOME_LOCATIONS": ["barcelona"],
+    "_HOME_REGIONS": [],
 }
 
 

@@ -66,9 +66,7 @@ def _run_scraper_with_mock(mock_df, search_config=None):
         "is_remote": False,
         "searches": [{"term": "PM", "sites": ["indeed"]}],
     }
-    with patch("scraper.scrape_jobs", return_value=mock_df), patch(
-        "scraper.load_search_config", return_value=config
-    ):
+    with patch("scraper.scrape_jobs", return_value=mock_df), patch("scraper.load_search_config", return_value=config):
         return run_scraper()
 
 

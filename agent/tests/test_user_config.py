@@ -52,12 +52,8 @@ class TestListProfiles:
         assert list_profiles("/nonexistent/path") == []
 
     def test_active_only_filters_inactive(self, tmp_path):
-        (tmp_path / "alice.yaml").write_text(
-            "user:\n  name: Alice\n  active: true\n"
-        )
-        (tmp_path / "bob.yaml").write_text(
-            "user:\n  name: Bob\n  active: false\n"
-        )
+        (tmp_path / "alice.yaml").write_text("user:\n  name: Alice\n  active: true\n")
+        (tmp_path / "bob.yaml").write_text("user:\n  name: Bob\n  active: false\n")
         load_profile.cache_clear()
         active = list_profiles(str(tmp_path), active_only=True)
         assert active == ["alice"]
@@ -76,9 +72,7 @@ class TestListProfiles:
 
 class TestLoadProfile:
     def test_loads_valid_profile(self, tmp_path):
-        (tmp_path / "test.yaml").write_text(
-            "user:\n  name: Test\nskills:\n  - python\n"
-        )
+        (tmp_path / "test.yaml").write_text("user:\n  name: Test\nskills:\n  - python\n")
         load_profile.cache_clear()
         profile = load_profile("test", str(tmp_path))
         assert profile["user"]["name"] == "Test"

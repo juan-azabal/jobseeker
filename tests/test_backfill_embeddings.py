@@ -36,15 +36,30 @@ class TestBackfillScript:
         conn.execute(
             "INSERT INTO jobs (job_id, title, company, location, url, parsed, first_seen, last_seen, ingested_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("j1", "PM", "Co", "NYC", "http://x", json.dumps({
-                "must_have_skills": ["Python", "SQL"],
-                "nice_to_have_skills": ["Docker"],
-            }), "2024-01-01", "2024-01-01", "2024-01-01"),
+            (
+                "j1",
+                "PM",
+                "Co",
+                "NYC",
+                "http://x",
+                json.dumps(
+                    {
+                        "must_have_skills": ["Python", "SQL"],
+                        "nice_to_have_skills": ["Docker"],
+                    }
+                ),
+                "2024-01-01",
+                "2024-01-01",
+                "2024-01-01",
+            ),
         )
         conn.commit()
         conn.close()
 
-        with patch("scripts.backfill_embeddings.get_embeddings_batch", return_value={"python": [0.1], "sql": [0.2], "docker": [0.3]}) as mock_batch:
+        with patch(
+            "scripts.backfill_embeddings.get_embeddings_batch",
+            return_value={"python": [0.1], "sql": [0.2], "docker": [0.3]},
+        ) as mock_batch:
             result = backfill(db)
 
         assert result["total"] == 3
@@ -66,7 +81,9 @@ class TestBackfillScript:
         conn.commit()
         conn.close()
 
-        with patch("scripts.backfill_embeddings.get_embeddings_batch", return_value={"analytics": [0.1], "python": [0.2]}) as mock_batch:
+        with patch(
+            "scripts.backfill_embeddings.get_embeddings_batch", return_value={"analytics": [0.1], "python": [0.2]}
+        ) as mock_batch:
             result = backfill(db)
 
         assert result["total"] == 2
@@ -84,9 +101,21 @@ class TestBackfillScript:
         conn.execute(
             "INSERT INTO jobs (job_id, title, company, location, url, parsed, first_seen, last_seen, ingested_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("j1", "PM", "Co", "NYC", "http://x", json.dumps({
-                "must_have_skills": ["Python"],
-            }), "2024-01-01", "2024-01-01", "2024-01-01"),
+            (
+                "j1",
+                "PM",
+                "Co",
+                "NYC",
+                "http://x",
+                json.dumps(
+                    {
+                        "must_have_skills": ["Python"],
+                    }
+                ),
+                "2024-01-01",
+                "2024-01-01",
+                "2024-01-01",
+            ),
         )
         conn.commit()
         conn.close()
@@ -102,18 +131,20 @@ class TestIngestEmbeddingPrecompute:
         """Ingest calls get_embeddings_batch for new job skills."""
         from api.ingest import ingest_from_list
 
-        raw_jobs = [{
-            "id": "j1",
-            "title": "PM",
-            "company": "Co",
-            "location": "NYC",
-            "job_url": "http://x",
-            "date_posted": "2024-01-01",
-            "parsed": {
-                "must_have_skills": ["Python", "SQL"],
-                "nice_to_have_skills": ["Docker"],
-            },
-        }]
+        raw_jobs = [
+            {
+                "id": "j1",
+                "title": "PM",
+                "company": "Co",
+                "location": "NYC",
+                "job_url": "http://x",
+                "date_posted": "2024-01-01",
+                "parsed": {
+                    "must_have_skills": ["Python", "SQL"],
+                    "nice_to_have_skills": ["Docker"],
+                },
+            }
+        ]
 
         with patch("api.embeddings.get_embeddings_batch") as mock_batch:
             ingest_from_list(db, raw_jobs)
@@ -126,15 +157,17 @@ class TestIngestEmbeddingPrecompute:
         """Embedding precompute failure doesn't break ingest."""
         from api.ingest import ingest_from_list
 
-        raw_jobs = [{
-            "id": "j1",
-            "title": "PM",
-            "company": "Co",
-            "location": "NYC",
-            "job_url": "http://x",
-            "date_posted": "2024-01-01",
-            "parsed": {"must_have_skills": ["Python"]},
-        }]
+        raw_jobs = [
+            {
+                "id": "j1",
+                "title": "PM",
+                "company": "Co",
+                "location": "NYC",
+                "job_url": "http://x",
+                "date_posted": "2024-01-01",
+                "parsed": {"must_have_skills": ["Python"]},
+            }
+        ]
 
         with patch("api.ingest._precompute_skill_embeddings", side_effect=Exception("boom")):
             # Should not raise

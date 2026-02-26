@@ -10,14 +10,22 @@ PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 SCHEMAS_DIR = Path(__file__).parent.parent / "schemas"
 
 VALID_ROLE_FUNCTIONS = {
-    "product", "engineering", "design", "data",
-    "marketing", "sales", "ops", "support", "other",
+    "product",
+    "engineering",
+    "design",
+    "data",
+    "marketing",
+    "sales",
+    "ops",
+    "support",
+    "other",
 }
 
 
 # ---------------------------------------------------------------------------
 # 17.1.1 — role_function field in prompt and schema
 # ---------------------------------------------------------------------------
+
 
 class TestRoleFunctionInPrompt:
     def test_parser_prompt_contains_role_function_field(self):
@@ -52,25 +60,27 @@ class TestRoleFunctionInPrompt:
 class TestParseJdRoleFunction:
     def _make_llm_response(self, role_function="product"):
         """Build a minimal mock LLM response with role_function."""
-        content = json.dumps({
-            "seniority": "senior",
-            "years_experience_min": 5,
-            "years_experience_max": None,
-            "location_type": "remote",
-            "locations_mentioned": [],
-            "must_have_skills": ["Python"],
-            "nice_to_have_skills": [],
-            "technical_stack": ["Python"],
-            "experience_requirements": [],
-            "domain": "saas",
-            "responsibilities_summary": "Lead product.",
-            "team_size_hints": None,
-            "salary_mentioned": None,
-            "remote_restriction": None,
-            "red_flags": [],
-            "key_phrases": ["product-led growth"],
-            "role_function": role_function,
-        })
+        content = json.dumps(
+            {
+                "seniority": "senior",
+                "years_experience_min": 5,
+                "years_experience_max": None,
+                "location_type": "remote",
+                "locations_mentioned": [],
+                "must_have_skills": ["Python"],
+                "nice_to_have_skills": [],
+                "technical_stack": ["Python"],
+                "experience_requirements": [],
+                "domain": "saas",
+                "responsibilities_summary": "Lead product.",
+                "team_size_hints": None,
+                "salary_mentioned": None,
+                "remote_restriction": None,
+                "red_flags": [],
+                "key_phrases": ["product-led growth"],
+                "role_function": role_function,
+            }
+        )
         mock_msg = MagicMock()
         mock_msg.content = content
         mock_choice = MagicMock()
@@ -86,6 +96,7 @@ class TestParseJdRoleFunction:
         """parse_jd must store role_function from LLM response."""
         from parser import parse_jd, _PARSER_PROMPT_CACHE  # noqa: F401
         import parser as parser_mod
+
         # Reset cache so fresh prompt is loaded
         parser_mod._PARSER_PROMPT_CACHE = None
 
@@ -109,6 +120,7 @@ class TestParseJdRoleFunction:
         """parse_jd gracefully handles LLM response without role_function (backward compat)."""
         from parser import parse_jd  # noqa: F811
         import parser as parser_mod
+
         parser_mod._PARSER_PROMPT_CACHE = None
 
         response = self._make_llm_response("product")

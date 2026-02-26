@@ -1,4 +1,5 @@
 """Tests for POST /api/jobs/{id}/generate-cv endpoint."""
+
 import json
 import pytest
 from unittest.mock import patch
@@ -52,17 +53,17 @@ JOB_WITH_JD = {
     "domain": "data",
     "score": 75,
     "tier": "A",
-    "parsed": json.dumps({
-        "description": "We are looking for a Senior PM to drive data platform growth."
-    }),
-    "scored": json.dumps({
-        "rag_score": {
-            "total": 75,
-            "breakdown": {"domain_fit": 20},
-            "strengths": ["Data background"],
-            "gaps": [],
+    "parsed": json.dumps({"description": "We are looking for a Senior PM to drive data platform growth."}),
+    "scored": json.dumps(
+        {
+            "rag_score": {
+                "total": 75,
+                "breakdown": {"domain_fit": 20},
+                "strengths": ["Data background"],
+                "gaps": [],
+            }
         }
-    }),
+    ),
     "first_seen": "2026-02-23",
     "last_seen": "2026-02-23",
     "ingested_at": "2026-02-23T10:00:00",
@@ -101,10 +102,16 @@ def authed_client(tmp_path, monkeypatch):
     for name in ["generate-cv.md", "ats-rules.md", "master-cv-profile.md", "master-cv-experience.md"]:
         (refs / name).write_text(f"# {name}\nReference content for {name}.")
 
-    user = upsert_user(db_path, {
-        "google_id": "g_cv", "email": "cv@test.com",
-        "name": "CV Tester", "avatar_url": None, "profile_id": None,
-    })
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": "g_cv",
+            "email": "cv@test.com",
+            "name": "CV Tester",
+            "avatar_url": None,
+            "profile_id": None,
+        },
+    )
     create_session(db_path, "cv_tok", user["id"], "2099-01-01T00:00:00")
     c = TestClient(app)
     c.cookies.set("jsk", "cv_tok")
@@ -179,15 +186,14 @@ def test_generate_cv_llm_failure_returns_500(authed_client):
 
 # ── Plan-driven pipeline headers (Step 6.6) ──────────────────────────────
 
+
 def test_generate_cv_returns_cv_validation_header(authed_client):
     """Response includes X-CV-Validation header with passed and warning_count."""
     with patch("api.cv.llm.generate_cv", return_value=MOCK_CV_MARKDOWN):
         resp = authed_client.post("/api/jobs/cv_test_1/generate-cv")
 
     assert resp.status_code == 200
-    assert "x-cv-validation" in resp.headers, (
-        "Response must include X-CV-Validation header"
-    )
+    assert "x-cv-validation" in resp.headers, "Response must include X-CV-Validation header"
     validation = json.loads(resp.headers["x-cv-validation"])
     assert "passed" in validation
     assert "warning_count" in validation
@@ -224,14 +230,14 @@ def test_generate_cv_fix_applied_when_first_validation_fails(authed_client):
         call_count += 1
         return result
 
-    with patch("api.cv.llm.generate_cv", return_value=MOCK_CV_MARKDOWN), \
-         patch("api.cv.validator.validate_cv", side_effect=mock_validate):
+    with (
+        patch("api.cv.llm.generate_cv", return_value=MOCK_CV_MARKDOWN),
+        patch("api.cv.validator.validate_cv", side_effect=mock_validate),
+    ):
         resp = authed_client.post("/api/jobs/cv_test_1/generate-cv")
 
     assert resp.status_code == 200
-    assert resp.headers.get("x-cv-fix-applied") == "true", (
-        "X-CV-Fix-Applied must be 'true' when fix call was triggered"
-    )
+    assert resp.headers.get("x-cv-fix-applied") == "true", "X-CV-Fix-Applied must be 'true' when fix call was triggered"
 
 
 def test_generate_cv_llm_called_twice_when_fix_needed(authed_client):
@@ -248,25 +254,24 @@ def test_generate_cv_llm_called_twice_when_fix_needed(authed_client):
         call_count += 1
         return result
 
-    with patch("api.cv.llm.generate_cv", return_value=MOCK_CV_MARKDOWN) as mock_llm, \
-         patch("api.cv.validator.validate_cv", side_effect=mock_validate):
+    with (
+        patch("api.cv.llm.generate_cv", return_value=MOCK_CV_MARKDOWN) as mock_llm,
+        patch("api.cv.validator.validate_cv", side_effect=mock_validate),
+    ):
         resp = authed_client.post("/api/jobs/cv_test_1/generate-cv")
 
     assert resp.status_code == 200
-    assert mock_llm.call_count == 2, (
-        f"Expected 2 LLM calls (initial + fix), got {mock_llm.call_count}"
-    )
+    assert mock_llm.call_count == 2, f"Expected 2 LLM calls (initial + fix), got {mock_llm.call_count}"
 
 
 def test_generate_cv_fix_not_applied_when_validation_passes(authed_client):
     """When validation passes immediately, only one LLM call is made."""
-    with patch("api.cv.llm.generate_cv", return_value=MOCK_CV_MARKDOWN) as mock_llm, \
-         patch("api.cv.validator.validate_cv",
-               return_value={"passed": True, "errors": [], "warnings": []}):
+    with (
+        patch("api.cv.llm.generate_cv", return_value=MOCK_CV_MARKDOWN) as mock_llm,
+        patch("api.cv.validator.validate_cv", return_value={"passed": True, "errors": [], "warnings": []}),
+    ):
         resp = authed_client.post("/api/jobs/cv_test_1/generate-cv")
 
     assert resp.status_code == 200
-    assert mock_llm.call_count == 1, (
-        f"Expected 1 LLM call (no fix needed), got {mock_llm.call_count}"
-    )
+    assert mock_llm.call_count == 1, f"Expected 1 LLM call (no fix needed), got {mock_llm.call_count}"
     assert resp.headers.get("x-cv-fix-applied") == "false"

@@ -1,4 +1,5 @@
 """Tests for api/cv/llm.py — LLM abstraction layer."""
+
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -16,6 +17,7 @@ def test_anthropic_provider_calls_correct_client(monkeypatch):
 
     import importlib
     import api.cv.llm as llm_module
+
     importlib.reload(llm_module)  # reset singleton so patch takes effect
 
     with patch("posthog.ai.anthropic.Anthropic", return_value=mock_client):
@@ -46,6 +48,7 @@ def test_openai_provider_calls_correct_client(monkeypatch):
         # Re-import to pick up new env var
         import importlib
         import api.cv.llm as llm_module
+
         importlib.reload(llm_module)  # reset singleton so patch takes effect
         result = llm_module.generate_cv("system prompt", "user prompt")
 
@@ -62,6 +65,7 @@ def test_invalid_provider_raises_value_error(monkeypatch):
 
     import importlib
     import api.cv.llm as llm_module
+
     importlib.reload(llm_module)
 
     with pytest.raises(ValueError, match="fakeai"):
@@ -75,6 +79,7 @@ def test_missing_anthropic_api_key_raises_runtime_error(monkeypatch):
 
     import importlib
     import api.cv.llm as llm_module
+
     importlib.reload(llm_module)
 
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
@@ -88,6 +93,7 @@ def test_missing_openai_api_key_raises_runtime_error(monkeypatch):
 
     import importlib
     import api.cv.llm as llm_module
+
     importlib.reload(llm_module)
 
     with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
@@ -108,6 +114,7 @@ def test_cv_llm_model_override_anthropic(monkeypatch):
     with patch("posthog.ai.anthropic.Anthropic", return_value=mock_client):
         import importlib
         import api.cv.llm as llm_module
+
         importlib.reload(llm_module)  # reset singleton so patch takes effect
         llm_module.generate_cv("sys", "usr")
 
@@ -130,6 +137,7 @@ def test_cv_llm_model_override_openai(monkeypatch):
     with patch("posthog.ai.openai.OpenAI", return_value=mock_client):
         import importlib
         import api.cv.llm as llm_module
+
         importlib.reload(llm_module)  # reset singleton so patch takes effect
         llm_module.generate_cv("sys", "usr")
 
@@ -161,11 +169,10 @@ _Global data platform team, 5 engineers._
 def test_strip_analysis_removes_block():
     """<analysis>...</analysis> block is removed, returning clean CV markdown."""
     from api.cv.llm import strip_analysis
+
     raw = f"<analysis>\nSummary angle: emphasize consulting.\n</analysis>\n\n{_CV_SAMPLE}"
     result = strip_analysis(raw)
-    assert result.startswith("# John Doe"), (
-        f"Expected output to start with '# John Doe', got: {result[:80]!r}"
-    )
+    assert result.startswith("# John Doe"), f"Expected output to start with '# John Doe', got: {result[:80]!r}"
     assert "<analysis>" not in result
     assert "</analysis>" not in result
 
@@ -173,6 +180,7 @@ def test_strip_analysis_removes_block():
 def test_strip_analysis_noop_when_no_block():
     """strip_analysis is a no-op when there is no <analysis> block."""
     from api.cv.llm import strip_analysis
+
     result = strip_analysis(_CV_SAMPLE)
     assert result.strip() == _CV_SAMPLE.strip()
 
@@ -180,6 +188,7 @@ def test_strip_analysis_noop_when_no_block():
 def test_strip_analysis_handles_multiline_block():
     """Multi-line <analysis> block is fully stripped."""
     from api.cv.llm import strip_analysis
+
     analysis = (
         "<analysis>\n"
         "Line 1: Summary angle.\n"
@@ -198,6 +207,7 @@ def test_strip_analysis_handles_multiline_block():
 def test_strip_analysis_handles_leading_whitespace():
     """Strips any blank lines between </analysis> and the CV start."""
     from api.cv.llm import strip_analysis
+
     raw = "<analysis>short</analysis>\n\n\n\n# Jane Smith\nSenior PM\n"
     result = strip_analysis(raw)
     assert result.startswith("# Jane Smith")
@@ -206,6 +216,7 @@ def test_strip_analysis_handles_leading_whitespace():
 def test_strip_analysis_preserves_cv_content_exactly():
     """CV content after the analysis block is preserved."""
     from api.cv.llm import strip_analysis
+
     raw = "<analysis>abc</analysis>\n" + _CV_SAMPLE
     result = strip_analysis(raw)
     assert "Snowplow tracking pipeline" in result
@@ -219,8 +230,7 @@ def test_generate_cv_strips_analysis_automatically(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
     raw_with_analysis = (
-        "<analysis>\nSome reasoning here.\n</analysis>\n\n"
-        "# John Doe\nSenior PM\n## Summary\nExperienced PM."
+        "<analysis>\nSome reasoning here.\n</analysis>\n\n# John Doe\nSenior PM\n## Summary\nExperienced PM."
     )
     mock_response = MagicMock()
     mock_response.content = [MagicMock(text=raw_with_analysis)]
@@ -230,6 +240,7 @@ def test_generate_cv_strips_analysis_automatically(monkeypatch):
     with patch("posthog.ai.anthropic.Anthropic", return_value=mock_client):
         import importlib
         import api.cv.llm as llm_module
+
         importlib.reload(llm_module)  # reset singleton so patch takes effect
         result = llm_module.generate_cv("system", "user")
 

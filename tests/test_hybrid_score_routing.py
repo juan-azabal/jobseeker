@@ -38,24 +38,20 @@ class TestV2ScoreUsesGrades:
     """When ujs_scored_v2=1, score uses hybrid_score with actual grades."""
 
     def test_v2_a_a_higher_than_v2_c_c(self):
-        score_aa = hybrid_score(_PROFILE, _PARSED, _JOB, False,
-                                technical_grade="A", profile_grade="A")
-        score_cc = hybrid_score(_PROFILE, _PARSED, _JOB, False,
-                                technical_grade="C", profile_grade="C")
+        score_aa = hybrid_score(_PROFILE, _PARSED, _JOB, False, technical_grade="A", profile_grade="A")
+        score_cc = hybrid_score(_PROFILE, _PARSED, _JOB, False, technical_grade="C", profile_grade="C")
         assert score_aa > score_cc
 
     def test_v2_grade_a_a_adds_40(self):
         det = heuristic_score(_PROFILE, _PARSED, _JOB, False)
         expected = min(100, det + GRADE_POINTS["A"] + GRADE_POINTS["A"])
-        actual = hybrid_score(_PROFILE, _PARSED, _JOB, False,
-                              technical_grade="A", profile_grade="A")
+        actual = hybrid_score(_PROFILE, _PARSED, _JOB, False, technical_grade="A", profile_grade="A")
         assert actual == expected
 
     def test_v2_grade_c_c_adds_10(self):
         det = heuristic_score(_PROFILE, _PARSED, _JOB, False)
         expected = min(100, det + GRADE_POINTS["C"] + GRADE_POINTS["C"])
-        actual = hybrid_score(_PROFILE, _PARSED, _JOB, False,
-                              technical_grade="C", profile_grade="C")
+        actual = hybrid_score(_PROFILE, _PARSED, _JOB, False, technical_grade="C", profile_grade="C")
         assert actual == expected
 
 
@@ -69,8 +65,7 @@ class TestUnscoredUsesHybridDefaults:
 
     def test_unscored_same_as_hybrid_none_grades(self):
         score_unscored = hybrid_score(_PROFILE, _PARSED, _JOB, False)
-        score_explicit_none = hybrid_score(_PROFILE, _PARSED, _JOB, False,
-                                           technical_grade=None, profile_grade=None)
+        score_explicit_none = hybrid_score(_PROFILE, _PARSED, _JOB, False, technical_grade=None, profile_grade=None)
         assert score_unscored == score_explicit_none
 
 

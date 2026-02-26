@@ -16,6 +16,7 @@ from models import RawJob
 
 # ── Greenhouse ──────────────────────────────────────────────────────────────
 
+
 def _make_greenhouse_job(**overrides):
     base = {
         "title": "Senior Product Manager",
@@ -42,7 +43,6 @@ def _run_greenhouse(job_data, company_name="Acme Corp", title_patterns=None):
 
 
 class TestGreenhouseReturnsRawJob:
-
     def test_returns_list_of_raw_job(self):
         jobs = _run_greenhouse(_make_greenhouse_job())
         assert len(jobs) == 1
@@ -89,6 +89,7 @@ class TestGreenhouseReturnsRawJob:
 
 # ── Lever ────────────────────────────────────────────────────────────────────
 
+
 def _make_lever_job(**overrides):
     base = {
         "text": "Head of Product",
@@ -119,7 +120,6 @@ def _run_lever(job_data, company_name="Acme Corp", title_patterns=None):
 
 
 class TestLeverReturnsRawJob:
-
     def test_returns_list_of_raw_job(self):
         jobs = _run_lever(_make_lever_job())
         assert len(jobs) == 1
@@ -153,6 +153,7 @@ class TestLeverReturnsRawJob:
 
 # ── Ashby ────────────────────────────────────────────────────────────────────
 
+
 def _make_ashby_job(**overrides):
     base = {
         "title": "Principal Product Manager",
@@ -181,7 +182,6 @@ def _run_ashby(job_data, company_name="Acme Corp", title_patterns=None):
 
 
 class TestAshbyReturnsRawJob:
-
     def test_returns_list_of_raw_job(self):
         jobs = _run_ashby(_make_ashby_job())
         assert len(jobs) == 1

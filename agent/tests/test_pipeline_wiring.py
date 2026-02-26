@@ -25,6 +25,7 @@ class TestToDicts:
 
     def test_returns_list_of_dicts(self):
         from main import _to_dicts
+
         jobs = [_make_raw_job()]
         result = _to_dicts(jobs)
         assert isinstance(result, list)
@@ -32,6 +33,7 @@ class TestToDicts:
 
     def test_required_fields_present(self):
         from main import _to_dicts
+
         result = _to_dicts([_make_raw_job()])[0]
         assert result["id"] == "abc123def456"
         assert result["title"] == "Senior PM"
@@ -40,6 +42,7 @@ class TestToDicts:
     def test_is_remote_bool_in_dict(self):
         """is_remote must be a bool in the output dict (prefilter uses it)."""
         from main import _to_dicts
+
         job = _make_raw_job(remote_type="fulltime")
         result = _to_dicts([job])[0]
         assert result["is_remote"] is True
@@ -51,6 +54,7 @@ class TestToDicts:
     def test_none_fields_preserved(self):
         """Optional fields with None are preserved as None (not omitted)."""
         from main import _to_dicts
+
         job = _make_raw_job(location=None, description=None)
         result = _to_dicts([job])[0]
         assert "location" in result
@@ -59,6 +63,7 @@ class TestToDicts:
     def test_structured_fields_preserved(self):
         """Structured WTTJ fields (locations_structured, experience_min) are in dict."""
         from main import _to_dicts
+
         job = _make_raw_job(
             source="wttj",
             remote_type="partial",
@@ -76,16 +81,19 @@ class TestToDicts:
     def test_departments_preserved(self):
         """ATS departments list is preserved."""
         from main import _to_dicts
+
         job = _make_raw_job(source="greenhouse", departments=["Product"])
         result = _to_dicts([job])[0]
         assert result["departments"] == ["Product"]
 
     def test_empty_list(self):
         from main import _to_dicts
+
         assert _to_dicts([]) == []
 
     def test_multiple_jobs(self):
         from main import _to_dicts
+
         jobs = [
             _make_raw_job(id="aaa", title="PM 1"),
             _make_raw_job(id="bbb", title="PM 2"),

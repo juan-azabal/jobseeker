@@ -11,8 +11,8 @@ Usage:
         fix_system, fix_user = build_fix_prompt(generated_markdown, result["errors"])
         fixed_markdown = generate_cv(fix_system, fix_user)
 """
+
 import re
-from typing import Any
 
 # ── Slop blacklist ────────────────────────────────────────────────────────
 
@@ -32,14 +32,20 @@ _SLOP_PHRASES: list[str] = [
 
 # Consulting signals (any one of these in Summary → no_consulting_mention is clear)
 _CONSULTING_SIGNALS: list[str] = [
-    "consulting", "consultant", "client", "embedded", "adapt",
-    "multiple environments", "different environments",
+    "consulting",
+    "consultant",
+    "client",
+    "embedded",
+    "adapt",
+    "multiple environments",
+    "different environments",
 ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Public API
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 def validate_cv(generated_markdown: str, cv_plan: dict) -> dict:
     """Validate the generated CV markdown against plan source facts.
@@ -62,8 +68,8 @@ def validate_cv(generated_markdown: str, cv_plan: dict) -> dict:
     bullet_allocation: dict = {}
 
     if cv_plan:
-        source_facts     = cv_plan.get("source_facts", {}) or {}
-        jd_context       = cv_plan.get("jd_context", {}) or {}
+        source_facts = cv_plan.get("source_facts", {}) or {}
+        jd_context = cv_plan.get("jd_context", {}) or {}
         bullet_allocation = cv_plan.get("bullet_allocation", {}) or {}
 
     text = generated_markdown or ""
@@ -107,8 +113,8 @@ def validate_cv(generated_markdown: str, cv_plan: dict) -> dict:
     warnings.extend(_check_gerund_starts(text))
 
     return {
-        "passed":   len(errors) == 0,
-        "errors":   errors,
+        "passed": len(errors) == 0,
+        "errors": errors,
         "warnings": warnings,
     }
 
@@ -136,23 +142,25 @@ def build_fix_prompt(generated_markdown: str, errors: list[dict]) -> tuple[str, 
 
     error_lines = []
     for err in errors:
-        code   = err.get("code", "unknown")
+        code = err.get("code", "unknown")
         detail = err.get("detail", "")
         error_lines.append(f"- [{code}] {detail}")
 
-    user_prompt = "\n".join([
-        "## Issues to fix",
-        "",
-        *error_lines,
-        "",
-        "## CV to fix",
-        "",
-        generated_markdown.strip(),
-        "",
-        "---",
-        "",
-        "Fix ONLY the issues listed above. Output the corrected CV markdown.",
-    ])
+    user_prompt = "\n".join(
+        [
+            "## Issues to fix",
+            "",
+            *error_lines,
+            "",
+            "## CV to fix",
+            "",
+            generated_markdown.strip(),
+            "",
+            "---",
+            "",
+            "Fix ONLY the issues listed above. Output the corrected CV markdown.",
+        ]
+    )
 
     return system_prompt, user_prompt
 
@@ -161,19 +169,19 @@ def build_fix_prompt(generated_markdown: str, errors: list[dict]) -> tuple[str, 
 # Error checks
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 def _check_title(text: str, expected_title: str) -> list[dict]:
     """Error if expected title not found in the first 10 lines of the CV."""
     lines = text.splitlines()[:10]
     header_block = "\n".join(lines).lower()
     if expected_title.lower() in header_block:
         return []
-    return [{
-        "code": "title_downgraded",
-        "detail": (
-            f"Expected '{expected_title}' in CV title area. "
-            f"Candidate title was downgraded or omitted."
-        ),
-    }]
+    return [
+        {
+            "code": "title_downgraded",
+            "detail": (f"Expected '{expected_title}' in CV title area. Candidate title was downgraded or omitted."),
+        }
+    ]
 
 
 def _check_years(text: str, expected_years: str) -> list[dict]:
@@ -198,13 +206,15 @@ def _check_years(text: str, expected_years: str) -> list[dict]:
     if found_standalone:
         return []
 
-    return [{
-        "code": "years_downgraded",
-        "detail": (
-            f"Expected '{expected_years}' years of experience mentioned in CV. "
-            f"Years may have been downgraded or omitted."
-        ),
-    }]
+    return [
+        {
+            "code": "years_downgraded",
+            "detail": (
+                f"Expected '{expected_years}' years of experience mentioned in CV. "
+                f"Years may have been downgraded or omitted."
+            ),
+        }
+    ]
 
 
 def _check_slop(text_lower: str) -> list[dict]:
@@ -215,18 +225,21 @@ def _check_slop(text_lower: str) -> list[dict]:
             found_phrases.append(phrase)
     if not found_phrases:
         return []
-    return [{
-        "code": "slop_detected",
-        "detail": (
-            f"Blacklisted phrase(s) found: {', '.join(repr(p) for p in found_phrases)}. "
-            f"Rewrite Summary to remove generic aspirational language."
-        ),
-    }]
+    return [
+        {
+            "code": "slop_detected",
+            "detail": (
+                f"Blacklisted phrase(s) found: {', '.join(repr(p) for p in found_phrases)}. "
+                f"Rewrite Summary to remove generic aspirational language."
+            ),
+        }
+    ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Warning checks
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 def _extract_languages_section(text: str) -> str:
     """Extract the text of the Languages section."""
@@ -249,13 +262,12 @@ def _check_languages(text: str, languages: list[str]) -> list[dict]:
         # Extract base language name: "Spanish (native)" → "spanish"
         lang_name = lang_entry.split("(")[0].strip().lower()
         if lang_name and lang_name not in search_text:
-            warnings.append({
-                "code": "missing_language",
-                "detail": (
-                    f"Language '{lang_entry}' from source_facts not found "
-                    f"in CV Languages section."
-                ),
-            })
+            warnings.append(
+                {
+                    "code": "missing_language",
+                    "detail": (f"Language '{lang_entry}' from source_facts not found in CV Languages section."),
+                }
+            )
     return warnings
 
 
@@ -275,19 +287,16 @@ def _check_themes(text: str, themes: list[str]) -> list[dict]:
     for theme in themes:
         if _theme_found(theme, search_text):
             continue
-        warnings.append({
-            "code": "missing_theme",
-            "detail": (
-                f"Core Skills theme '{theme}' from source_facts not found in CV "
-                f"(token overlap < 50%)."
-            ),
-        })
+        warnings.append(
+            {
+                "code": "missing_theme",
+                "detail": (f"Core Skills theme '{theme}' from source_facts not found in CV (token overlap < 50%)."),
+            }
+        )
     return warnings
 
 
-_THEME_STOP_WORDS: frozenset[str] = frozenset(
-    {"and", "or", "of", "the", "in", "for", "a", "to", "with", "by"}
-)
+_THEME_STOP_WORDS: frozenset[str] = frozenset({"and", "or", "of", "the", "in", "for", "a", "to", "with", "by"})
 
 
 def _theme_found(theme: str, text: str) -> bool:
@@ -295,10 +304,7 @@ def _theme_found(theme: str, text: str) -> bool:
 
     Filters common stopwords but keeps short meaningful tokens like 'AI' and 'ML'.
     """
-    tokens = [
-        t for t in theme.lower().split()
-        if t not in _THEME_STOP_WORDS and len(t) >= 2
-    ]
+    tokens = [t for t in theme.lower().split() if t not in _THEME_STOP_WORDS and len(t) >= 2]
     if not tokens:
         return False
     hits = sum(1 for t in tokens if t in text)
@@ -315,13 +321,12 @@ def _check_bullet_budgets(text: str, bullet_allocation: dict) -> list[dict]:
             # Company not found in CV — skip (other checks cover completeness)
             continue
         if abs(actual - budget) > 2:
-            warnings.append({
-                "code": "bullet_budget_violation",
-                "detail": (
-                    f"'{company}': bullet budget is {budget} but found {actual} bullets "
-                    f"(difference > 2)."
-                ),
-            })
+            warnings.append(
+                {
+                    "code": "bullet_budget_violation",
+                    "detail": (f"'{company}': bullet budget is {budget} but found {actual} bullets (difference > 2)."),
+                }
+            )
     return warnings
 
 
@@ -360,13 +365,15 @@ def _check_consulting_mention(text_lower: str) -> list[dict]:
     for signal in _CONSULTING_SIGNALS:
         if signal in summary:
             return []
-    return [{
-        "code": "no_consulting_mention",
-        "detail": (
-            "Plan indicates a consultancy role but Summary has no mention of "
-            "consulting context, clients, or adaptability to different environments."
-        ),
-    }]
+    return [
+        {
+            "code": "no_consulting_mention",
+            "detail": (
+                "Plan indicates a consultancy role but Summary has no mention of "
+                "consulting context, clients, or adaptability to different environments."
+            ),
+        }
+    ]
 
 
 def _check_gerund_starts(text: str) -> list[dict]:
@@ -376,10 +383,12 @@ def _check_gerund_starts(text: str) -> list[dict]:
     matches = gerund_pattern.findall(text)
     if not matches:
         return []
-    return [{
-        "code": "gerund_start",
-        "detail": (
-            f"Bullet(s) start with a gerund: {matches[:3]}. "
-            f"Use past tense for completed work (e.g., 'Led' not 'Leading')."
-        ),
-    }]
+    return [
+        {
+            "code": "gerund_start",
+            "detail": (
+                f"Bullet(s) start with a gerund: {matches[:3]}. "
+                f"Use past tense for completed work (e.g., 'Led' not 'Leading')."
+            ),
+        }
+    ]

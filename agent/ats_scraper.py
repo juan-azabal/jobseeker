@@ -43,19 +43,21 @@ def _fetch_greenhouse(token, company_name, title_patterns) -> list[RawJob]:
         is_remote = "remote" in (loc or "").lower() or "remote" in title.lower()
         remote_type = "fulltime" if is_remote else "no"
 
-        jobs.append(RawJob(
-            id=make_job_id(title, company_name),
-            title=title,
-            company=company_name,
-            source="greenhouse",
-            location=loc,
-            description=content,
-            job_url=j.get("absolute_url") or None,
-            date_posted=j.get("updated_at") or None,
-            search_term_used=f"watchlist:{token}",
-            remote_type=remote_type,
-            departments=departments,
-        ))
+        jobs.append(
+            RawJob(
+                id=make_job_id(title, company_name),
+                title=title,
+                company=company_name,
+                source="greenhouse",
+                location=loc,
+                description=content,
+                job_url=j.get("absolute_url") or None,
+                date_posted=j.get("updated_at") or None,
+                search_term_used=f"watchlist:{token}",
+                remote_type=remote_type,
+                departments=departments,
+            )
+        )
 
     return jobs
 
@@ -95,20 +97,22 @@ def _fetch_lever(token, company_name, title_patterns) -> list[RawJob]:
         is_remote = "remote" in (loc or "").lower()
         remote_type = "fulltime" if is_remote else "no"
 
-        jobs.append(RawJob(
-            id=make_job_id(title, company_name),
-            title=title,
-            company=company_name,
-            source="lever",
-            location=loc,
-            description=description,
-            job_url=j.get("hostedUrl") or None,
-            job_type=cats.get("commitment") or None,
-            search_term_used=f"watchlist:{token}",
-            remote_type=remote_type,
-            departments=departments,
-            team=team,
-        ))
+        jobs.append(
+            RawJob(
+                id=make_job_id(title, company_name),
+                title=title,
+                company=company_name,
+                source="lever",
+                location=loc,
+                description=description,
+                job_url=j.get("hostedUrl") or None,
+                job_type=cats.get("commitment") or None,
+                search_term_used=f"watchlist:{token}",
+                remote_type=remote_type,
+                departments=departments,
+                team=team,
+            )
+        )
 
     return jobs
 
@@ -145,21 +149,23 @@ def _fetch_ashby(token, company_name, title_patterns) -> list[RawJob]:
         is_remote = "remote" in (loc or "").lower()
         remote_type = "fulltime" if is_remote else "no"
 
-        jobs.append(RawJob(
-            id=make_job_id(title, company_name),
-            title=title,
-            company=company_name,
-            source="ashby",
-            location=loc,
-            description=desc,
-            job_url=j.get("jobUrl") or j.get("applyUrl") or None,
-            date_posted=j.get("publishedAt") or None,
-            job_type=j.get("employmentType") or None,
-            search_term_used=f"watchlist:{token}",
-            remote_type=remote_type,
-            departments=departments,
-            team=team,
-        ))
+        jobs.append(
+            RawJob(
+                id=make_job_id(title, company_name),
+                title=title,
+                company=company_name,
+                source="ashby",
+                location=loc,
+                description=desc,
+                job_url=j.get("jobUrl") or j.get("applyUrl") or None,
+                date_posted=j.get("publishedAt") or None,
+                job_type=j.get("employmentType") or None,
+                search_term_used=f"watchlist:{token}",
+                remote_type=remote_type,
+                departments=departments,
+                team=team,
+            )
+        )
 
     return jobs
 
@@ -170,11 +176,11 @@ def run_watchlist_scraper(config_path="config/watchlist.yaml") -> list[RawJob]:
     title_patterns = [p.lower() for p in config.get("title_patterns", ["product manager"])]
 
     tasks = []
-    for company in (config.get("greenhouse") or []):
+    for company in config.get("greenhouse") or []:
         tasks.append(("greenhouse", company["token"], company["name"]))
-    for company in (config.get("lever") or []):
+    for company in config.get("lever") or []:
         tasks.append(("lever", company["token"], company["name"]))
-    for company in (config.get("ashby") or []):
+    for company in config.get("ashby") or []:
         tasks.append(("ashby", company["token"], company["name"]))
 
     print(f"\nPolling {len(tasks)} ATS boards...")

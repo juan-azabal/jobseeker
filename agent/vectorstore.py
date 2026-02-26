@@ -61,26 +61,28 @@ def _chunk_markdown(text, source_file, doc_type, max_chars=800, overlap=100):
     chunks = []
 
     # Split on ## headings (keep heading with its content)
-    sections = re.split(r'\n(?=## )', text)
+    sections = re.split(r"\n(?=## )", text)
 
     for section in sections:
         if not section.strip():
             continue
 
         # Extract section title
-        first_line = section.split('\n', 1)[0].strip()
-        section_title = first_line.lstrip('#').strip()
+        first_line = section.split("\n", 1)[0].strip()
+        section_title = first_line.lstrip("#").strip()
 
         if len(section) <= max_chars:
-            chunks.append({
-                "text": section.strip(),
-                "source": source_file,
-                "doc_type": doc_type,
-                "section": section_title,
-            })
+            chunks.append(
+                {
+                    "text": section.strip(),
+                    "source": source_file,
+                    "doc_type": doc_type,
+                    "section": section_title,
+                }
+            )
         else:
             # Split large sections by paragraph with overlap
-            paragraphs = re.split(r'\n\n+', section)
+            paragraphs = re.split(r"\n\n+", section)
             current = ""
             for para in paragraphs:
                 para = para.strip()
@@ -90,22 +92,26 @@ def _chunk_markdown(text, source_file, doc_type, max_chars=800, overlap=100):
                     current = (current + "\n\n" + para).strip()
                 else:
                     if current:
-                        chunks.append({
-                            "text": current,
-                            "source": source_file,
-                            "doc_type": doc_type,
-                            "section": section_title,
-                        })
+                        chunks.append(
+                            {
+                                "text": current,
+                                "source": source_file,
+                                "doc_type": doc_type,
+                                "section": section_title,
+                            }
+                        )
                     # Start new chunk with overlap from end of previous
                     overlap_text = current[-overlap:] if len(current) > overlap else current
                     current = (overlap_text + "\n\n" + para).strip() if overlap_text else para
             if current:
-                chunks.append({
-                    "text": current,
-                    "source": source_file,
-                    "doc_type": doc_type,
-                    "section": section_title,
-                })
+                chunks.append(
+                    {
+                        "text": current,
+                        "source": source_file,
+                        "doc_type": doc_type,
+                        "section": section_title,
+                    }
+                )
 
     return chunks
 
@@ -115,7 +121,7 @@ def _embed_texts(texts, client):
     # Batch in groups of 100 (API limit)
     all_embeddings = []
     for i in range(0, len(texts), 100):
-        batch = texts[i:i + 100]
+        batch = texts[i : i + 100]
         response = client.embeddings.create(model=EMBED_MODEL, input=batch)
         all_embeddings.extend([r.embedding for r in response.data])
     return all_embeddings
@@ -172,11 +178,14 @@ def build_vectorstore(profile=None, chroma_dir=CHROMA_DIR, force_rebuild=False):
         ids=[f"chunk_{i}" for i in range(len(all_chunks))],
         embeddings=embeddings,
         documents=texts,
-        metadatas=[{
-            "source": c["source"],
-            "doc_type": c["doc_type"],
-            "section": c["section"],
-        } for c in all_chunks],
+        metadatas=[
+            {
+                "source": c["source"],
+                "doc_type": c["doc_type"],
+                "section": c["section"],
+            }
+            for c in all_chunks
+        ],
     )
 
     print(f"Vectorstore built: {collection.count()} chunks stored in '{collection_name}'")
@@ -204,13 +213,15 @@ def retrieve_relevant_chunks(query, collection, n_results=8):
         results["metadatas"][0],
         results["distances"][0],
     ):
-        chunks.append({
-            "text": doc,
-            "source": meta.get("source", ""),
-            "doc_type": meta.get("doc_type", ""),
-            "section": meta.get("section", ""),
-            "relevance": round(1 - dist, 3),  # cosine similarity
-        })
+        chunks.append(
+            {
+                "text": doc,
+                "source": meta.get("source", ""),
+                "doc_type": meta.get("doc_type", ""),
+                "section": meta.get("section", ""),
+                "relevance": round(1 - dist, 3),  # cosine similarity
+            }
+        )
 
     return chunks
 

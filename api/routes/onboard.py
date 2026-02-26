@@ -10,13 +10,16 @@ from pydantic import BaseModel
 import yaml
 
 import structlog
+
 logger = structlog.get_logger(__name__)
 
 from api.middleware.auth import get_current_user
 from api import analytics
 from api.db.queries import (
-    save_user_cv_md, get_user_cv_md,
-    save_user_profile_yaml, get_user_profile_yaml,
+    save_user_cv_md,
+    get_user_cv_md,
+    save_user_profile_yaml,
+    get_user_profile_yaml,
 )
 from api.onboard_utils import (
     docx_to_markdown as _docx_to_markdown,
@@ -35,6 +38,7 @@ def docx_to_markdown(path: str) -> str:
 
 def _extract_profile_from_cv(cv_text: str) -> dict:
     from posthog.ai.openai import OpenAI  # noqa: PLC0415
+
     return _onboard_extract_profile(cv_text, OpenAI())
 
 
@@ -72,91 +76,137 @@ def _generate_profile_id(name: str) -> str:  # noqa: ARG001 — name ignored, ke
 # ---------------------------------------------------------------------------
 
 _DOMAIN_SEARCH_TERMS: dict[str, str] = {
-    "data":        "data",
-    "ml":          "ML AI",
-    "adtech":      "AdTech advertising",
-    "ecommerce":   "ecommerce marketplace",
-    "fintech":     "fintech payments",
-    "saas":        "SaaS B2B",
-    "platform":    "platform developer tools",
-    "analytics":   "analytics data",
-    "healthtech":  "healthtech digital health",
-    "edtech":      "edtech education",
-    "growth":      "growth user acquisition",
+    "data": "data",
+    "ml": "ML AI",
+    "adtech": "AdTech advertising",
+    "ecommerce": "ecommerce marketplace",
+    "fintech": "fintech payments",
+    "saas": "SaaS B2B",
+    "platform": "platform developer tools",
+    "analytics": "analytics data",
+    "healthtech": "healthtech digital health",
+    "edtech": "edtech education",
+    "growth": "growth user acquisition",
     "marketplace": "marketplace",
-    "developer":   "developer tools",
-    "api":         "API platform",
-    "mobile":      "mobile app",
-    "gaming":      "gaming",
-    "crypto":      "blockchain crypto web3",
-    "hr":          "HR people tech",
-    "proptech":    "proptech real estate",
-    "legaltech":   "legaltech",
-    "security":    "cybersecurity",
-    "logistics":   "logistics supply chain",
-    "travel":      "travel hospitality",
-    "media":       "media content",
+    "developer": "developer tools",
+    "api": "API platform",
+    "mobile": "mobile app",
+    "gaming": "gaming",
+    "crypto": "blockchain crypto web3",
+    "hr": "HR people tech",
+    "proptech": "proptech real estate",
+    "legaltech": "legaltech",
+    "security": "cybersecurity",
+    "logistics": "logistics supply chain",
+    "travel": "travel hospitality",
+    "media": "media content",
 }
 
 _DOMAIN_ALIASES: dict[str, str] = {
-    "ia": "ml", "ai": "ml", "llm": "ml", "martech": "adtech",
+    "ia": "ml",
+    "ai": "ml",
+    "llm": "ml",
+    "martech": "adtech",
 }
 
 _IC_TITLES: dict[str, str] = {
-    "junior":    "Junior Product Manager",
-    "mid":       "Product Manager",
-    "senior":    "Senior Product Manager",
-    "staff":     "Staff Product Manager",
+    "junior": "Junior Product Manager",
+    "mid": "Product Manager",
+    "senior": "Senior Product Manager",
+    "staff": "Staff Product Manager",
     "principal": "Principal Product Manager",
-    "director":  "Principal Product Manager",  # IC director → keep principal title
-    "vp":        "Staff Product Manager",
+    "director": "Principal Product Manager",  # IC director → keep principal title
+    "vp": "Staff Product Manager",
 }
 _MGMT_TITLES: dict[str, str] = {
-    "junior":    "Product Manager",
-    "mid":       "Senior Product Manager",
-    "senior":    "Head of Product",
-    "staff":     "Head of Product",
+    "junior": "Product Manager",
+    "mid": "Senior Product Manager",
+    "senior": "Head of Product",
+    "staff": "Head of Product",
     "principal": "Head of Product",
-    "director":  "Director of Product",
-    "vp":        "VP Product",
+    "director": "Director of Product",
+    "vp": "VP Product",
 }
 
 _LOCATION_MAP: dict[str, str] = {
-    "spain": "Spain", "españa": "Spain", "barcelona": "Spain", "madrid": "Spain",
-    "netherlands": "Netherlands", "amsterdam": "Netherlands",
-    "germany": "Germany", "berlin": "Germany", "munich": "Germany",
-    "france": "France", "paris": "France",
-    "uk": "UK", "london": "UK", "england": "UK",
-    "portugal": "Portugal", "lisbon": "Portugal",
-    "italy": "Italy", "milan": "Italy",
-    "sweden": "Sweden", "stockholm": "Sweden",
-    "denmark": "Denmark", "copenhagen": "Denmark",
-    "belgium": "Belgium", "brussels": "Belgium",
-    "ireland": "Ireland", "dublin": "Ireland",
+    "spain": "Spain",
+    "españa": "Spain",
+    "barcelona": "Spain",
+    "madrid": "Spain",
+    "netherlands": "Netherlands",
+    "amsterdam": "Netherlands",
+    "germany": "Germany",
+    "berlin": "Germany",
+    "munich": "Germany",
+    "france": "France",
+    "paris": "France",
+    "uk": "UK",
+    "london": "UK",
+    "england": "UK",
+    "portugal": "Portugal",
+    "lisbon": "Portugal",
+    "italy": "Italy",
+    "milan": "Italy",
+    "sweden": "Sweden",
+    "stockholm": "Sweden",
+    "denmark": "Denmark",
+    "copenhagen": "Denmark",
+    "belgium": "Belgium",
+    "brussels": "Belgium",
+    "ireland": "Ireland",
+    "dublin": "Ireland",
     "remote": "",
 }
 
 # city/country → canonical country name, used to derive the relocation-rejection rule
 # in per-user preferences.yaml. Keep in sync with _LOCATION_MAP.
 _HOME_TO_COUNTRY: dict[str, str] = {
-    "spain": "Spain", "españa": "Spain", "barcelona": "Spain", "madrid": "Spain",
-    "valencia": "Spain", "bilbao": "Spain",
-    "netherlands": "Netherlands", "amsterdam": "Netherlands", "rotterdam": "Netherlands",
-    "germany": "Germany", "berlin": "Germany", "munich": "Germany", "hamburg": "Germany",
-    "france": "France", "paris": "France", "lyon": "France",
-    "uk": "UK", "london": "UK", "england": "UK", "manchester": "UK",
-    "portugal": "Portugal", "lisbon": "Portugal", "porto": "Portugal",
-    "italy": "Italy", "milan": "Italy", "rome": "Italy",
-    "sweden": "Sweden", "stockholm": "Sweden",
-    "denmark": "Denmark", "copenhagen": "Denmark",
-    "belgium": "Belgium", "brussels": "Belgium",
-    "ireland": "Ireland", "dublin": "Ireland",
-    "switzerland": "Switzerland", "zurich": "Switzerland",
-    "austria": "Austria", "vienna": "Austria",
-    "poland": "Poland", "warsaw": "Poland",
-    "czechia": "Czechia", "prague": "Czechia",
-    "finland": "Finland", "helsinki": "Finland",
-    "norway": "Norway", "oslo": "Norway",
+    "spain": "Spain",
+    "españa": "Spain",
+    "barcelona": "Spain",
+    "madrid": "Spain",
+    "valencia": "Spain",
+    "bilbao": "Spain",
+    "netherlands": "Netherlands",
+    "amsterdam": "Netherlands",
+    "rotterdam": "Netherlands",
+    "germany": "Germany",
+    "berlin": "Germany",
+    "munich": "Germany",
+    "hamburg": "Germany",
+    "france": "France",
+    "paris": "France",
+    "lyon": "France",
+    "uk": "UK",
+    "london": "UK",
+    "england": "UK",
+    "manchester": "UK",
+    "portugal": "Portugal",
+    "lisbon": "Portugal",
+    "porto": "Portugal",
+    "italy": "Italy",
+    "milan": "Italy",
+    "rome": "Italy",
+    "sweden": "Sweden",
+    "stockholm": "Sweden",
+    "denmark": "Denmark",
+    "copenhagen": "Denmark",
+    "belgium": "Belgium",
+    "brussels": "Belgium",
+    "ireland": "Ireland",
+    "dublin": "Ireland",
+    "switzerland": "Switzerland",
+    "zurich": "Switzerland",
+    "austria": "Austria",
+    "vienna": "Austria",
+    "poland": "Poland",
+    "warsaw": "Poland",
+    "czechia": "Czechia",
+    "prague": "Czechia",
+    "finland": "Finland",
+    "helsinki": "Finland",
+    "norway": "Norway",
+    "oslo": "Norway",
 }
 
 
@@ -166,29 +216,80 @@ _HOME_TO_COUNTRY: dict[str, str] = {
 # in tech job descriptions, causing false positives. "associate product manager" already covers
 # the intended exclusion in titles.
 _SENIORITY_DEALBREAKERS: dict[str, list[str]] = {
-    "junior":    [],
-    "mid":       ["intern", "internship"],
-    "senior":    ["junior", "intern", "internship", "entry level", "entry-level",
-                  "associate product manager", "0-2 years", "1-3 years"],
-    "staff":     ["junior", "intern", "internship", "entry level", "entry-level",
-                  "associate product manager", "0-2 years", "1-3 years", "2-4 years"],
-    "principal": ["junior", "intern", "internship", "entry level", "entry-level",
-                  "associate product manager", "0-2 years", "1-3 years", "2-4 years"],
-    "director":  ["junior", "intern", "internship", "entry level", "entry-level",
-                  "associate product manager", "0-2 years", "1-3 years", "2-4 years"],
-    "vp":        ["junior", "intern", "internship", "entry level", "entry-level",
-                  "associate product manager", "0-2 years", "1-3 years", "2-4 years"],
+    "junior": [],
+    "mid": ["intern", "internship"],
+    "senior": [
+        "junior",
+        "intern",
+        "internship",
+        "entry level",
+        "entry-level",
+        "associate product manager",
+        "0-2 years",
+        "1-3 years",
+    ],
+    "staff": [
+        "junior",
+        "intern",
+        "internship",
+        "entry level",
+        "entry-level",
+        "associate product manager",
+        "0-2 years",
+        "1-3 years",
+        "2-4 years",
+    ],
+    "principal": [
+        "junior",
+        "intern",
+        "internship",
+        "entry level",
+        "entry-level",
+        "associate product manager",
+        "0-2 years",
+        "1-3 years",
+        "2-4 years",
+    ],
+    "director": [
+        "junior",
+        "intern",
+        "internship",
+        "entry level",
+        "entry-level",
+        "associate product manager",
+        "0-2 years",
+        "1-3 years",
+        "2-4 years",
+    ],
+    "vp": [
+        "junior",
+        "intern",
+        "internship",
+        "entry level",
+        "entry-level",
+        "associate product manager",
+        "0-2 years",
+        "1-3 years",
+        "2-4 years",
+    ],
 }
 
 # IC track title keywords (no director/VP — those are management-track roles)
 _IC_TITLE_KEYWORDS: list[str] = [
-    "product manager", "product lead", "product owner",
-    "principal pm", "staff pm", "senior pm",
+    "product manager",
+    "product lead",
+    "product owner",
+    "principal pm",
+    "staff pm",
+    "senior pm",
 ]
 # Management track includes IC keywords + leadership titles
 _MGMT_TITLE_KEYWORDS: list[str] = _IC_TITLE_KEYWORDS + [
-    "director of product", "head of product",
-    "group product manager", "vp product", "vp of product",
+    "director of product",
+    "head of product",
+    "group product manager",
+    "vp product",
+    "vp of product",
 ]
 
 
@@ -272,55 +373,69 @@ def _generate_searches_yaml(profile: dict) -> str:
         query = f"{title} {domain_term}".strip() if domain_term else title
         for location in primary_locations[:2]:
             # Skip exact duplicates (e.g. if same location appears twice)
-            entry = {"term": query, "location": location,
-                     "sites": ["indeed", "google"], "results_wanted": 20, "hours_old": 72}
+            entry = {
+                "term": query,
+                "location": location,
+                "sites": ["indeed", "google"],
+                "results_wanted": 20,
+                "hours_old": 72,
+            }
             if entry not in searches:
                 searches.append(entry)
 
     # LinkedIn broad: title + remote
-    searches.append({
-        "term": f"{title} remote",
-        "location": primary_locations[0] if primary_locations[0] else "",
-        "sites": ["linkedin"],
-        "results_wanted": 15,
-        "hours_old": 72,
-    })
-
-    # LinkedIn targeted: top domain
-    if top_domains:
-        domain_term = _DOMAIN_SEARCH_TERMS.get(top_domains[0], top_domains[0])
-        searches.append({
-            "term": f"{title} {domain_term}",
-            "location": "",
-            "sites": ["linkedin"],
-            "results_wanted": 10,
-            "hours_old": 72,
-        })
-
-    # LinkedIn: 2nd title variant (if distinct from primary)
-    if title2:
-        searches.append({
-            "term": f"{title2} remote",
+    searches.append(
+        {
+            "term": f"{title} remote",
             "location": primary_locations[0] if primary_locations[0] else "",
             "sites": ["linkedin"],
             "results_wanted": 15,
             "hours_old": 72,
-        })
+        }
+    )
+
+    # LinkedIn targeted: top domain
+    if top_domains:
+        domain_term = _DOMAIN_SEARCH_TERMS.get(top_domains[0], top_domains[0])
+        searches.append(
+            {
+                "term": f"{title} {domain_term}",
+                "location": "",
+                "sites": ["linkedin"],
+                "results_wanted": 10,
+                "hours_old": 72,
+            }
+        )
+
+    # LinkedIn: 2nd title variant (if distinct from primary)
+    if title2:
+        searches.append(
+            {
+                "term": f"{title2} remote",
+                "location": primary_locations[0] if primary_locations[0] else "",
+                "sites": ["linkedin"],
+                "results_wanted": 15,
+                "hours_old": 72,
+            }
+        )
 
     # LinkedIn skill-based: title + top profile skill (extra precision signal)
     skills = profile.get("skills") or []
     if skills:
         top_skill = skills[0]
-        searches.append({
-            "term": f"{title} {top_skill}",
-            "location": primary_locations[0] if primary_locations and primary_locations[0] else "",
-            "sites": ["linkedin"],
-            "results_wanted": 15,
-            "hours_old": 72,
-        })
+        searches.append(
+            {
+                "term": f"{title} {top_skill}",
+                "location": primary_locations[0] if primary_locations and primary_locations[0] else "",
+                "sites": ["linkedin"],
+                "results_wanted": 15,
+                "hours_old": 72,
+            }
+        )
 
-    return yaml.dump({"searches": searches, "is_remote": True},
-                     default_flow_style=False, allow_unicode=True, sort_keys=False)
+    return yaml.dump(
+        {"searches": searches, "is_remote": True}, default_flow_style=False, allow_unicode=True, sort_keys=False
+    )
 
 
 def _generate_preferences_yaml(profile: dict) -> str:
@@ -372,13 +487,26 @@ def _generate_preferences_yaml(profile: dict) -> str:
             "title_exclude": [
                 # Note: "growth" intentionally excluded — "Product Manager, Growth" is a
                 # legitimate PM role. Non-PM growth roles fail title_must_contain_one_of.
-                "business development", "crm manager", "marketing manager",
-                "project manager", "program manager", "sales", "account manager",
-                "customer success", "deposit product", "lending", "insurance",
+                "business development",
+                "crm manager",
+                "marketing manager",
+                "project manager",
+                "program manager",
+                "sales",
+                "account manager",
+                "customer success",
+                "deposit product",
+                "lending",
+                "insurance",
             ],
             "exclude_companies": [
-                "Gartner", "Capterra", "GetApp", "Software Advice", "G2",
-            ] + exclude_companies,
+                "Gartner",
+                "Capterra",
+                "GetApp",
+                "Software Advice",
+                "G2",
+            ]
+            + exclude_companies,
             "location": location_block,
         },
         "scoring": {"auto_generate_package": 65, "manual_review": 50, "auto_reject": 50},
@@ -466,9 +594,7 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
 
     # First-time setup: profile_id was assigned at login, just generate YAML + searches.
     logger.info("First-time onboarding for user_id=%d profile_id=%r", user["id"], profile_id)
-    profile_yaml = _build_profile_yaml(
-        body.profile, profile_id, body.salary_min, body.location_preference
-    )
+    profile_yaml = _build_profile_yaml(body.profile, profile_id, body.salary_min, body.location_preference)
 
     # Generate per-user searches and patch the profile YAML to reference it.
     # Also inject seniority_weights (user-editable, not in the agent's _build_profile_yaml).
@@ -484,18 +610,24 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
         sw = body.profile.get("seniority_weights") or _derive_seniority_weights(body.profile)
         if sw:
             profile_data.setdefault("target", {})["seniority_weights"] = sw
-        profile_yaml = yaml.dump(profile_data, default_flow_style=False,
-                                 allow_unicode=True, sort_keys=False)
-        logger.info("Generated per-user searches for %s (%d searches)",
-                    profile_id, len(yaml.safe_load(searches_yaml).get("searches", [])))
+        profile_yaml = yaml.dump(profile_data, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        logger.info(
+            "Generated per-user searches for %s (%d searches)",
+            profile_id,
+            len(yaml.safe_load(searches_yaml).get("searches", [])),
+        )
     except Exception:
         logger.exception("Failed to patch searches+preferences paths for %s — using global defaults", profile_id)
         searches_yaml = ""
         preferences_yaml = ""
 
     _write_profile_files(
-        jobagent_dir, profile_id, body.cv_markdown, profile_yaml,
-        searches_yaml, preferences_yaml,
+        jobagent_dir,
+        profile_id,
+        body.cv_markdown,
+        profile_yaml,
+        searches_yaml,
+        preferences_yaml,
     )
 
     save_user_cv_md(db_path, user["id"], body.cv_markdown)
@@ -504,16 +636,24 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
     # Sync profile to GitHub repo and trigger the scraping pipeline (fire-and-forget)
     try:
         await _sync_and_trigger_pipeline(
-            profile_id, profile_yaml, body.cv_markdown, searches_yaml, preferences_yaml,
+            profile_id,
+            profile_yaml,
+            body.cv_markdown,
+            searches_yaml,
+            preferences_yaml,
         )
     except Exception:
         logger.exception("Pipeline sync/trigger failed for %s (non-fatal)", profile_id)
 
-    analytics.capture(user["id"], "onboard_completed", {
-        "profile_id": profile_id,
-        "domains_count": len(body.profile.get("domains") or {}),
-        "skills_count": len(body.profile.get("skills") or []),
-    })
+    analytics.capture(
+        user["id"],
+        "onboard_completed",
+        {
+            "profile_id": profile_id,
+            "domains_count": len(body.profile.get("domains") or {}),
+            "skills_count": len(body.profile.get("skills") or []),
+        },
+    )
     return {"profile_id": profile_id}
 
 
@@ -546,13 +686,18 @@ async def _push_file_to_github(gh_path: str, content: str, message: str) -> None
         else:
             logger.warning(
                 "GitHub file sync FAILED: %s HTTP %d — %s",
-                gh_path, put_resp.status_code, put_resp.text[:200],
+                gh_path,
+                put_resp.status_code,
+                put_resp.text[:200],
             )
 
 
 async def _sync_and_trigger_pipeline(
-    profile_id: str, profile_yaml: str, cv_markdown: str,
-    searches_yaml: str = "", preferences_yaml: str = "",
+    profile_id: str,
+    profile_yaml: str,
+    cv_markdown: str,
+    searches_yaml: str = "",
+    preferences_yaml: str = "",
 ) -> None:
     """Push profile files to GitHub repo and trigger the agent pipeline.
 
@@ -582,13 +727,9 @@ async def _sync_and_trigger_pipeline(
             (f"agent/config/seen_ids/{profile_id}.txt", ""),
         ]
         if searches_yaml:
-            files_to_push.append(
-                (f"agent/config/profiles/{profile_id}-searches.yaml", searches_yaml)
-            )
+            files_to_push.append((f"agent/config/profiles/{profile_id}-searches.yaml", searches_yaml))
         if preferences_yaml:
-            files_to_push.append(
-                (f"agent/config/profiles/{profile_id}-preferences.yaml", preferences_yaml)
-            )
+            files_to_push.append((f"agent/config/profiles/{profile_id}-preferences.yaml", preferences_yaml))
         for path, content in files_to_push:
             url = f"https://api.github.com/repos/{gh_repo}/contents/{path}"
 
@@ -610,7 +751,9 @@ async def _sync_and_trigger_pipeline(
             else:
                 logger.warning(
                     "GitHub sync FAILED: %s HTTP %d — %s",
-                    path, put_resp.status_code, put_resp.text[:300],
+                    path,
+                    put_resp.status_code,
+                    put_resp.text[:300],
                 )
 
         # Trigger the pipeline workflow
@@ -625,7 +768,9 @@ async def _sync_and_trigger_pipeline(
         else:
             logger.warning(
                 "Pipeline trigger returned HTTP %d for profile %s — %s",
-                resp.status_code, profile_id, resp.text[:300],
+                resp.status_code,
+                profile_id,
+                resp.text[:300],
             )
 
 
@@ -785,9 +930,7 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
     }
     try:
         searches_yaml = _generate_searches_yaml(profile_for_gen)
-        searches_path = os.path.join(
-            jobagent_dir, "config", "profiles", f"{profile_id}-searches.yaml"
-        )
+        searches_path = os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}-searches.yaml")
         with open(searches_path, "w") as f:
             f.write(searches_yaml)
         logger.info("Regenerated searches for profile %s after profile edit", profile_id)
@@ -802,9 +945,7 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
 
     try:
         preferences_yaml = _generate_preferences_yaml(profile_for_gen)
-        prefs_path = os.path.join(
-            jobagent_dir, "config", "profiles", f"{profile_id}-preferences.yaml"
-        )
+        prefs_path = os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}-preferences.yaml")
         with open(prefs_path, "w") as f:
             f.write(preferences_yaml)
         logger.info("Regenerated preferences for profile %s after profile edit", profile_id)
@@ -816,11 +957,15 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
     except Exception:
         logger.exception("Preferences regeneration failed for %s (non-fatal)", profile_id)
 
-    analytics.capture(user["id"], "profile_saved", {
-        "domains_count": len(body.domains),
-        "skills_count": len(body.skills),
-        "fields_changed": list(UpdateProfileRequest.model_fields.keys()),
-    })
+    analytics.capture(
+        user["id"],
+        "profile_saved",
+        {
+            "domains_count": len(body.domains),
+            "skills_count": len(body.skills),
+            "fields_changed": list(UpdateProfileRequest.model_fields.keys()),
+        },
+    )
     return {"ok": True}
 
 
@@ -872,6 +1017,7 @@ async def add_skill(body: AddSkillRequest, user: dict = Depends(get_current_user
     # Pre-compute embedding for the new skill (non-blocking)
     try:
         from api.embeddings import get_embedding, clear_memory_cache
+
         get_embedding(skill, db_path)
         clear_memory_cache()  # invalidate so subsequent requests pick up the new skill
     except Exception:

@@ -15,14 +15,16 @@ load_dotenv()
 
 # Pre-seeded fields that are factual (structured data wins over LLM interpretation).
 # LLM wins for everything else (domain, skills, responsibilities, etc.).
-_FACTUAL_FIELDS = frozenset({
-    "seniority",
-    "salary_mentioned",
-    "location_type",
-    "years_experience_min",
-    "years_experience_max",
-    "locations_mentioned",
-})
+_FACTUAL_FIELDS = frozenset(
+    {
+        "seniority",
+        "salary_mentioned",
+        "location_type",
+        "years_experience_min",
+        "years_experience_max",
+        "locations_mentioned",
+    }
+)
 
 
 def _make_openai_client():
@@ -35,15 +37,19 @@ def _make_openai_client():
     if os.environ.get("POSTHOG_API_KEY"):
         try:
             from posthog.ai.openai import OpenAI as _PhOpenAI  # noqa: PLC0415
+
             return _PhOpenAI()
         except Exception:
             pass
     from openai import OpenAI  # noqa: PLC0415
+
     return OpenAI()
+
 
 # Optional: Langfuse tracing
 try:
     from langfuse import Langfuse
+
     langfuse = Langfuse()
     LANGFUSE_ENABLED = True
     print("Langfuse tracing enabled")
@@ -63,10 +69,7 @@ def _get_parser_prompt() -> str:
         with open(_PARSER_PROMPT_PATH) as f:
             content = f.read()
         # Strip markdown header lines and HTML comments
-        lines = [
-            line for line in content.splitlines()
-            if not line.startswith("#") and not line.startswith("<!--")
-        ]
+        lines = [line for line in content.splitlines() if not line.startswith("#") and not line.startswith("<!--")]
         _PARSER_PROMPT_CACHE = "\n".join(lines).strip()
     return _PARSER_PROMPT_CACHE
 
@@ -92,15 +95,13 @@ def parse_jd(job, model="gpt-4o-mini"):
     if seed:
         seed_json = json.dumps(seed, ensure_ascii=False)
         system_prompt = (
-            system_prompt
-            + "\n\nThe following fields have been pre-determined from structured source data. "
-            "Use these values unless the job description CLEARLY contradicts them:\n"
-            + seed_json
+            system_prompt + "\n\nThe following fields have been pre-determined from structured source data. "
+            "Use these values unless the job description CLEARLY contradicts them:\n" + seed_json
         )
 
-    user_content = f"""Job Title: {job['title']}
-Company: {job['company']}
-Location: {job.get('location', 'Not specified')}
+    user_content = f"""Job Title: {job["title"]}
+Company: {job["company"]}
+Location: {job.get("location", "Not specified")}
 
 Job Description:
 {description}"""
@@ -152,6 +153,7 @@ Job Description:
                 llm_val = parsed.get(field)
                 if llm_val is not None and llm_val != value:
                     import structlog as _sl
+
                     _sl.get_logger("agent.parser").info(
                         "preseed_divergence",
                         job_id=job.get("id"),

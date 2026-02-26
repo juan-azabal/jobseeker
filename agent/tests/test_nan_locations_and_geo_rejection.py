@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 # A. Nan location sanitization (scraper.py)
 # ---------------------------------------------------------------------------
 
+
 class TestNanSanitizationScraper:
     """run_scraper() must never emit 'nan' string for location or other string fields."""
 
@@ -28,28 +29,37 @@ class TestNanSanitizationScraper:
         import pandas as pd
         from scraper import run_scraper
 
-        mock_df = pd.DataFrame([{
-            "title": "Senior PM",
-            "company": "Acme",
-            "location": float("nan"),  # pandas NaN
-            "description": "A great role",
-            "job_url": "https://example.com",
-            "date_posted": "",
-            "job_type": "",
-            "is_remote": False,
-            "min_amount": None,
-            "max_amount": None,
-            "currency": "",
-            "interval": "",
-            "site": "indeed",
-        }])
+        mock_df = pd.DataFrame(
+            [
+                {
+                    "title": "Senior PM",
+                    "company": "Acme",
+                    "location": float("nan"),  # pandas NaN
+                    "description": "A great role",
+                    "job_url": "https://example.com",
+                    "date_posted": "",
+                    "job_type": "",
+                    "is_remote": False,
+                    "min_amount": None,
+                    "max_amount": None,
+                    "currency": "",
+                    "interval": "",
+                    "site": "indeed",
+                }
+            ]
+        )
 
-        with patch("scraper.scrape_jobs", return_value=mock_df), \
-             patch("scraper.load_search_config", return_value={
-                 "country_indeed": "Spain",
-                 "is_remote": False,
-                 "searches": [{"term": "PM", "sites": ["indeed"]}],
-             }):
+        with (
+            patch("scraper.scrape_jobs", return_value=mock_df),
+            patch(
+                "scraper.load_search_config",
+                return_value={
+                    "country_indeed": "Spain",
+                    "is_remote": False,
+                    "searches": [{"term": "PM", "sites": ["indeed"]}],
+                },
+            ),
+        ):
             jobs = run_scraper()
 
         assert len(jobs) == 1
@@ -61,28 +71,37 @@ class TestNanSanitizationScraper:
         import pandas as pd
         from scraper import run_scraper
 
-        mock_df = pd.DataFrame([{
-            "title": "PM",
-            "company": "Corp",
-            "location": "nan",  # string "nan" (str(float('nan')))
-            "description": "desc",
-            "job_url": "",
-            "date_posted": "",
-            "job_type": "",
-            "is_remote": False,
-            "min_amount": None,
-            "max_amount": None,
-            "currency": "nan",
-            "interval": "nan",
-            "site": "indeed",
-        }])
+        mock_df = pd.DataFrame(
+            [
+                {
+                    "title": "PM",
+                    "company": "Corp",
+                    "location": "nan",  # string "nan" (str(float('nan')))
+                    "description": "desc",
+                    "job_url": "",
+                    "date_posted": "",
+                    "job_type": "",
+                    "is_remote": False,
+                    "min_amount": None,
+                    "max_amount": None,
+                    "currency": "nan",
+                    "interval": "nan",
+                    "site": "indeed",
+                }
+            ]
+        )
 
-        with patch("scraper.scrape_jobs", return_value=mock_df), \
-             patch("scraper.load_search_config", return_value={
-                 "country_indeed": "Spain",
-                 "is_remote": False,
-                 "searches": [{"term": "PM", "sites": ["indeed"]}],
-             }):
+        with (
+            patch("scraper.scrape_jobs", return_value=mock_df),
+            patch(
+                "scraper.load_search_config",
+                return_value={
+                    "country_indeed": "Spain",
+                    "is_remote": False,
+                    "searches": [{"term": "PM", "sites": ["indeed"]}],
+                },
+            ),
+        ):
             jobs = run_scraper()
 
         assert len(jobs) == 1
@@ -95,28 +114,37 @@ class TestNanSanitizationScraper:
         import pandas as pd
         from scraper import run_scraper
 
-        mock_df = pd.DataFrame([{
-            "title": "PM",
-            "company": "Corp",
-            "location": "Barcelona, Spain",
-            "description": "desc",
-            "job_url": "",
-            "date_posted": "",
-            "job_type": "",
-            "is_remote": False,
-            "min_amount": None,
-            "max_amount": None,
-            "currency": "EUR",
-            "interval": "yearly",
-            "site": "indeed",
-        }])
+        mock_df = pd.DataFrame(
+            [
+                {
+                    "title": "PM",
+                    "company": "Corp",
+                    "location": "Barcelona, Spain",
+                    "description": "desc",
+                    "job_url": "",
+                    "date_posted": "",
+                    "job_type": "",
+                    "is_remote": False,
+                    "min_amount": None,
+                    "max_amount": None,
+                    "currency": "EUR",
+                    "interval": "yearly",
+                    "site": "indeed",
+                }
+            ]
+        )
 
-        with patch("scraper.scrape_jobs", return_value=mock_df), \
-             patch("scraper.load_search_config", return_value={
-                 "country_indeed": "Spain",
-                 "is_remote": False,
-                 "searches": [{"term": "PM", "sites": ["indeed"]}],
-             }):
+        with (
+            patch("scraper.scrape_jobs", return_value=mock_df),
+            patch(
+                "scraper.load_search_config",
+                return_value={
+                    "country_indeed": "Spain",
+                    "is_remote": False,
+                    "searches": [{"term": "PM", "sites": ["indeed"]}],
+                },
+            ),
+        ):
             jobs = run_scraper()
 
         assert len(jobs) == 1
@@ -126,6 +154,7 @@ class TestNanSanitizationScraper:
 # ---------------------------------------------------------------------------
 # B. reject_if_requires_relocation_outside in prefilter
 # ---------------------------------------------------------------------------
+
 
 def _make_prefs_file(reject_outside="Spain", accept_onsite_cities=None, tmp_dir=None):
     """Write a minimal preferences YAML and return its path."""
@@ -168,6 +197,7 @@ def _run_prefilter(jobs, reject_outside="Spain", accept_onsite_cities=None):
         applied_path = _make_applied_file(tmp)
         seen_path = _make_seen_file(tmp)
         from prefilter import prefilter_jobs
+
         return prefilter_jobs(
             jobs,
             config_path=prefs_path,
@@ -191,7 +221,6 @@ def _pm_job(title="Senior Product Manager", company="Acme", location="", is_remo
 
 
 class TestGeoRejection:
-
     def test_france_onsite_rejected(self):
         """Paris, France onsite job → rejected when France is not target."""
         job = _pm_job(location="Paris, France", is_remote=False)

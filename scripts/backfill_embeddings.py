@@ -30,9 +30,7 @@ def _collect_profile_skills(db_path: str) -> set[str]:
     skills: set[str] = set()
     conn = sqlite3.connect(db_path)
     try:
-        rows = conn.execute(
-            "SELECT profile_yaml FROM users WHERE profile_yaml IS NOT NULL"
-        ).fetchall()
+        rows = conn.execute("SELECT profile_yaml FROM users WHERE profile_yaml IS NOT NULL").fetchall()
         for (yaml_text,) in rows:
             try:
                 profile = yaml.safe_load(yaml_text)
@@ -80,14 +78,17 @@ def backfill(db_path: str) -> dict:
 
     logger.info(
         "Found %d unique skills (%d from profiles, %d from jobs).",
-        len(all_skills), len(profile_skills), len(job_skills),
+        len(all_skills),
+        len(profile_skills),
+        len(job_skills),
     )
 
     result = get_embeddings_batch(list(all_skills), db_path)
 
     logger.info(
         "Cached %d embeddings for %d unique skills.",
-        len(result), len(all_skills),
+        len(result),
+        len(all_skills),
     )
     return {"total": len(all_skills), "cached": len(result)}
 

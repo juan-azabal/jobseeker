@@ -17,13 +17,13 @@ from __future__ import annotations
 
 _SENIORITY_MAP: list[tuple[list[str], str]] = [
     # Check most specific first
-    (["principal"],                              "principal"),
-    (["staff"],                                  "staff"),
-    (["vp", "vice president"],                   "vp"),
-    (["executive", "c-level", "c level"],        "vp"),
-    (["director"],                               "director"),
-    (["mid-senior", "mid senior", "senior", "lead", "sr"],  "senior"),
-    (["associate", "mid-level", "mid level"],    "mid"),
+    (["principal"], "principal"),
+    (["staff"], "staff"),
+    (["vp", "vice president"], "vp"),
+    (["executive", "c-level", "c level"], "vp"),
+    (["director"], "director"),
+    (["mid-senior", "mid senior", "senior", "lead", "sr"], "senior"),
+    (["associate", "mid-level", "mid level"], "mid"),
     (["entry", "junior", "internship", "intern", "graduate", "trainee"], "junior"),
 ]
 
@@ -48,8 +48,8 @@ def _map_seniority(job_level: str | None) -> str | None:
 
 _REMOTE_TYPE_TO_LOCATION: dict[str, str] = {
     "fulltime": "remote",
-    "partial":  "hybrid",
-    "no":       "onsite",
+    "partial": "hybrid",
+    "no": "onsite",
 }
 
 
@@ -62,8 +62,14 @@ def _map_location_type(remote_type: str | None) -> str | None:
 # ── Salary formatting ────────────────────────────────────────────────────────
 
 _CURRENCY_SYMBOLS: dict[str, str] = {
-    "EUR": "€", "USD": "$", "GBP": "£", "CHF": "CHF",
-    "SEK": "SEK", "DKK": "DKK", "NOK": "NOK", "PLN": "PLN",
+    "EUR": "€",
+    "USD": "$",
+    "GBP": "£",
+    "CHF": "CHF",
+    "SEK": "SEK",
+    "DKK": "DKK",
+    "NOK": "NOK",
+    "PLN": "PLN",
 }
 
 
@@ -98,97 +104,97 @@ def _format_salary(
 # Keys are lowercase substrings; first match wins. Order matters (specific first).
 _INDUSTRY_DOMAIN: list[tuple[str, str]] = [
     # Fintech
-    ("financial services",        "fintech"),
-    ("banking",                   "fintech"),
-    ("insurance",                 "fintech"),
-    ("investment management",     "fintech"),
-    ("venture capital",           "fintech"),
-    ("capital markets",           "fintech"),
-    ("accounting",                "fintech"),
+    ("financial services", "fintech"),
+    ("banking", "fintech"),
+    ("insurance", "fintech"),
+    ("investment management", "fintech"),
+    ("venture capital", "fintech"),
+    ("capital markets", "fintech"),
+    ("accounting", "fintech"),
     # Healthcare
-    ("hospital & health care",    "healthtech"),
-    ("health care",               "healthtech"),
-    ("healthcare",                "healthtech"),
-    ("medical device",            "healthtech"),
-    ("medical practice",          "healthtech"),
+    ("hospital & health care", "healthtech"),
+    ("health care", "healthtech"),
+    ("healthcare", "healthtech"),
+    ("medical device", "healthtech"),
+    ("medical practice", "healthtech"),
     # Biotech
-    ("pharmaceuticals",           "biotech"),
-    ("biotechnology",             "biotech"),
-    ("life sciences",             "biotech"),
+    ("pharmaceuticals", "biotech"),
+    ("biotechnology", "biotech"),
+    ("life sciences", "biotech"),
     # Edtech
-    ("e-learning",                "edtech"),
-    ("education management",      "edtech"),
+    ("e-learning", "edtech"),
+    ("education management", "edtech"),
     ("primary/secondary education", "edtech"),
-    ("higher education",          "edtech"),
+    ("higher education", "edtech"),
     # Gaming
-    ("computer games",            "gaming"),
-    ("online media",              "media"),
-    ("games",                     "gaming"),
+    ("computer games", "gaming"),
+    ("online media", "media"),
+    ("games", "gaming"),
     # Cybersecurity
     ("computer & network security", "cybersecurity"),
-    ("network security",          "cybersecurity"),
+    ("network security", "cybersecurity"),
     # Retail
-    ("retail",                    "retail"),
-    ("consumer goods",            "retail"),
+    ("retail", "retail"),
+    ("consumer goods", "retail"),
     # Automotive
-    ("automotive",                "automotive"),
+    ("automotive", "automotive"),
     # Defense
-    ("defense & space",           "defense"),
-    ("military",                  "defense"),
+    ("defense & space", "defense"),
+    ("military", "defense"),
     # Legal tech
-    ("law practice",              "legal_tech"),
-    ("legal services",            "legal_tech"),
+    ("law practice", "legal_tech"),
+    ("legal services", "legal_tech"),
     # HR tech
-    ("staffing & recruiting",     "hr_tech"),
-    ("human resources",           "hr_tech"),
+    ("staffing & recruiting", "hr_tech"),
+    ("human resources", "hr_tech"),
     # Logistics
-    ("logistics & supply chain",  "logistics"),
-    ("transportation/trucking",   "logistics"),
-    ("warehousing",               "logistics"),
-    ("package/freight delivery",  "logistics"),
+    ("logistics & supply chain", "logistics"),
+    ("transportation/trucking", "logistics"),
+    ("warehousing", "logistics"),
+    ("package/freight delivery", "logistics"),
     # Food & bev
-    ("food & beverages",          "food_bev"),
-    ("restaurants",               "food_bev"),
-    ("food production",           "food_bev"),
+    ("food & beverages", "food_bev"),
+    ("restaurants", "food_bev"),
+    ("food production", "food_bev"),
     # Travel
-    ("airlines/aviation",         "travel"),
-    ("hospitality",               "travel"),
-    ("leisure, travel",           "travel"),
+    ("airlines/aviation", "travel"),
+    ("hospitality", "travel"),
+    ("leisure, travel", "travel"),
     # Media
-    ("media production",          "media"),
-    ("broadcast media",           "media"),
-    ("publishing",                "media"),
-    ("entertainment",             "media"),
+    ("media production", "media"),
+    ("broadcast media", "media"),
+    ("publishing", "media"),
+    ("entertainment", "media"),
     # Energy
-    ("oil & energy",              "energy"),
-    ("utilities",                 "energy"),
-    ("renewables & environment",  "climate"),
-    ("environmental services",    "climate"),
+    ("oil & energy", "energy"),
+    ("utilities", "energy"),
+    ("renewables & environment", "climate"),
+    ("environmental services", "climate"),
     # Telecom
-    ("telecommunications",        "telecom"),
-    ("wireless",                  "telecom"),
+    ("telecommunications", "telecom"),
+    ("wireless", "telecom"),
     # Construction
-    ("construction",              "construction"),
-    ("civil engineering",         "construction"),
-    ("real estate",               "construction"),
+    ("construction", "construction"),
+    ("civil engineering", "construction"),
+    ("real estate", "construction"),
     # Govtech
     ("government administration", "govtech"),
-    ("public policy",             "govtech"),
+    ("public policy", "govtech"),
     # Manufacturing
-    ("manufacturing",             "manufacturing"),
-    ("machinery",                 "manufacturing"),
-    ("industrial automation",     "manufacturing"),
+    ("manufacturing", "manufacturing"),
+    ("machinery", "manufacturing"),
+    ("industrial automation", "manufacturing"),
     # AI/ML
-    ("artificial intelligence",   "ai_ml"),
-    ("machine learning",          "ai_ml"),
+    ("artificial intelligence", "ai_ml"),
+    ("machine learning", "ai_ml"),
     # Data
-    ("data analytics",            "data"),
+    ("data analytics", "data"),
     # SaaS / generic tech (broad — keep last)
-    ("computer software",         "saas"),
-    ("information technology",    "saas"),
-    ("internet",                  "saas"),
-    ("technology",                "saas"),
-    ("software development",      "saas"),
+    ("computer software", "saas"),
+    ("information technology", "saas"),
+    ("internet", "saas"),
+    ("technology", "saas"),
+    ("software development", "saas"),
 ]
 
 
@@ -204,31 +210,31 @@ def _industry_to_domain(industry: str | None) -> str | None:
 
 # WTTJ source_category keyword → domain
 _SOURCE_CATEGORY_DOMAIN: list[tuple[str, str]] = [
-    ("data-analytic",       "data"),
-    ("data-engineer",       "data"),
+    ("data-analytic", "data"),
+    ("data-engineer", "data"),
     ("business-intelligen", "data"),
-    ("machine-learning",    "ai_ml"),
+    ("machine-learning", "ai_ml"),
     ("artificial-intellig", "ai_ml"),
-    ("deep-learning",       "ai_ml"),
-    ("cybersecurit",        "cybersecurity"),
+    ("deep-learning", "ai_ml"),
+    ("cybersecurit", "cybersecurity"),
     ("information-securit", "cybersecurity"),
-    ("fintech",             "fintech"),
-    ("banking",             "fintech"),
-    ("insurtech",           "fintech"),
-    ("health",              "healthtech"),
-    ("medtech",             "healthtech"),
-    ("edtech",              "edtech"),
-    ("e-learning",          "edtech"),
-    ("gaming",              "gaming"),
-    ("game-dev",            "gaming"),
-    ("ecommerce",           "ecommerce"),
-    ("marketplace",         "marketplace"),
-    ("adtech",              "adtech"),
-    ("martech",             "adtech"),
-    ("cloud",               "infra"),
-    ("devops",              "infra"),
-    ("infrastructure",      "infra"),
-    ("saas",                "saas"),
+    ("fintech", "fintech"),
+    ("banking", "fintech"),
+    ("insurtech", "fintech"),
+    ("health", "healthtech"),
+    ("medtech", "healthtech"),
+    ("edtech", "edtech"),
+    ("e-learning", "edtech"),
+    ("gaming", "gaming"),
+    ("game-dev", "gaming"),
+    ("ecommerce", "ecommerce"),
+    ("marketplace", "marketplace"),
+    ("adtech", "adtech"),
+    ("martech", "adtech"),
+    ("cloud", "infra"),
+    ("devops", "infra"),
+    ("infrastructure", "infra"),
+    ("saas", "saas"),
 ]
 
 
@@ -251,6 +257,7 @@ def _map_domain(company_industry: str | None, source_category: str | None) -> st
 
 
 # ── Location extraction ──────────────────────────────────────────────────────
+
 
 def _extract_locations(job: dict) -> list[str] | None:
     """Extract location strings from structured location fields."""
@@ -279,6 +286,7 @@ def _extract_locations(job: dict) -> list[str] | None:
 
 
 # ── Main entry point ─────────────────────────────────────────────────────────
+
 
 def preseed_parsed(job: dict) -> dict:
     """Map structured RawJob fields to parser output schema.

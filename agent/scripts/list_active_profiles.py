@@ -14,6 +14,7 @@ Usage (from repo root):
 Output:
     ["alice", "juan", "noura", "test1234"]
 """
+
 import json
 import os
 import sys

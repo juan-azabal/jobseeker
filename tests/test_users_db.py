@@ -54,6 +54,7 @@ def test_upsert_user_no_duplicate(db_path):
     upsert_user(db_path, USER)
     upsert_user(db_path, USER)
     import sqlite3
+
     con = sqlite3.connect(db_path)
     count = con.execute("SELECT COUNT(*) FROM users WHERE google_id = 'g_123'").fetchone()[0]
     assert count == 1

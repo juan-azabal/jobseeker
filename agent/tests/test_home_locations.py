@@ -96,6 +96,7 @@ class TestJuanHomeLocations:
 
     def setup_method(self):
         import copy
+
         profile = copy.deepcopy(BASELINE_PROFILE)
         _load_heuristic_config(profile)
 
@@ -159,4 +160,5 @@ class TestJuanHomeLocations:
     def test_baseline_regression_strong_fit(self):
         """Same job as baseline test — must still score 56 (after seniority fix)."""
         from tests.test_scoring_baseline import JOB_STRONG_FIT
+
         assert _heuristic_score(JOB_STRONG_FIT) == 56

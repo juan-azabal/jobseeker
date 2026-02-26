@@ -39,20 +39,40 @@ def _normalize_for_id(text: str) -> str:
     """
     s = text.lower().strip()
     # Strip gender/diversity parenthetical suffixes (e.g. (f/m/d), (h/f), (all genders))
-    s = re.sub(r'\s*\([fmhwd/]+\)\s*$', '', s)
-    s = re.sub(r'\s*\(all\s+genders?\)\s*$', '', s)
+    s = re.sub(r"\s*\([fmhwd/]+\)\s*$", "", s)
+    s = re.sub(r"\s*\(all\s+genders?\)\s*$", "", s)
     # Strip common legal entity suffixes from company names
-    for suffix in [', inc.', ', inc', ' inc.', ' inc',
-                   ', ltd', ' ltd', ', s.l.', ' s.l.',
-                   ', s.a.', ' s.a.', ', gmbh', ' gmbh',
-                   ', b.v.', ' b.v.', ', llc.', ' llc.',
-                   ', llc', ' llc', ', corp.', ' corp.',
-                   ', corp', ' corp', ', ag', ' ag']:
+    for suffix in [
+        ", inc.",
+        ", inc",
+        " inc.",
+        " inc",
+        ", ltd",
+        " ltd",
+        ", s.l.",
+        " s.l.",
+        ", s.a.",
+        " s.a.",
+        ", gmbh",
+        " gmbh",
+        ", b.v.",
+        " b.v.",
+        ", llc.",
+        " llc.",
+        ", llc",
+        " llc",
+        ", corp.",
+        " corp.",
+        ", corp",
+        " corp",
+        ", ag",
+        " ag",
+    ]:
         if s.endswith(suffix):
-            s = s[:-len(suffix)].strip()
+            s = s[: -len(suffix)].strip()
     # Replace all punctuation with spaces, then collapse whitespace
-    s = re.sub(r'[^\w\s]', ' ', s)
-    s = ' '.join(s.split())
+    s = re.sub(r"[^\w\s]", " ", s)
+    s = " ".join(s.split())
     return s
 
 
@@ -173,8 +193,9 @@ def run_scraper(config_path="config/searches.yaml") -> list[RawJob]:
                         job_level=_or_none(row.get("job_level")),
                         job_function=_or_none(row.get("job_function")),
                         # Contact
-                        emails=([e.strip() for e in row["emails"].split(",") if e.strip()]
-                                if row.get("emails") else None),
+                        emails=(
+                            [e.strip() for e in row["emails"].split(",") if e.strip()] if row.get("emails") else None
+                        ),
                     )
 
             print(f"   Found {len(results)} results ({len(all_jobs)} unique total)")

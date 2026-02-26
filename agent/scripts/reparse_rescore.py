@@ -29,12 +29,12 @@ os.chdir(ROOT)
 sys.path.insert(0, str(ROOT))
 
 from user_config import load_profile, resolve_profile_paths  # noqa: E402
-from jobcache import load_cache, update_cache, save_cache     # noqa: E402
-from parser import parse_jd                                    # noqa: E402
+from jobcache import load_cache, update_cache, save_cache  # noqa: E402
+from parser import parse_jd  # noqa: E402
 
 # Cost constants (from main.py comments)
-_COST_PARSE = 0.001   # gpt-4o-mini per job
-_COST_SCORE = 0.040   # gpt-4o per job
+_COST_PARSE = 0.001  # gpt-4o-mini per job
+_COST_SCORE = 0.040  # gpt-4o per job
 
 
 def _load_applied_ids(applied_path: str) -> set:
@@ -43,6 +43,7 @@ def _load_applied_ids(applied_path: str) -> set:
         return set()
     try:
         import yaml  # noqa: PLC0415
+
         with open(applied_path) as f:
             data = yaml.safe_load(f) or {}
         return set(data.get("applied", {}).get("ids", []))
@@ -92,12 +93,9 @@ def _post_to_railway(jobs: list, profile_id: str) -> bool:
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description="Reparse + rescore existing cached jobs for v1→v2 migration."
-    )
+    ap = argparse.ArgumentParser(description="Reparse + rescore existing cached jobs for v1→v2 migration.")
     ap.add_argument("--profile", required=True, help="Profile ID (e.g. juan)")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="Print job count and cost estimate only; no API calls")
+    ap.add_argument("--dry-run", action="store_true", help="Print job count and cost estimate only; no API calls")
     args = ap.parse_args()
 
     profile_id = args.profile
@@ -131,21 +129,20 @@ def main():
 
     # Filter to eligible: not applied/dismissed, has description + parsed
     eligible = [
-        j for j in all_jobs
+        j
+        for j in all_jobs
         if j.get("id") not in applied_ids
-        and j.get("description") and len(j.get("description", "")) >= 100
+        and j.get("description")
+        and len(j.get("description", "")) >= 100
         and j.get("parsed")
     ]
     n_applied = sum(1 for j in all_jobs if j.get("id") in applied_ids)
     n_no_desc = sum(
-        1 for j in all_jobs
-        if j.get("id") not in applied_ids
-        and (not j.get("description") or len(j.get("description", "")) < 100)
+        1
+        for j in all_jobs
+        if j.get("id") not in applied_ids and (not j.get("description") or len(j.get("description", "")) < 100)
     )
-    n_already_v2 = sum(
-        1 for j in eligible
-        if (j.get("rag_score") or {}).get("technical_depth") is not None
-    )
+    n_already_v2 = sum(1 for j in eligible if (j.get("rag_score") or {}).get("technical_depth") is not None)
 
     print(f"  Applied/dismissed:      {n_applied}")
     print(f"  Skipped (no desc):      {n_no_desc}")
@@ -157,8 +154,7 @@ def main():
         sys.exit(0)
 
     cost_est = round(len(eligible) * (_COST_PARSE + _COST_SCORE), 2)
-    print(f"\nCost estimate: ~${cost_est} "
-          f"({len(eligible)} jobs × ${_COST_PARSE + _COST_SCORE:.3f}/job)")
+    print(f"\nCost estimate: ~${cost_est} ({len(eligible)} jobs × ${_COST_PARSE + _COST_SCORE:.3f}/job)")
 
     if dry_run:
         print("\n--dry-run: stopping here. Remove flag to execute.")
@@ -174,15 +170,11 @@ def main():
             reparsed.append(result)
         else:
             n_parse_fail += 1
-            print(f"   [{i:3}/{len(eligible)}] ⚠  Parse failed: "
-                  f"{job.get('title')} — {result.get('parse_error')}")
+            print(f"   [{i:3}/{len(eligible)}] ⚠  Parse failed: {job.get('title')} — {result.get('parse_error')}")
         if i % 10 == 0:
             print(f"   [{i:3}/{len(eligible)}] parsed so far...")
 
-    n_with_rf = sum(
-        1 for j in reparsed
-        if (j.get("parsed") or {}).get("role_function")
-    )
+    n_with_rf = sum(1 for j in reparsed if (j.get("parsed") or {}).get("role_function"))
     print(f"   Parsed: {len(reparsed)}, with role_function: {n_with_rf}, failed: {n_parse_fail}")
 
     if not reparsed:
@@ -193,7 +185,8 @@ def main():
     print(f"\n── Step 2: Re-scoring {len(reparsed)} jobs with rubric v2...")
     try:
         from vectorstore import build_vectorstore  # noqa: PLC0415
-        from scorer import score_all               # noqa: PLC0415
+        from scorer import score_all  # noqa: PLC0415
+
         collection = build_vectorstore(profile=profile)
         scored = score_all(reparsed, collection, profile=profile)
     except Exception as e:
@@ -201,10 +194,7 @@ def main():
         print("   Ingesting parse results only (no v2 grades).")
         scored = reparsed
 
-    n_scored_v2 = sum(
-        1 for j in scored
-        if (j.get("rag_score") or {}).get("technical_depth") is not None
-    )
+    n_scored_v2 = sum(1 for j in scored if (j.get("rag_score") or {}).get("technical_depth") is not None)
     print(f"   Scored v2: {n_scored_v2}/{len(scored)}")
 
     # ── Step 3: Ingest to Railway DB ─────────────────────────────────────────
@@ -218,7 +208,7 @@ def main():
 
     # Summary
     print("\n" + "=" * 70)
-    print(f"Done.")
+    print("Done.")
     print(f"  Reparsed:     {len(reparsed)}/{len(eligible)}")
     print(f"  Scored v2:    {n_scored_v2}/{len(scored)}")
     print(f"  Railway sync: {'✓ ok' if railway_ok else '⚠  skipped (set RAILWAY_URL + INGEST_API_KEY)'}")

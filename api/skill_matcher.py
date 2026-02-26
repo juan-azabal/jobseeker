@@ -11,17 +11,17 @@ from api.embeddings import cosine_similarity, get_embeddings_batch
 
 logger = structlog.get_logger(__name__)
 
-MATCH_THRESHOLD = 0.80    # strong match
+MATCH_THRESHOLD = 0.80  # strong match
 PARTIAL_THRESHOLD = 0.68  # partial match
-MAX_PAIRS = 500           # skip semantic matching for pathological cases
+MAX_PAIRS = 500  # skip semantic matching for pathological cases
 
 
 @dataclass
 class SkillMatch:
-    job_skill: str           # original skill text from job
-    status: str              # "matched" | "partial" | "none"
-    user_skill: str | None   # which user skill matched (if any)
-    similarity: float        # best cosine similarity score
+    job_skill: str  # original skill text from job
+    status: str  # "matched" | "partial" | "none"
+    user_skill: str | None  # which user skill matched (if any)
+    similarity: float  # best cosine similarity score
 
 
 def match_skills(
@@ -36,10 +36,7 @@ def match_skills(
     if not job_skills:
         return []
     if not user_skills:
-        return [
-            SkillMatch(job_skill=s, status="none", user_skill=None, similarity=0.0)
-            for s in job_skills
-        ]
+        return [SkillMatch(job_skill=s, status="none", user_skill=None, similarity=0.0) for s in job_skills]
 
     # Normalize all skills; skip overly long strings (likely sentences, not skills)
     norm_user = [s.strip().lower().replace("-", " ") for s in user_skills if len(s.strip()) <= 200]
@@ -49,7 +46,8 @@ def match_skills(
     if len(norm_user) * len(norm_job) > MAX_PAIRS:
         logger.info(
             "Pair count %d exceeds %d — falling back to substring matching",
-            len(norm_user) * len(norm_job), MAX_PAIRS,
+            len(norm_user) * len(norm_job),
+            MAX_PAIRS,
         )
         return _substring_match(norm_user, norm_job, job_skills)
 
@@ -59,9 +57,7 @@ def match_skills(
 
     # Check if we have enough embeddings for semantic matching
     has_embeddings = (
-        len(embeddings) > 0
-        and all(s in embeddings for s in norm_job)
-        and any(s in embeddings for s in norm_user)
+        len(embeddings) > 0 and all(s in embeddings for s in norm_job) and any(s in embeddings for s in norm_user)
     )
 
     if has_embeddings and norm_user:
@@ -81,12 +77,14 @@ def _semantic_match(
     for i, job_skill in enumerate(norm_job):
         job_emb = embeddings.get(job_skill)
         if job_emb is None:
-            results.append(SkillMatch(
-                job_skill=original_job_skills[i],
-                status="none",
-                user_skill=None,
-                similarity=0.0,
-            ))
+            results.append(
+                SkillMatch(
+                    job_skill=original_job_skills[i],
+                    status="none",
+                    user_skill=None,
+                    similarity=0.0,
+                )
+            )
             continue
 
         best_sim = 0.0
@@ -107,12 +105,14 @@ def _semantic_match(
         else:
             status = "none"
 
-        results.append(SkillMatch(
-            job_skill=original_job_skills[i],
-            status=status,
-            user_skill=best_user if status != "none" else None,
-            similarity=best_sim,
-        ))
+        results.append(
+            SkillMatch(
+                job_skill=original_job_skills[i],
+                status=status,
+                user_skill=best_user if status != "none" else None,
+                similarity=best_sim,
+            )
+        )
 
     return results
 
@@ -131,11 +131,13 @@ def _substring_match(
                 matched_user = user_skill
                 break
 
-        results.append(SkillMatch(
-            job_skill=original_job_skills[i],
-            status="matched" if matched_user else "none",
-            user_skill=matched_user,
-            similarity=1.0 if matched_user else 0.0,
-        ))
+        results.append(
+            SkillMatch(
+                job_skill=original_job_skills[i],
+                status="matched" if matched_user else "none",
+                user_skill=matched_user,
+                similarity=1.0 if matched_user else 0.0,
+            )
+        )
 
     return results

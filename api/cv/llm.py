@@ -10,6 +10,7 @@ LLM calls are automatically instrumented via posthog.ai wrappers so that
 token usage and latency are recorded in PostHog (no-op when PostHog is not
 initialised, i.e. POSTHOG_API_KEY is absent in dev/test).
 """
+
 import os
 import re
 
@@ -75,9 +76,7 @@ def generate_cv(
     elif provider == "openai":
         raw = _call_openai(system_prompt, user_prompt, model_override, distinct_id)
     else:
-        raise ValueError(
-            f"Unknown CV_LLM_PROVIDER: '{provider}'. Must be 'anthropic' or 'openai'."
-        )
+        raise ValueError(f"Unknown CV_LLM_PROVIDER: '{provider}'. Must be 'anthropic' or 'openai'.")
     return strip_analysis(raw)
 
 
@@ -91,8 +90,7 @@ def _call_anthropic(
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise RuntimeError(
-            "ANTHROPIC_API_KEY environment variable is not set. "
-            "Set it in .env or your deployment environment."
+            "ANTHROPIC_API_KEY environment variable is not set. Set it in .env or your deployment environment."
         )
 
     from posthog.ai.anthropic import Anthropic  # noqa: PLC0415
@@ -121,8 +119,7 @@ def _call_openai(
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
         raise RuntimeError(
-            "OPENAI_API_KEY environment variable is not set. "
-            "Set it in .env or your deployment environment."
+            "OPENAI_API_KEY environment variable is not set. Set it in .env or your deployment environment."
         )
 
     from posthog.ai.openai import OpenAI  # noqa: PLC0415

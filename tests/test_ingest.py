@@ -9,6 +9,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 def _create_test_user(db_path, user_id=1, profile_id="test-user"):
     import sqlite3
+
     con = sqlite3.connect(db_path)
     con.execute(
         "INSERT INTO users (id, google_id, email, name, profile_id) VALUES (?, 'g1', 'a@b.com', 'Test', ?)",

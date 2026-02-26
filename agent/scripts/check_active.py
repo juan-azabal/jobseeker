@@ -2,6 +2,7 @@
 Helper for GitHub Actions: prints 'true' or 'false' based on user.active in a profile YAML.
 Usage: python scripts/check_active.py config/profiles/juan.yaml
 """
+
 import sys
 import yaml
 
