@@ -196,20 +196,29 @@ def cleanup_old_jobs(db_path: str, days: int = 90) -> int:
 def upsert_user_job_score(
     db_path: str, user_id: int, job_id: str,
     score: int, tier: str, scored_json: str | None,
+    technical_grade: str | None = None,
+    profile_grade: str | None = None,
+    scored_v2: int = 0,
 ) -> None:
     now = datetime.now(timezone.utc).isoformat()
     con = _connect(db_path)
     con.execute(
         """
-        INSERT INTO user_job_scores (user_id, job_id, score, tier, scored, scored_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO user_job_scores
+          (user_id, job_id, score, tier, scored, scored_at,
+           technical_grade, profile_grade, scored_v2)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id, job_id) DO UPDATE SET
-          score     = excluded.score,
-          tier      = excluded.tier,
-          scored    = excluded.scored,
-          scored_at = excluded.scored_at
+          score           = excluded.score,
+          tier            = excluded.tier,
+          scored          = excluded.scored,
+          scored_at       = excluded.scored_at,
+          technical_grade = excluded.technical_grade,
+          profile_grade   = excluded.profile_grade,
+          scored_v2       = excluded.scored_v2
         """,
-        (user_id, job_id, score, tier, scored_json, now),
+        (user_id, job_id, score, tier, scored_json, now,
+         technical_grade, profile_grade, scored_v2),
     )
     con.commit()
     con.close()

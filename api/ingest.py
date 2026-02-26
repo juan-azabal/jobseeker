@@ -89,12 +89,25 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None 
         # Store per-user score when profile_id is provided and job has a RAG score
         if user_id:
             rag = raw.get("rag_score")
-            if rag and isinstance(rag, dict) and rag.get("score") is not None:
-                score = rag["score"]
-                tier = compute_tier(score)
+            if rag and isinstance(rag, dict):
                 scored_json = json.dumps(rag)
-                upsert_user_job_score(db_path, user_id, job_id, score, tier, scored_json)
-                scored += 1
+                is_v2 = rag.get("technical_depth") is not None
+                if is_v2:
+                    # v2 rubric: store categorical grades; numeric score computed at query time
+                    upsert_user_job_score(
+                        db_path, user_id, job_id,
+                        score=0, tier="C", scored_json=scored_json,
+                        technical_grade=rag.get("technical_depth"),
+                        profile_grade=rag.get("profile_evidence"),
+                        scored_v2=1,
+                    )
+                    scored += 1
+                elif rag.get("score") is not None:
+                    # v1 rubric: store numeric score unchanged
+                    score = rag["score"]
+                    tier = compute_tier(score)
+                    upsert_user_job_score(db_path, user_id, job_id, score, tier, scored_json)
+                    scored += 1
 
     # Prune jobs not seen in the last 90 days to keep the DB bounded
     deleted = cleanup_old_jobs(db_path)
