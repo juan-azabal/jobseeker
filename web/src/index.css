@@ -1,3 +1,44 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ---- Scroll reveal (LandingPage) ---- */
+.reveal-section {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.reveal-section.revealed { opacity: 1; transform: translateY(0); }
+.reveal-section > *:nth-child(1) { transition-delay: 0ms; }
+.reveal-section > *:nth-child(2) { transition-delay: 100ms; }
+.reveal-section > *:nth-child(3) { transition-delay: 200ms; }
+.reveal-section > *:nth-child(4) { transition-delay: 300ms; }
+.reveal-section > *:nth-child(5) { transition-delay: 400ms; }
+
+/* ---- MockCVButton animation ---- */
+/* 12s total cycle: Generate(1.5s) → Generating(2.5s) → Downloaded(8s) */
+@keyframes cv-frame-1 {
+  0%, 100% { opacity: 0; }
+  2%   { opacity: 1; }
+  11%  { opacity: 1; }
+  13%  { opacity: 0; }
+}
+@keyframes cv-frame-2 {
+  0%, 13%  { opacity: 0; }
+  15%  { opacity: 1; }
+  31%  { opacity: 1; }
+  33%  { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes cv-frame-3 {
+  0%, 33%  { opacity: 0; }
+  35%  { opacity: 1; }
+  98%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.cv-anim-1 { animation: cv-frame-1 12s ease infinite; animation-play-state: paused; opacity: 0; }
+.cv-anim-2 { animation: cv-frame-2 12s ease infinite; animation-play-state: paused; opacity: 0; }
+.cv-anim-3 { animation: cv-frame-3 12s ease infinite; animation-play-state: paused; opacity: 0; }
+.cv-playing .cv-anim-1,
+.cv-playing .cv-anim-2,
+.cv-playing .cv-anim-3 { animation-play-state: running; }

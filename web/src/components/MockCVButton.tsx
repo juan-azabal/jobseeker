@@ -20,35 +20,6 @@ export default function MockCVButton() {
 
   return (
     <div ref={ref} className="relative" style={{ height: '42px' }}>
-      <style>{`
-        /* 12s total cycle: Generate(1.5s) → Generating(2.5s) → Downloaded(8s) */
-        @keyframes cv-frame-1 {
-          0%, 100% { opacity: 0; }
-          2%   { opacity: 1; }
-          11%  { opacity: 1; }
-          13%  { opacity: 0; }
-        }
-        @keyframes cv-frame-2 {
-          0%, 13%  { opacity: 0; }
-          15%  { opacity: 1; }
-          31%  { opacity: 1; }
-          33%  { opacity: 0; }
-          100% { opacity: 0; }
-        }
-        @keyframes cv-frame-3 {
-          0%, 33%  { opacity: 0; }
-          35%  { opacity: 1; }
-          98%  { opacity: 1; }
-          100% { opacity: 0; }
-        }
-        .cv-anim-1 { animation: cv-frame-1 12s ease infinite; animation-play-state: paused; opacity: 0; }
-        .cv-anim-2 { animation: cv-frame-2 12s ease infinite; animation-play-state: paused; opacity: 0; }
-        .cv-anim-3 { animation: cv-frame-3 12s ease infinite; animation-play-state: paused; opacity: 0; }
-        .cv-playing .cv-anim-1,
-        .cv-playing .cv-anim-2,
-        .cv-playing .cv-anim-3 { animation-play-state: running; }
-      `}</style>
-
       {/* Frame 1: Generate CV */}
       <div className="cv-anim-1 absolute inset-0 flex items-center justify-center">
         <button

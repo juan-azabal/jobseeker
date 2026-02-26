@@ -37,17 +37,6 @@ function RevealSection({ children, className = '' }: { children: React.ReactNode
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      {/* ---- Scroll reveal styles ---- */}
-      <style>{`
-        .reveal-section { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
-        .reveal-section.revealed { opacity: 1; transform: translateY(0); }
-        .reveal-section > *:nth-child(1) { transition-delay: 0ms; }
-        .reveal-section > *:nth-child(2) { transition-delay: 100ms; }
-        .reveal-section > *:nth-child(3) { transition-delay: 200ms; }
-        .reveal-section > *:nth-child(4) { transition-delay: 300ms; }
-        .reveal-section > *:nth-child(5) { transition-delay: 400ms; }
-      `}</style>
-
       {/* ---- Hero ---- */}
       <section className="relative flex flex-col items-center justify-center px-6 py-24 text-center md:py-40">
         {/* Violet glow */}
