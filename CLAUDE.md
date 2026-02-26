@@ -48,11 +48,12 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `web/src/analytics.ts` — posthog-js wrapper (initPostHog, identifyUser, resetPostHog)
 - Agent: `agent/`
   - `agent/main.py` — pipeline orchestrator (scrape → parse → score → notify)
+  - `agent/models.py` — RawJob Pydantic model (source-agnostic scraper output)
   - `agent/logging_setup.py` — structlog configuration for the agent
   - `agent/api_cache.py` — cross-user parsed-job cache via Railway DB
-  - `agent/scraper.py` — JobSpy wrapper + `make_job_id()` dedup
-  - `agent/ats_scraper.py` — Greenhouse/Lever/Ashby API poller
-  - `agent/wttj_scraper.py` — Welcome to the Jungle (Algolia API)
+  - `agent/scraper.py` — JobSpy wrapper + `make_job_id()` dedup → returns `list[RawJob]`
+  - `agent/ats_scraper.py` — Greenhouse/Lever/Ashby API poller → returns `list[RawJob]`
+  - `agent/wttj_scraper.py` — Welcome to the Jungle (Algolia API) → returns `list[RawJob]`
   - `agent/prefilter.py` — keyword filter + US-only detection (no API calls)
   - `agent/parser.py` — gpt-4o-mini: structured JSON extraction from JD
   - `agent/scorer.py` — gpt-4o: RAG scoring against full CV via ChromaDB
@@ -243,12 +244,18 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - Responsive: MockJobDetail hides gap card + reduces to 1 strength on mobile
 
 ### Current
-Ingestion Overhaul — Phase 0 complete (2026-02-26)
+Ingestion Overhaul — Phase 1 complete (2026-02-26)
 - Phase 0.1: WTTJ geographic filter — run_wttj_scraper(target_countries) + Algolia geo filter; juan.yaml: target.wttj_countries: [ES, NL, DE, GB, IE]; 6 tests
 - Phase 0.2: make_job_id normalization — _normalize_for_id() strips gender/legal suffixes + punctuation; location param removed; call sites updated; migrate_job_ids.py; 13 tests
 - Phase 0.3: nan location sanitization + geography rejection — _sanitize_str() in scraper.py; _is_non_target_onsite() in prefilter.py; 10 tests
 - Phase 0.4: smoke test suite — @pytest.mark.smoke, skips without output files; pytest.ini registers marker
 - GATE Phase 0 (closed): 246 agent tests passing, 5 smoke tests skipping (no output files in worktree)
+- Phase 1.1: RawJob Pydantic model — agent/models.py; required: id/title/company/source; is_remote computed from remote_type; extra='ignore'; 10 tests
+- Phase 1.2: JobSpy field enrichment — run_scraper() returns list[RawJob]; captures salary, company metadata (employees_label, revenue_label, industry, url, logo), role metadata (job_level, job_function), emails; remote_type from is_remote bool; 13 tests
+- Phase 1.3: WTTJ field enrichment — _search_wttj_algolia() returns list[RawJob]; captures remote_type, locations_structured (raw offices[]), country/city from first office, experience_min/max, language, source_category; 15 tests
+- Phase 1.4: ATS field enrichment — _fetch_greenhouse/lever/ashby() return list[RawJob]; Greenhouse: departments[] names; Lever: departments from categories.department, team from categories.team; Ashby: department, team fields; 18 tests
+- Phase 1.5: Pipeline wiring — main.py uses attribute access (j.id) for merge; _to_dicts() shim converts list[RawJob]→list[dict] before prefilter; 8 tests
+- GATE Phase 1 (closed): 310 agent tests passing (1 pre-existing failure); patterns/scraper.md updated
 
 Phase 17 — Decomposed Hybrid Scoring (complete: 17.1–17.7)
 - Phase 17.1 — Parser + DB + Ingest: role_function enum
