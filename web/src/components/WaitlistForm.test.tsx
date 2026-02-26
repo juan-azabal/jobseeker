@@ -9,7 +9,10 @@ vi.mock('posthog-js', () => ({
 
 import posthog from 'posthog-js';
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 test('renders email input and submit button', () => {
   render(<WaitlistForm source="hero" />);
@@ -50,6 +53,16 @@ test('on empty input shows validation error and does NOT call fetch', async () =
   await userEvent.click(screen.getByRole('button', { name: /get early access/i }));
   expect(screen.getByText(/enter a valid email/i)).toBeInTheDocument();
   expect(global.fetch).not.toHaveBeenCalled();
+});
+
+test('fetch abort (timeout) shows generic error', async () => {
+  global.fetch = vi.fn().mockRejectedValueOnce(
+    Object.assign(new Error('Aborted'), { name: 'AbortError' }),
+  );
+  render(<WaitlistForm source="hero" />);
+  await userEvent.type(screen.getByRole('textbox'), 'user@example.com');
+  await userEvent.click(screen.getByRole('button', { name: /get early access/i }));
+  await waitFor(() => expect(screen.getByText(/something went wrong/i)).toBeInTheDocument());
 });
 
 test('source prop is passed to posthog.capture on submit', async () => {

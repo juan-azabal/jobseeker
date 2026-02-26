@@ -25,12 +25,16 @@ export default function WaitlistForm({ source }: Props) {
     setState('submitting');
     setErrorMsg('');
     posthog.capture('waitlist_submitted', { source });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
       const res = await fetch('/api/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: trimmed }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
       if (res.status === 201) {
         posthog.capture('waitlist_success', { source });
         setState('success');
@@ -44,6 +48,7 @@ export default function WaitlistForm({ source }: Props) {
         setState('error');
       }
     } catch {
+      clearTimeout(timeoutId);
       setErrorMsg('Something went wrong. Try again.');
       setState('error');
     }
