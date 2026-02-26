@@ -243,7 +243,12 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - Responsive: MockJobDetail hides gap card + reduces to 1 strength on mobile
 
 ### Current
-Phase 16 — Completed
+Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1 complete)
+- Phase 17.1 — Parser + DB + Ingest: role_function enum
+  - Parser prompt v1.4: emits role_function (product|engineering|design|data|marketing|sales|ops|support|other)
+  - DB migration 017: role_function column on jobs table, backfilled from parsed JSON
+  - Ingest: extracts role_function from parsed, writes to jobs.role_function; upsert_job handles missing key defensively
+  - Note: plan referenced migration 016 for role_function but 016 was already taken by waitlist index; used 017 instead; scoring grades will use 018
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
