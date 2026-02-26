@@ -22,6 +22,7 @@ from api.routes.auth import router as auth_router
 from api.routes.onboard import router as onboard_router
 from api.routes.ingest import router as ingest_router
 from api.routes.admin import router as admin_router
+from api.routes.waitlist import router as waitlist_router
 
 configure_logging()
 logger = structlog.get_logger(__name__)
@@ -118,6 +119,7 @@ app.include_router(jobs_router)
 app.include_router(onboard_router)
 app.include_router(ingest_router)
 app.include_router(admin_router)
+app.include_router(waitlist_router)
 
 
 # --- Static file serving (production SPA) ---
