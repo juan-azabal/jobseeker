@@ -419,7 +419,10 @@ Phase 17 — Decomposed Hybrid Scoring (complete: 17.1–17.7)
 
 ### Known Bugs
 
-{none}
+- **P15** — `agent/notifier.py` `_build_context()` does `rag["score"]` (no `.get()`) → `KeyError` when job has v2 rag_score (only has `technical_depth`/`profile_evidence`, no `score` key). Email digest will crash whenever a v2-scored job reaches the notifier. Same pattern as the `main.py` bug fixed 2026-02-26.
+- **P16** — `agent/main.py` `ranked_jobs()` and `_auto_skip_reloc()`: v2 jobs fall back to `_fit_score` (heuristic-only) for `_display_score` because the agent pipeline doesn't compute `hybrid_score()`. Digest ordering and auto-skip reloc logic ignore the LLM grades for v2 jobs. Architectural fix: port `grade_to_points()` + `hybrid_score()` into the agent.
+- **P17** — `agent/gap_tracker.py` stores `rag.get("score", 0)` in gap history JSONL. For v2 jobs this is always 0 (no numeric score in v2 dict). Gap/strength history loses scoring context for v2 jobs.
+- **P18** — `agent/main.py` `print_summary()`: `has_rag = any(j.get("rag_score") ...)` evaluates to `True` for v2 jobs (dict is truthy) but `_display_score` uses heuristic. Digest prints "RAG score" mode even though v2 jobs are ordered by heuristic score. Cosmetic only.
 
 ### Resolved
 - **P14** (2026-02-26) — List and detail endpoints produced different scores for the same job (diffs 3–20 pts). Root causes: `remote_restriction` absent from `SELECT *`, global skill_lookup triggering substring fallback, divergent scoring paths. Fixed via `_score_single_job()` helper and per-job semantic matching. 0 mismatches across 57 jobs; 541 tests passing.
