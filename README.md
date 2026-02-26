@@ -146,7 +146,7 @@ jobsearch/
 │   ├── scripts/            # reparse, rescore, ingest payload builder
 │   ├── schemas/            # JSON output contracts
 │   └── patterns/           # Module interface contracts
-├── tests/                  # Backend tests (415)
+├── tests/                  # Backend tests (449)
 ├── data/                   # jobseeker.db (gitignored)
 ├── scripts/                # seed_dev.py, backfill_embeddings.py, audit_domain_scoring.py
 └── requirements.txt        # Merged deps
@@ -188,6 +188,7 @@ jobsearch/
 | 11 | Cross-user dedup + sequential pipeline | ✅ |
 | 12 | Semantic skill matching | ✅ |
 | 13 | Domain scoring fix (30-domain enum, per-user overrides, admin reparse) | ✅ |
+| 14 | Instrumentation + observability (structlog, PostHog, LLM telemetry) | ✅ |
 | N | Onboarding UX for new profile fields | 🔜 |
 | R | Refactor & test coverage | 🔜 |
 | F | Ship: Dockerfile, README, deploy | 🔜 |

@@ -71,7 +71,8 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `agent/schemas/` — JSON output contracts (parsed_job, scored_job, digest_context, gap_history_entry)
   - `agent/patterns/` — interface contracts per module
   - `agent/docs/decisions/` — ADRs (001–007)
-- Tests: `tests/` (backend, 449 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 194 tests)
+- Tests: `tests/` (backend, 449 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 195 tests)
+  - `agent/tests/fixtures.py` — shared BASELINE_PROFILE fixture (fixed dict, not from juan.yaml)
 - DB: `data/jobseeker.db` (gitignored)
 - Static build: `web/dist/` (gitignored)
 - Scripts: `scripts/seed_dev.py` — dev database seeder, `scripts/backfill_embeddings.py` — one-time skill embedding backfill
@@ -294,6 +295,10 @@ Phase 14 — Completed
 - Health check endpoint (Phase 14): `GET /api/health/ready` runs a lightweight `SELECT COUNT(*) FROM jobs` to verify DB connectivity. Returns `{"status":"ok","jobs":N}` or `{"status":"error","detail":"..."}` with 503. Safe to poll every minute from Railway / GHA `verify-health` job.
 - PostHog AI singleton (Phase 14): `api/cv/llm.py` hoists `_anthropic_client` and `_openai_client` to module level. Created on first `generate_cv()` call, reused for all subsequent calls. Tests patch `posthog.ai.anthropic.Anthropic` / `posthog.ai.openai.OpenAI` (not the bare provider) and call `importlib.reload()` to reset the singleton between tests.
 - Agent LLM observability (Phase 14): `parser.py` and `scorer.py` use `posthog.ai.openai.OpenAI` when `POSTHOG_API_KEY` is set, falling back to plain `openai.OpenAI`. `parser.py` lazy-initialises via `_make_openai_client()` helper (no module-level client). `scorer.py` creates the client per `score_job()` call (same lazy pattern).
+- PostHog host (Phase 14 fix): `api/analytics.py` reads `POSTHOG_HOST` from env at init time (default `https://eu.i.posthog.com`). Was previously hardcoded to `us.i.posthog.com` — events were silently dropped. `web/src/analytics.ts` and `agent/main.py` also default to EU. Set `POSTHOG_HOST` / `VITE_POSTHOG_HOST` to override.
+- structlog `add_logger_name` (Phase 14 fix): `agent/logging_setup.py` uses `PrintLoggerFactory` (not stdlib). `structlog.stdlib.add_logger_name` requires a stdlib logger with `.name` attr → `AttributeError` on first log call. Processor removed from agent; `api/logging_config.py` is unaffected (uses stdlib processors only).
+- Scoring baseline tests (Phase 14 fix): `agent/tests/test_scoring_baseline.py`, `test_home_locations.py`, `test_rubric_parameterization.py` now import `BASELINE_PROFILE` from `agent/tests/fixtures.py` instead of calling `load_profile("juan")`. This decouples regression tests from personal profile tuning — changing `juan.yaml` no longer breaks baselines.
+- 500 exception test (Phase 14 fix): `tests/test_analytics.py::test_unhandled_exception_calls_capture_exception` now calls the exception handler function directly instead of adding a dynamic route. Dynamic routes added after app init land behind the SPA catch-all `/{path:path}` and return 200 instead of 500 when `web/dist/` exists.
 
 ### Blockers
 {none}
