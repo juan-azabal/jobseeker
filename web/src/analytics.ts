@@ -22,9 +22,10 @@ export function initPostHog(): void {
   const key = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
   if (!key) return;
 
+  // Default to EU Cloud; set VITE_POSTHOG_HOST=https://us.i.posthog.com for US Cloud.
   const host =
     (import.meta.env.VITE_POSTHOG_HOST as string | undefined) ??
-    'https://us.i.posthog.com';
+    'https://eu.i.posthog.com';
 
   posthog.init(key, {
     api_host: host,

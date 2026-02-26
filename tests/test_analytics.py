@@ -170,28 +170,21 @@ def test_auth_callback_calls_identify_user():
 
 def test_unhandled_exception_calls_capture_exception():
     """Unhandled exceptions (500s) are captured via capture_exception()."""
+    import asyncio
     import api.analytics as m
     mock_client = MagicMock()
     m._client = mock_client
 
-    from fastapi import APIRouter
-    from fastapi.testclient import TestClient
-    from api.main import app
+    from fastapi import Request
+    from api.main import unhandled_exception_handler
 
-    # Add a temporary test route that raises
-    test_router = APIRouter()
+    # Call the exception handler directly — avoids route-ordering issues when
+    # the SPA catch-all (/{full_path:path}) is registered before a dynamic test route.
+    mock_request = MagicMock(spec=Request)
+    mock_request.url.path = "/api/_test_500"
+    exc = RuntimeError("intentional 500 for test")
 
-    @test_router.get("/api/_test_500")
-    def raise_500():
-        raise RuntimeError("intentional 500 for test")
+    response = asyncio.run(unhandled_exception_handler(mock_request, exc))
 
-    app.include_router(test_router)
-
-    try:
-        with TestClient(app, raise_server_exceptions=False) as client:
-            response = client.get("/api/_test_500")
-        assert response.status_code == 500
-        mock_client.capture_exception.assert_called()
-    finally:
-        # Remove the test route by rebuilding the app's route list
-        app.routes[:] = [r for r in app.routes if getattr(r, "path", "") != "/api/_test_500"]
+    assert response.status_code == 500
+    mock_client.capture_exception.assert_called_once_with(exc)

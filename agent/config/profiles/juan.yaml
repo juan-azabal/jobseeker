@@ -23,19 +23,30 @@ target:
     principal: 15
     staff: 12
     senior: 8
+    unknown: -10
   country_weights:
     spain: 10
     remote: 10
-    france: 5
-    germany: 3
-    netherlands: 3
+    france: -10
+    germany: -10
+    netherlands: -10
   domains:
     data: 15
     adtech: 12
     saas: 10
     martech: 10
-    ia: 10
     llm: 10
+    ai_ml: 10
+    devtools: 10
+    marketplace: 10
+    gaming: -20
+    ecommerce: 10
+    media: 10
+  salary_min: 60000
+  company_type_weights:
+    startup: 15
+    scaleup: 15
+    enterprise: 5
 scoring:
   rag_threshold: 25
   salary_min: 70000
@@ -56,6 +67,7 @@ skills:
 - personalization
 - ml
 - data-platforms
+- data
 knowledge:
   dir: knowledge/juan
   profile_files:

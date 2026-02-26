@@ -20,7 +20,9 @@ logger = structlog.get_logger(__name__)
 
 _client: Posthog | None = None
 
-POSTHOG_HOST = "https://us.i.posthog.com"
+# Default to EU Cloud; override via POSTHOG_HOST env var if self-hosting or
+# using a different region. Set POSTHOG_HOST=https://us.i.posthog.com for US Cloud.
+_DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com"
 
 
 def init_posthog() -> None:
@@ -35,14 +37,15 @@ def init_posthog() -> None:
         logger.debug("PostHog disabled: POSTHOG_API_KEY not set")
         return
 
+    host = os.environ.get("POSTHOG_HOST", _DEFAULT_POSTHOG_HOST)
     _client = Posthog(
         api_key,
-        host=POSTHOG_HOST,
+        host=host,
         flush_interval=10,
         enable_exception_autocapture=False,
     )
     atexit.register(_client.shutdown)
-    logger.info("PostHog initialized", host=POSTHOG_HOST)
+    logger.info("PostHog initialized", host=host)
 
 
 def capture(user_id: int | str, event: str, properties: dict | None = None) -> None:

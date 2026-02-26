@@ -271,8 +271,9 @@ The agent uses `structlog` configured in `agent/logging_setup.py`.
 | Variable | Component | Purpose |
 |---|---|---|
 | `POSTHOG_API_KEY` | API (Railway), Agent (GHA) | Enables PostHog. No-op if absent. |
+| `POSTHOG_HOST` | API (Railway), Agent (GHA) | PostHog ingest host. Defaults to `https://eu.i.posthog.com`. Set to `https://us.i.posthog.com` for US Cloud. |
 | `VITE_POSTHOG_KEY` | Frontend build | Enables posthog-js. No-op if absent. |
-| `VITE_POSTHOG_HOST` | Frontend build | Override PostHog host (optional, defaults to `https://us.i.posthog.com`) |
+| `VITE_POSTHOG_HOST` | Frontend build | PostHog ingest host for the browser. Defaults to `https://eu.i.posthog.com`. |
 | `ENVIRONMENT` | API (Railway) | Set to `"production"` to emit JSON logs |
 | `LOG_FORMAT` | Agent (GHA) | Set to `"json"` for JSON logs (auto-set when `CI=true`) |
 
