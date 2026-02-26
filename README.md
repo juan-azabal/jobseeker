@@ -126,7 +126,7 @@ jobsearch/
 ├── web/                    # React frontend
 │   └── src/
 │       ├── pages/          # Landing, Login, Onboard, Jobs, JobDetail, Profile, Admin
-│       ├── components/     # FilterBar, JobCard, ProfileEditor, ScoreBreakdown, DomainSelector, WaitlistForm, MockDashboard, etc.
+│       ├── components/     # FilterBar, JobCard, ProfileEditor, ScoreBreakdown, DomainSelector, WaitlistForm, MockDashboard, MockJobDetail, MockCVButton, etc.
 │       ├── context/        # AuthContext
 │       └── types/          # TypeScript types
 ├── agent/                  # Scraping/scoring engine
@@ -146,7 +146,7 @@ jobsearch/
 │   ├── scripts/            # reparse, rescore, ingest payload builder
 │   ├── schemas/            # JSON output contracts
 │   └── patterns/           # Module interface contracts
-├── tests/                  # Backend tests (457)
+├── tests/                  # Backend tests (457), frontend tests (56)
 ├── data/                   # jobseeker.db (gitignored)
 ├── scripts/                # seed_dev.py, backfill_embeddings.py, audit_domain_scoring.py
 └── requirements.txt        # Merged deps
@@ -190,6 +190,7 @@ jobsearch/
 | 13 | Domain scoring fix (30-domain enum, per-user overrides, admin reparse) | ✅ |
 | 14 | Instrumentation + observability (structlog, PostHog, LLM telemetry) | ✅ |
 | 15 | Landing page + waitlist (public landing, WaitlistForm, MockDashboard, branding) | ✅ |
+| 16 | Landing iteration: MockJobDetail, MockCVButton, CV callout, 4-step How it works | ✅ |
 | N | Onboarding UX for new profile fields | 🔜 |
 | R | Refactor & test coverage | 🔜 |
 | F | Ship: Dockerfile, README, deploy | 🔜 |
