@@ -157,7 +157,7 @@ def load_seen_ids(path="config/seen_ids.txt"):
         return {line.strip() for line in f if line.strip()}
 
 
-def prefilter_jobs(jobs, config_path, applied_path, seen_path, home_locations=None):
+def prefilter_jobs(jobs, config_path, applied_path, seen_path, home_locations=None, profile_role_function=None):
     prefs = load_preferences(config_path)
     pf = prefs["prefilter"]
     applied = load_applied(applied_path)
@@ -176,6 +176,8 @@ def prefilter_jobs(jobs, config_path, applied_path, seen_path, home_locations=No
     passed = []
     rejected = []
 
+    _profile_rf = (profile_role_function or "").strip().lower()
+
     stats = {
         "total": len(jobs),
         "passed": 0,
@@ -188,6 +190,7 @@ def prefilter_jobs(jobs, config_path, applied_path, seen_path, home_locations=No
         "title_excluded": 0,
         "us_only": 0,
         "aggregator": 0,
+        "role_function_mismatch": 0,
     }
 
     for job in jobs:
@@ -253,6 +256,13 @@ def prefilter_jobs(jobs, config_path, applied_path, seen_path, home_locations=No
             if any(agg in company_lower for agg in aggregator_companies):
                 reason = f"job aggregator: {job['company']}"
                 stat_key = "aggregator"
+
+        # 6. role_function soft gate (only when both profile and job declare the field)
+        if not reason and _profile_rf:
+            job_rf = (job.get("role_function") or "").strip().lower()
+            if job_rf and job_rf != _profile_rf:
+                reason = f"role_function mismatch: profile={_profile_rf} job={job_rf}"
+                stat_key = "role_function_mismatch"
 
         if reason:
             job["reject_reason"] = reason
