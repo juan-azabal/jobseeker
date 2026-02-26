@@ -1,62 +1,47 @@
-# Search configuration
-
 searches:
-  # Main searches: Indeed + Google (fast)
-  - term: "Senior Product Manager data platform"
-    location: "Spain"
-    sites: ["indeed", "google"]
-    results_wanted: 25
-    hours_old: 72
-
-  # "Europe" returns 0 results on Indeed/Google - using specific countries instead
-  - term: "Product Manager AdTech"
-    location: "Netherlands"
-    sites: ["indeed", "google"]
-    results_wanted: 20
-    hours_old: 72
-
-  - term: "Product Manager AdTech"
-    location: "Germany"
-    sites: ["indeed", "google"]
-    results_wanted: 20
-    hours_old: 72
-
-  - term: "Principal Product Manager data"
-    location: "Spain"
-    sites: ["indeed", "google"]
-    results_wanted: 25
-    hours_old: 72
-
-  - term: "Product Manager ML AI platform"
-    location: "Netherlands"
-    sites: ["indeed", "google"]
-    results_wanted: 20
-    hours_old: 72
-
-  - term: "Product Manager ML AI platform"
-    location: "Germany"
-    sites: ["indeed", "google"]
-    results_wanted: 20
-    hours_old: 72
-
-  - term: "Staff Product Manager analytics"
-    location: "Spain"
-    sites: ["indeed", "google"]
-    results_wanted: 25
-    hours_old: 72
-
-  # Targeted LinkedIn (specific high-value queries + companies without ATS boards)
-  - term: "Principal Product Manager data platform remote"
-    location: "Spain"
-    sites: ["linkedin"]
-    results_wanted: 10
-    hours_old: 72
-
-  # Companies verified without public ATS: Airbyte, Timescale, Confluent, Snowflake, RudderStack
-  - term: "Product Manager Airbyte OR Timescale OR Confluent OR RudderStack"
-    location: ""
-    sites: ["linkedin"]
-    results_wanted: 10
-    hours_old: 168
-
+- term: Principal Product Manager data
+  location: Spain
+  sites:
+  - indeed
+  - google
+  results_wanted: 20
+  hours_old: 72
+- term: Principal Product Manager AdTech advertising
+  location: Spain
+  sites:
+  - indeed
+  - google
+  results_wanted: 20
+  hours_old: 72
+- term: Principal Product Manager SaaS B2B
+  location: Spain
+  sites:
+  - indeed
+  - google
+  results_wanted: 20
+  hours_old: 72
+- term: Principal Product Manager remote
+  location: Spain
+  sites:
+  - linkedin
+  results_wanted: 15
+  hours_old: 72
+- term: Principal Product Manager data
+  location: ''
+  sites:
+  - linkedin
+  results_wanted: 10
+  hours_old: 72
+- term: Staff Product Manager remote
+  location: Spain
+  sites:
+  - linkedin
+  results_wanted: 15
+  hours_old: 72
+- term: Principal Product Manager snowplow
+  location: Spain
+  sites:
+  - linkedin
+  results_wanted: 15
+  hours_old: 72
 is_remote: true
