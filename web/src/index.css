@@ -14,6 +14,8 @@
 .reveal-section > *:nth-child(3) { transition-delay: 200ms; }
 .reveal-section > *:nth-child(4) { transition-delay: 300ms; }
 .reveal-section > *:nth-child(5) { transition-delay: 400ms; }
+.reveal-section > *:nth-child(6) { transition-delay: 500ms; }
+.reveal-section > *:nth-child(7) { transition-delay: 600ms; }
 
 /* ---- MockCVButton animation ---- */
 /* 12s total cycle: Generate(1.5s) → Generating(2.5s) → Downloaded(8s) */
