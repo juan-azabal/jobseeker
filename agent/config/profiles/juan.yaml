@@ -18,6 +18,7 @@ target:
   level: principal
   track: ic
   role_type: "Product Manager"
+  role_function: product
   geography: "EU or remote"
   seniority_weights:
     principal: 15

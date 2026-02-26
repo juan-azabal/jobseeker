@@ -20,6 +20,8 @@ user:
 target:
   level: director
   track: management
+  role_type: "Director of Product"
+  role_function: product
   seniority_weights:
     director: 15
     senior: 10

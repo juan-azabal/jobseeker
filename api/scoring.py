@@ -388,6 +388,8 @@ def load_profile_data(profile_id: str | None) -> dict | None:
         "company_type_weights": {
             k.lower(): int(v) for k, v in (target_block.get("company_type_weights") or {}).items()
         },
+        "role_function": target_block.get("role_function") or None,
+        "role_type": target_block.get("role_type") or None,
     }
 
 
