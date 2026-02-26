@@ -11,8 +11,8 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from user_config import load_profile
 from main import _load_heuristic_config, _heuristic_score
+from tests.fixtures import BASELINE_PROFILE
 
 
 class TestEmptyHomeLocations:
@@ -88,10 +88,15 @@ class TestEmptyHomeLocations:
 
 
 class TestJuanHomeLocations:
-    """Juan's profile unchanged from baseline — location scoring still works."""
+    """Fixed baseline profile — location scoring unchanged from baseline.
+
+    Uses BASELINE_PROFILE (not config/profiles/juan.yaml) so personal profile
+    tuning never breaks these regression tests.
+    """
 
     def setup_method(self):
-        profile = load_profile("juan")
+        import copy
+        profile = copy.deepcopy(BASELINE_PROFILE)
         _load_heuristic_config(profile)
 
     def test_remote_scores_10(self):

@@ -13,9 +13,9 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from user_config import load_profile
 from scorer import _build_scoring_prompt, _SCORING_RUBRIC_CACHE
 import scorer
+from tests.fixtures import BASELINE_PROFILE
 
 
 def _reset_rubric_cache():
@@ -24,11 +24,16 @@ def _reset_rubric_cache():
 
 
 class TestJuanProfile:
-    """(a) Juan's profile → rubric contains correct parameterized values."""
+    """(a) Fixed baseline profile → rubric contains correct parameterized values.
+
+    Uses BASELINE_PROFILE (not config/profiles/juan.yaml) so that personal
+    profile tuning never breaks these regression tests.
+    """
 
     def setup_method(self):
         _reset_rubric_cache()
-        self.profile = load_profile("juan")
+        import copy
+        self.profile = copy.deepcopy(BASELINE_PROFILE)
         self.rubric = _build_scoring_prompt(self.profile)
 
     def test_contains_product_manager(self):

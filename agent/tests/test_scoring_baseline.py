@@ -14,9 +14,9 @@ import os
 # Allow importing agent modules from the agent/ directory
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from user_config import load_profile
 from main import _load_heuristic_config, _heuristic_score
 from scorer import _build_scoring_prompt
+from tests.fixtures import BASELINE_PROFILE
 
 
 # ---------------------------------------------------------------------------
@@ -24,8 +24,13 @@ from scorer import _build_scoring_prompt
 # ---------------------------------------------------------------------------
 
 def _load_juan_profile():
-    """Load Juan's profile and initialize heuristic config."""
-    profile = load_profile("juan")
+    """Return the fixed baseline profile and initialize heuristic config.
+
+    Uses BASELINE_PROFILE (not config/profiles/juan.yaml) so that personal
+    profile tuning never breaks these regression tests.
+    """
+    import copy
+    profile = copy.deepcopy(BASELINE_PROFILE)
     _load_heuristic_config(profile)
     return profile
 

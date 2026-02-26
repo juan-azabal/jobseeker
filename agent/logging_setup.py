@@ -28,7 +28,8 @@ def configure_logging() -> None:
 
     shared_processors = [
         structlog.stdlib.add_log_level,
-        structlog.stdlib.add_logger_name,
+        # add_logger_name requires stdlib LoggerFactory (has .name attr).
+        # We use PrintLoggerFactory, so we skip it here.
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
