@@ -17,6 +17,7 @@ ruamel.yaml>=0.18.0
 # LLM providers (CV generation + onboarding profile extraction)
 anthropic>=0.40.0
 openai==2.21.0
+posthog>=7.0.0
 
 # Numeric (cosine similarity for skill matching)
 numpy>=1.26
