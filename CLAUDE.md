@@ -258,6 +258,12 @@ Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1–17.7 complete)
   - Migration 018: technical_grade TEXT, profile_grade TEXT, scored_v2 INTEGER NOT NULL DEFAULT 0 on user_job_scores
   - Ingest: v2 detection via rag.get("technical_depth") is not None; v2 stores grades + scored_v2=1, score=0; v1 stores numeric score unchanged
   - queries.py: upsert_user_job_score() accepts technical_grade/profile_grade/scored_v2 params; get_jobs() returns all three columns
+- Phase 17.3.4 — Reparse + rescore script for v1→v2 migration
+  - agent/scripts/reparse_rescore.py: fetches active jobs from local cache (excludes applied/dismissed via applied.yaml), re-parses with parser v1.4 (adds role_function), re-scores with rubric v2 (technical_depth + profile_evidence), ingests to Railway DB, refreshes local cache
+  - --dry-run flag: prints eligible job count + cost estimate (~$0.041/job) without making API calls
+  - Usage: cd agent && ../venv/bin/python scripts/reparse_rescore.py --profile juan [--dry-run]
+  - agent/tests/test_reparse_rescore.py: 6 tests (dry-run, applied filter, empty cache, Railway POST)
+  - GATE 17.3 (closed): DB stores grades ✓ · ingest handles v1+v2 ✓ · queries return grades ✓ · reparse/rescore script ✓ · all tests pass ✓
 - Phase 17.4 — hybrid_score() + wiring
   - api/scoring.py: hybrid_score() = heuristic_score() + grade_to_points(technical_grade) + grade_to_points(profile_grade), clamped [0,100]
   - api/routes/jobs.py: scoring priority: v2 (scored_v2=1) → hybrid_score with grades; v1 (ujs_score present) → stored RAG; unscored → hybrid_score with defaults
@@ -278,17 +284,12 @@ Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1–17.7 complete)
   - 17.7.3 TestCrossUserDifferentiation: Juan (data=15, kafka/flink) scores ≥10 pts higher than Noura (saas=15) on a data PM role
 
 ### Pending
-- Phase 17.3.4 — Reparse + rescore script for existing jobs (deferred; must be implemented before GATE 17.3 is closed)
-  - Create agent/scripts/reparse_rescore.py
-  - Fetches active jobs for a user from Railway DB; re-parses with parser v1.4; re-scores with rubric v2; ingests back
-  - --dry-run flag: prints job count + cost estimate
-  - Usage: cd agent && python scripts/reparse_rescore.py --profile juan
-  - GATE 17.3 updated: DB stores grades + ingest handles v1+v2 + queries return grades + reparse/rescore works + all tests pass
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
 - Phase R — Refactor & Test Coverage
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
+- reparse_rescore.py (Phase 17.3.4): reads from local `output/cache.json` (not Railway API — no auth-free "get jobs" endpoint exists). Excludes jobs listed in `applied.yaml` (covers both applied and auto-skipped). Cost estimate = n_jobs × $0.041 (parse $0.001 + score $0.040). Ingests to Railway via `POST /api/ingest` with `X-Ingest-Key`. Also refreshes local cache so next run uses v2 data immediately.
 - react-router v7 uses `react-router` package (not `react-router-dom`)
 - `vitest/config` required in vite.config.ts to fix TypeScript `test` key error
 - Test files excluded from tsconfig.app.json to avoid TS errors on `global`
