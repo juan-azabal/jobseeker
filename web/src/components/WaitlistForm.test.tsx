@@ -55,6 +55,15 @@ test('on empty input shows validation error and does NOT call fetch', async () =
   expect(global.fetch).not.toHaveBeenCalled();
 });
 
+test('on 500 shows generic error (not "Enter a valid email")', async () => {
+  global.fetch = vi.fn().mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) } as Response);
+  render(<WaitlistForm source="hero" />);
+  await userEvent.type(screen.getByRole('textbox'), 'user@example.com');
+  await userEvent.click(screen.getByRole('button', { name: /get early access/i }));
+  await waitFor(() => expect(screen.getByText(/something went wrong/i)).toBeInTheDocument());
+  expect(screen.queryByText(/enter a valid email/i)).not.toBeInTheDocument();
+});
+
 test('email with subdomain (user@sub.example.com) passes validation', async () => {
   global.fetch = vi.fn().mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ status: 'ok' }) } as Response);
   render(<WaitlistForm source="hero" />);

@@ -42,9 +42,13 @@ export default function WaitlistForm({ source }: Props) {
         posthog.capture('waitlist_duplicate', { source });
         setErrorMsg('Already on the list');
         setState('error');
-      } else {
+      } else if (res.status === 422) {
         posthog.capture('waitlist_error', { source, reason: 'invalid_email' });
         setErrorMsg('Enter a valid email');
+        setState('error');
+      } else {
+        posthog.capture('waitlist_error', { source, reason: 'server_error' });
+        setErrorMsg('Something went wrong. Try again.');
         setState('error');
       }
     } catch {
