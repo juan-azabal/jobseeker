@@ -7,12 +7,26 @@ import os
 import json
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
-client = OpenAI()
+
+def _make_openai_client():
+    """Return an OpenAI client wrapped with PostHog AI observability when available.
+
+    Falls back to a plain openai.OpenAI() when POSTHOG_API_KEY is absent or the
+    posthog.ai wrapper is unavailable (e.g. import error in minimal envs).
+    The PostHog AI wrapper tracks token usage and latency; the plain client does not.
+    """
+    if os.environ.get("POSTHOG_API_KEY"):
+        try:
+            from posthog.ai.openai import OpenAI as _PhOpenAI  # noqa: PLC0415
+            return _PhOpenAI()
+        except Exception:
+            pass
+    from openai import OpenAI  # noqa: PLC0415
+    return OpenAI()
 
 # Optional: Langfuse tracing
 try:
@@ -55,6 +69,8 @@ def parse_jd(job, model="gpt-4o-mini"):
 
     if len(description) > 8000:
         description = description[:8000] + "\n[...truncated]"
+
+    client = _make_openai_client()
 
     user_content = f"""Job Title: {job['title']}
 Company: {job['company']}

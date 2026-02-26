@@ -15,6 +15,9 @@ country_converter>=0.7
 pytz>=2024.1
 babel>=2.14
 numpy>=1.26
+structlog>=24.0
+asgi-correlation-id>=4.0
+posthog>=7.0.0
 pytest==8.3.4
 pytest-asyncio==0.25.2
 

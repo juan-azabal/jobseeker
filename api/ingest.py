@@ -1,13 +1,13 @@
 import json
-import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import structlog
 from api.db.queries import upsert_job, get_job_by_id, upsert_user_job_score, get_user_id_by_profile_id, cleanup_old_jobs
 from api.scoring import compute_tier
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _to_date(date_str: str | None) -> str:

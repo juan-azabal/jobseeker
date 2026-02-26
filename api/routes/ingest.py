@@ -1,10 +1,10 @@
-import logging
 import os
 
+import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 

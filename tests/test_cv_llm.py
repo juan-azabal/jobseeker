@@ -14,9 +14,12 @@ def test_anthropic_provider_calls_correct_client(monkeypatch):
     mock_client = MagicMock()
     mock_client.messages.create.return_value = mock_response
 
-    with patch("anthropic.Anthropic", return_value=mock_client):
-        from api.cv.llm import generate_cv
-        result = generate_cv("system prompt", "user prompt")
+    import importlib
+    import api.cv.llm as llm_module
+    importlib.reload(llm_module)  # reset singleton so patch takes effect
+
+    with patch("posthog.ai.anthropic.Anthropic", return_value=mock_client):
+        result = llm_module.generate_cv("system prompt", "user prompt")
 
     mock_client.messages.create.assert_called_once()
     call_kwargs = mock_client.messages.create.call_args.kwargs
@@ -39,11 +42,11 @@ def test_openai_provider_calls_correct_client(monkeypatch):
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = mock_response
 
-    with patch("openai.OpenAI", return_value=mock_client):
+    with patch("posthog.ai.openai.OpenAI", return_value=mock_client):
         # Re-import to pick up new env var
         import importlib
         import api.cv.llm as llm_module
-        importlib.reload(llm_module)
+        importlib.reload(llm_module)  # reset singleton so patch takes effect
         result = llm_module.generate_cv("system prompt", "user prompt")
 
     mock_client.chat.completions.create.assert_called_once()
@@ -102,10 +105,10 @@ def test_cv_llm_model_override_anthropic(monkeypatch):
     mock_client = MagicMock()
     mock_client.messages.create.return_value = mock_response
 
-    with patch("anthropic.Anthropic", return_value=mock_client):
+    with patch("posthog.ai.anthropic.Anthropic", return_value=mock_client):
         import importlib
         import api.cv.llm as llm_module
-        importlib.reload(llm_module)
+        importlib.reload(llm_module)  # reset singleton so patch takes effect
         llm_module.generate_cv("sys", "usr")
 
     call_kwargs = mock_client.messages.create.call_args.kwargs
@@ -124,10 +127,10 @@ def test_cv_llm_model_override_openai(monkeypatch):
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = mock_response
 
-    with patch("openai.OpenAI", return_value=mock_client):
+    with patch("posthog.ai.openai.OpenAI", return_value=mock_client):
         import importlib
         import api.cv.llm as llm_module
-        importlib.reload(llm_module)
+        importlib.reload(llm_module)  # reset singleton so patch takes effect
         llm_module.generate_cv("sys", "usr")
 
     call_kwargs = mock_client.chat.completions.create.call_args.kwargs
@@ -224,10 +227,10 @@ def test_generate_cv_strips_analysis_automatically(monkeypatch):
     mock_client = MagicMock()
     mock_client.messages.create.return_value = mock_response
 
-    with patch("anthropic.Anthropic", return_value=mock_client):
+    with patch("posthog.ai.anthropic.Anthropic", return_value=mock_client):
         import importlib
         import api.cv.llm as llm_module
-        importlib.reload(llm_module)
+        importlib.reload(llm_module)  # reset singleton so patch takes effect
         result = llm_module.generate_cv("system", "user")
 
     assert "<analysis>" not in result, "generate_cv must strip analysis blocks"

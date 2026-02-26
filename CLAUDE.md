@@ -37,14 +37,18 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `api/onboard_utils.py` — CV parsing + profile YAML generation (extracted from agent/onboard.py)
   - `api/prompts/` — LLM prompts for API-side features (onboard-extraction.md)
   - `api/cv/` — CV generation pipeline (plan, prompt, llm, validator, docx_builder, ats_audit)
+  - `api/analytics.py` — PostHog Python client (init, capture, identify_user, capture_exception)
+  - `api/logging_config.py` — structlog configuration (JSON in CI, ConsoleRenderer locally)
 - Frontend: `web/`
   - `web/src/components/` — FilterBar, JobCard, ProfileEditor, ScoreBreakdown, FileUpload, UserMenu, DomainSelector
   - `web/src/pages/` — Login, Onboard, Jobs, JobDetail, Profile, Admin
   - `web/src/context/AuthContext.tsx` — auth state provider
   - `web/src/types/job.ts` — TypeScript types
   - `web/src/constants/domains.ts` — 30-domain canonical enum, display labels, grouped categories
+  - `web/src/analytics.ts` — posthog-js wrapper (initPostHog, identifyUser, resetPostHog)
 - Agent: `agent/`
   - `agent/main.py` — pipeline orchestrator (scrape → parse → score → notify)
+  - `agent/logging_setup.py` — structlog configuration for the agent
   - `agent/api_cache.py` — cross-user parsed-job cache via Railway DB
   - `agent/scraper.py` — JobSpy wrapper + `make_job_id()` dedup
   - `agent/ats_scraper.py` — Greenhouse/Lever/Ashby API poller
@@ -67,7 +71,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `agent/schemas/` — JSON output contracts (parsed_job, scored_job, digest_context, gap_history_entry)
   - `agent/patterns/` — interface contracts per module
   - `agent/docs/decisions/` — ADRs (001–007)
-- Tests: `tests/` (backend, 415 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 194 tests)
+- Tests: `tests/` (backend, 449 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 194 tests)
 - DB: `data/jobseeker.db` (gitignored)
 - Static build: `web/dist/` (gitignored)
 - Scripts: `scripts/seed_dev.py` — dev database seeder, `scripts/backfill_embeddings.py` — one-time skill embedding backfill
@@ -212,9 +216,17 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - 13.4b: `DomainSelector` grouped dropdown in JobDetailPage; amber border for "other" domain; pencil icon for active override; 6 category groups + search filter
   - 13.5: `POST /api/admin/reparse-domains` re-classifies domain='other' jobs with keywords (synchronous, writes jobs.domain only); `GET /api/admin/reparse-domains/preview`; `GET /api/admin/domain-corrections` aggregated analytics; AdminPage domain section
   - 13.6: Keyword collision regression tests (fintech vs data, hr_tech vs other); keyword fixes: `financial institution`/`financial services` → fintech, `training management`/`learning and development` → hr_tech, `analytics platform` → `data analytics platform` (data); audit script column fix; 415 backend + 194 agent tests passing
+- Phase 14 — Instrumentation + Observability
+  - 14.1: structlog configured globally for api/ (`api/logging_config.py`); all existing loggers migrated; JSON in CI, ConsoleRenderer locally
+  - 14.2: `GET /api/health/ready` deep health check — DB connectivity + row counts; safe for Railway / GHA polling
+  - 14.3: PostHog Python SDK (`api/analytics.py`): `init_posthog()` at app startup, `identify_user()` in auth callback, `capture_exception()` on unhandled 500s; no-op when POSTHOG_API_KEY absent
+  - 14.4: 8 server-side user action events via `analytics.capture()`: job_viewed, job_applied, job_dismissed, cv_generated (via BackgroundTasks), skill_added, domain_overridden, profile_saved, onboard_completed
+  - 14.5: posthog-js frontend (`web/src/analytics.ts`): `initPostHog()` before first render, `identifyUser()` on auth load, `resetPostHog()` on logout; SPA route tracking via `capture_pageview: 'history_change'`
+  - 14.6: LLM calls wrapped with `posthog.ai.anthropic.Anthropic` / `posthog.ai.openai.OpenAI` — token usage + latency tracked per user in PostHog; `distinct_id` threaded from route layer; onboard extraction also wrapped
+  - 14.7: Agent structlog + PostHog pipeline events (`agent/logging_setup.py`); `agent_pipeline_start` and `agent_pipeline_complete` events with profile_id, mode, cost_usd, tier counts; key diagnostic prints duplicated as structured log fields
 
 ### Current
-Phase 13 — Completed
+Phase 14 — Completed
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
@@ -274,6 +286,14 @@ Phase 13 — Completed
 - Domain reparse (Phase 13): `POST /api/admin/reparse-domains` is synchronous — keyword matching is pure Python, <1s even for 500 jobs. Writes `jobs.domain` only; `parsed.domain` is immutable post-ingest.
 - Domain corrections query (Phase 13): `GET /api/admin/domain-corrections` uses SQL `COALESCE(json_extract(j.parsed, '$.domain'), 'other')` as the "from" value; excludes overrides that match the parsed domain.
 - Domain keyword quality (Phase 13): Every keyword ≥2 words to prevent cross-domain collisions across 29 lists. Exceptions: databricks, snowflake, clickhouse, shopify, woocommerce, kubernetes, terraform (unambiguous brand names). `data` uses `data analytics platform` (not bare `analytics platform`) to avoid fintech false positives.
+- PostHog Python SDK (Phase 14): `posthog>=7.0.0` in requirements.txt. `api/analytics.py` is the single module that owns init/capture/identify. Routes import `from api import analytics; analytics.capture(...)` (NOT `from api.analytics import capture`) so that `patch("api.analytics.capture")` works in tests.
+- structlog configuration (Phase 14): `api/logging_config.py` and `agent/logging_setup.py` both check `CI=true` or `LOG_FORMAT=json` to emit JSON. Locally uses ConsoleRenderer with colors. All api/ loggers use `structlog.get_logger(__name__)`.
+- PostHog AI wrappers (Phase 14): `posthog.ai.anthropic.Anthropic` and `posthog.ai.openai.OpenAI` are drop-in replacements. Pass `posthog_distinct_id` and `posthog_properties` at `.create()` call level (not constructor). `distinct_id` is threaded from the route layer as `str(user["id"])`. No-op when PostHog is not initialised (POSTHOG_API_KEY absent).
+- posthog-js frontend (Phase 14): `VITE_POSTHOG_KEY` and optional `VITE_POSTHOG_HOST` env vars. `initPostHog()` called in main.tsx before first render. `identifyUser()` called in AuthContext when `/api/auth/me` returns non-null data. `resetPostHog()` called on logout.
+- Agent PostHog events (Phase 14): `_capture()` helper in `agent/main.py` uses a module-level `Posthog` singleton (created on first use). Also sets `posthog.api_key` / `posthog.host` via module-level proxy so `posthog.default_client` is available to `posthog.ai` wrappers in parser.py/scorer.py. Events: `agent_pipeline_start` (profile_id, mode, notify), `agent_pipeline_complete` (profile_id, mode, **status**, duration_s, cost_usd, n_parsed, n_scored, tier_a/b/c). `status` values: `"success"`, `"no_jobs"`, `"all_filtered"`.
+- Health check endpoint (Phase 14): `GET /api/health/ready` runs a lightweight `SELECT COUNT(*) FROM jobs` to verify DB connectivity. Returns `{"status":"ok","jobs":N}` or `{"status":"error","detail":"..."}` with 503. Safe to poll every minute from Railway / GHA `verify-health` job.
+- PostHog AI singleton (Phase 14): `api/cv/llm.py` hoists `_anthropic_client` and `_openai_client` to module level. Created on first `generate_cv()` call, reused for all subsequent calls. Tests patch `posthog.ai.anthropic.Anthropic` / `posthog.ai.openai.OpenAI` (not the bare provider) and call `importlib.reload()` to reset the singleton between tests.
+- Agent LLM observability (Phase 14): `parser.py` and `scorer.py` use `posthog.ai.openai.OpenAI` when `POSTHOG_API_KEY` is set, falling back to plain `openai.OpenAI`. `parser.py` lazy-initialises via `_make_openai_client()` helper (no module-level client). `scorer.py` creates the client per `score_job()` call (same lazy pattern).
 
 ### Blockers
 {none}

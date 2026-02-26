@@ -6,13 +6,13 @@ in the skill_embeddings table (migration 011) to avoid redundant API calls.
 Falls back gracefully if OPENAI_API_KEY is missing or the API errors.
 """
 
-import logging
 import os
 import time
 
 import numpy as np
+import structlog
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 MODEL = "text-embedding-3-small"
 DIMENSIONS = 256
@@ -163,6 +163,8 @@ def get_embeddings_batch(
     if not texts:
         return {}
 
+    t_start = time.perf_counter()
+
     # Normalize and deduplicate
     norm_map: dict[str, str] = {}  # normalized → original (first seen)
     for t in texts:
@@ -174,46 +176,59 @@ def get_embeddings_batch(
 
     # 1. Check process-level memory cache first
     result: dict[str, list[float]] = {}
+    mem_hit_count = 0
     mem_misses = []
     for k in normalized_keys:
         if k in _memory_cache:
             result[k] = _memory_cache[k]
+            mem_hit_count += 1
         else:
             mem_misses.append(k)
 
-    if not mem_misses:
-        return result
+    sqlite_hit_count = 0
+    api_call_count = 0
 
-    # 2. Bulk SQLite cache lookup for memory misses
-    cached = _load_batch_from_cache(db_path, mem_misses)
-    for k, emb in cached.items():
-        result[k] = emb
-        if len(_memory_cache) < _MAX_MEMORY_CACHE:
-            _memory_cache[k] = emb
-
-    # 3. Determine remaining misses (not in memory or SQLite)
-    misses = [k for k in mem_misses if k not in cached]
-    if not misses:
-        return result
-
-    # 4. Call API for remaining misses (skip if circuit breaker is open)
-    if not _api_is_available():
-        return result
-    try:
-        client = openai.OpenAI()
-        response = client.embeddings.create(
-            model=MODEL, input=misses, dimensions=DIMENSIONS,
-        )
-        new_embeddings = [item.embedding for item in response.data]
-        to_cache = []
-        for text, emb in zip(misses, new_embeddings):
-            result[text] = emb
-            to_cache.append((text, emb))
+    if mem_misses:
+        # 2. Bulk SQLite cache lookup for memory misses
+        cached = _load_batch_from_cache(db_path, mem_misses)
+        sqlite_hit_count = len(cached)
+        for k, emb in cached.items():
+            result[k] = emb
             if len(_memory_cache) < _MAX_MEMORY_CACHE:
-                _memory_cache[text] = emb
-        _save_batch_to_cache(db_path, to_cache)
-    except Exception as exc:
-        _mark_api_unavailable()
-        logger.warning("Batch embedding API call failed: %s — pausing API calls for %.0fs", exc, _API_BACKOFF_S)
+                _memory_cache[k] = emb
 
+        # 3. Determine remaining misses (not in memory or SQLite)
+        misses = [k for k in mem_misses if k not in cached]
+
+        # 4. Call API for remaining misses (skip if circuit breaker is open)
+        if misses and _api_is_available():
+            api_call_count = len(misses)
+            try:
+                client = openai.OpenAI()
+                response = client.embeddings.create(
+                    model=MODEL, input=misses, dimensions=DIMENSIONS,
+                )
+                new_embeddings = [item.embedding for item in response.data]
+                to_cache = []
+                for text, emb in zip(misses, new_embeddings):
+                    result[text] = emb
+                    to_cache.append((text, emb))
+                    if len(_memory_cache) < _MAX_MEMORY_CACHE:
+                        _memory_cache[text] = emb
+                _save_batch_to_cache(db_path, to_cache)
+            except Exception as exc:
+                _mark_api_unavailable()
+                logger.warning(
+                    "Batch embedding API call failed — pausing API calls",
+                    error=str(exc),
+                    pause_s=_API_BACKOFF_S,
+                )
+
+    logger.info(
+        "Batch embedding call",
+        total_requested=len(texts),
+        cache_hits=mem_hit_count + sqlite_hit_count,
+        api_calls=api_call_count,
+        duration_ms=round((time.perf_counter() - t_start) * 1000, 1),
+    )
     return result

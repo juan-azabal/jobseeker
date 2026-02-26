@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import re
 import tempfile
@@ -7,7 +6,8 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated
 
-logger = logging.getLogger(__name__)
+import structlog
+logger = structlog.get_logger(__name__)
 
 import yaml
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -28,6 +28,7 @@ from api.geo import (
 from api.middleware.auth import get_current_user
 from api.scoring import compute_tier, heuristic_score, load_profile_data, precompute_skill_lookup, VALID_DOMAINS
 from api.skill_matcher import match_skills
+from api import analytics
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -305,6 +306,15 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
 
     # Skill matches: compute semantic match status for each skill
     row["skill_matches"] = _compute_skill_matches(row, user)
+
+    analytics.capture(user["id"], "job_viewed", {
+        "job_id": job_id,
+        "company": row.get("company"),
+        "domain": row.get("domain"),
+        "rag_score": ujs["score"] if ujs else None,
+        "heuristic_score": row["score"] if not ujs else None,
+        "tier": row.get("tier"),
+    })
     return row
 
 
@@ -360,6 +370,14 @@ def apply_job(job_id: str, payload: ApplyPayload, user: dict = Depends(get_curre
     if row is None:
         raise HTTPException(status_code=404, detail="Job not found")
     set_job_applied(_db_path(), user["id"], job_id, payload.applied)
+    ujs = get_user_job_score(_db_path(), user["id"], job_id)
+    analytics.capture(user["id"], "job_applied", {
+        "job_id": job_id,
+        "company": row.get("company"),
+        "domain": row.get("domain"),
+        "score": ujs["score"] if ujs else None,
+        "tier": ujs["tier"] if ujs else None,
+    })
     return {"job_id": job_id, "applied": payload.applied}
 
 
@@ -369,6 +387,14 @@ def dismiss_job(job_id: str, user: dict = Depends(get_current_user)):
     if row is None:
         raise HTTPException(status_code=404, detail="Job not found")
     set_job_dismissed(_db_path(), user["id"], job_id)
+    ujs = get_user_job_score(_db_path(), user["id"], job_id)
+    analytics.capture(user["id"], "job_dismissed", {
+        "job_id": job_id,
+        "company": row.get("company"),
+        "domain": row.get("domain"),
+        "score": ujs["score"] if ujs else None,
+        "tier": ujs["tier"] if ujs else None,
+    })
     return {"job_id": job_id, "dismissed": True}
 
 
@@ -392,7 +418,13 @@ def set_job_domain_override(
         raise HTTPException(status_code=404, detail="Job not found")
     if body.domain is not None and body.domain not in VALID_DOMAINS:
         raise HTTPException(status_code=422, detail=f"Invalid domain: {body.domain!r}")
+    old_domain = get_domain_override(_db_path(), user["id"], job_id)
     set_domain_override(_db_path(), user["id"], job_id, body.domain)
+    analytics.capture(user["id"], "domain_overridden", {
+        "job_id": job_id,
+        "old_domain": old_domain,
+        "new_domain": body.domain,
+    })
     return {"ok": True, "domain": body.domain}
 
 
@@ -441,7 +473,7 @@ def generate_cv_endpoint(
         )
 
     try:
-        cv_markdown = generate_cv(system_prompt, user_prompt)
+        cv_markdown = generate_cv(system_prompt, user_prompt, distinct_id=str(user["id"]))
     except Exception as e:
         return JSONResponse(
             status_code=500,
@@ -454,7 +486,7 @@ def generate_cv_endpoint(
     if not validation["passed"]:
         try:
             fix_system, fix_user = build_fix_prompt(cv_markdown, validation["errors"])
-            cv_markdown = generate_cv(fix_system, fix_user)
+            cv_markdown = generate_cv(fix_system, fix_user, distinct_id=str(user["id"]))
             fix_applied = True
         except Exception:
             pass
@@ -482,7 +514,19 @@ def generate_cv_endpoint(
     title_slug = _slugify(row.get("title", "cv"), max_len=20)
     filename = f"cv-{company_slug}-{title_slug}.docx"
 
+    provider = os.environ.get("CV_LLM_PROVIDER", "anthropic")
+    model = os.environ.get("CV_LLM_MODEL", "")
     background_tasks.add_task(lambda: Path(tmp_path).unlink(missing_ok=True))
+    background_tasks.add_task(analytics.capture, user["id"], "cv_generated", {
+        "job_id": job_id,
+        "company": row.get("company"),
+        "provider": provider,
+        "model": model,
+        "validation_passed": validation["passed"],
+        "fix_applied": fix_applied,
+        "ats_passed": audit_result["passed"],
+        "ats_violation_count": len(audit_result.get("violations", [])),
+    })
 
     return FileResponse(
         path=tmp_path,

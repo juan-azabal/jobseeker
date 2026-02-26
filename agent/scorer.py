@@ -5,10 +5,10 @@ to score each parsed job against the user's profile.
 """
 
 import json
+import os
 import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -229,7 +229,16 @@ def score_job(job, collection, profile: dict, n_chunks=8):
 
     user_content = _build_scoring_input(job, chunks)
 
-    client = OpenAI()
+    if os.environ.get("POSTHOG_API_KEY"):
+        try:
+            from posthog.ai.openai import OpenAI as _PhOpenAI  # noqa: PLC0415
+            client = _PhOpenAI()
+        except Exception:
+            from openai import OpenAI  # noqa: PLC0415
+            client = OpenAI()
+    else:
+        from openai import OpenAI  # noqa: PLC0415
+        client = OpenAI()
     max_retries = 4
     for attempt in range(max_retries):
         try:

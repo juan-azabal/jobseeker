@@ -1,7 +1,11 @@
 import os
+from typing import Annotated
+
+import structlog
 from fastapi import Depends, HTTPException, Request
 from api.db.queries import get_session, get_user_by_google_id, get_user_by_id
-from typing import Annotated
+
+logger = structlog.get_logger(__name__)
 
 SESSION_COOKIE = "jsk"
 
@@ -13,20 +17,32 @@ def _db_path() -> str:
 def get_current_user(request: Request) -> dict:
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
+        logger.warning("Auth failed: no session cookie")
         raise HTTPException(status_code=401, detail="Not authenticated")
     session = get_session(_db_path(), token)
     if not session:
+        logger.warning("Auth failed: invalid or expired session")
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
     real_user = get_user_by_id(_db_path(), session["user_id"])
     if not real_user:
+        logger.warning("Auth failed: user not found", user_id=session["user_id"])
         raise HTTPException(status_code=401, detail="User not found")
+
+    # Bind user_id to structlog contextvars so the request logging middleware
+    # includes it automatically without a DB call in the middleware itself.
+    structlog.contextvars.bind_contextvars(user_id=real_user["id"])
 
     # Impersonation: admins can view the app as another user
     impersonated_id = session.get("impersonated_user_id")
     if impersonated_id and real_user.get("is_admin"):
         impersonated = get_user_by_id(_db_path(), impersonated_id)
         if impersonated:
+            logger.debug(
+                "Auth: admin impersonating user",
+                real_user_id=real_user["id"],
+                impersonated_user_id=impersonated_id,
+            )
             return {
                 **_safe_user_dict(impersonated),
                 "is_impersonating": True,
@@ -34,6 +50,11 @@ def get_current_user(request: Request) -> dict:
                 "real_user_name": real_user.get("name", ""),
             }
 
+    logger.debug(
+        "Auth: user authenticated",
+        user_id=real_user["id"],
+        profile_id=real_user.get("profile_id"),
+    )
     return _safe_user_dict(real_user)
 
 

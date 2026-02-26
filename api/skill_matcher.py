@@ -4,12 +4,12 @@ Uses embedding-based cosine similarity when available, falls back to exact
 substring matching when embeddings are unavailable (no API key or API error).
 """
 
-import logging
+import structlog
 from dataclasses import dataclass
 
 from api.embeddings import cosine_similarity, get_embeddings_batch
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 MATCH_THRESHOLD = 0.80    # strong match
 PARTIAL_THRESHOLD = 0.68  # partial match

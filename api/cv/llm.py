@@ -5,14 +5,28 @@ Provider-agnostic interface configured via environment variables:
   CV_LLM_MODEL     — optional model override
   ANTHROPIC_API_KEY — required when provider=anthropic
   OPENAI_API_KEY    — required when provider=openai
+
+LLM calls are automatically instrumented via posthog.ai wrappers so that
+token usage and latency are recorded in PostHog (no-op when PostHog is not
+initialised, i.e. POSTHOG_API_KEY is absent in dev/test).
 """
 import os
 import re
+
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 _DEFAULTS = {
     "anthropic": "claude-sonnet-4-5-20250929",
     "openai": "gpt-4o",
 }
+
+# Module-level client singletons — created on first call, reused for all subsequent CV
+# generation requests.  Avoids the overhead of constructing a new PostHog AI wrapper
+# (which calls posthog.setup() internally) on every generate_cv() invocation.
+_anthropic_client = None
+_openai_client = None
 
 
 def strip_analysis(text: str) -> str:
@@ -33,12 +47,18 @@ def strip_analysis(text: str) -> str:
     return cleaned.strip()
 
 
-def generate_cv(system_prompt: str, user_prompt: str) -> str:
+def generate_cv(
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    distinct_id: str | None = None,
+) -> str:
     """Call the configured LLM and return the generated CV markdown string.
 
     Args:
         system_prompt: Full system prompt including reference files and output contract.
         user_prompt: Job description + scored data + user CV context.
+        distinct_id: PostHog distinct_id for LLM usage attribution (optional).
 
     Returns:
         Raw markdown string from the LLM (structured CV content).
@@ -51,9 +71,9 @@ def generate_cv(system_prompt: str, user_prompt: str) -> str:
     model_override = os.environ.get("CV_LLM_MODEL", "").strip()
 
     if provider == "anthropic":
-        raw = _call_anthropic(system_prompt, user_prompt, model_override)
+        raw = _call_anthropic(system_prompt, user_prompt, model_override, distinct_id)
     elif provider == "openai":
-        raw = _call_openai(system_prompt, user_prompt, model_override)
+        raw = _call_openai(system_prompt, user_prompt, model_override, distinct_id)
     else:
         raise ValueError(
             f"Unknown CV_LLM_PROVIDER: '{provider}'. Must be 'anthropic' or 'openai'."
@@ -61,7 +81,13 @@ def generate_cv(system_prompt: str, user_prompt: str) -> str:
     return strip_analysis(raw)
 
 
-def _call_anthropic(system_prompt: str, user_prompt: str, model_override: str) -> str:
+def _call_anthropic(
+    system_prompt: str,
+    user_prompt: str,
+    model_override: str,
+    distinct_id: str | None,
+) -> str:
+    global _anthropic_client
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise RuntimeError(
@@ -69,20 +95,29 @@ def _call_anthropic(system_prompt: str, user_prompt: str, model_override: str) -
             "Set it in .env or your deployment environment."
         )
 
-    import anthropic
+    from posthog.ai.anthropic import Anthropic  # noqa: PLC0415
 
     model = model_override or _DEFAULTS["anthropic"]
-    client = anthropic.Anthropic(api_key=api_key)
-    response = client.messages.create(
+    if _anthropic_client is None:
+        _anthropic_client = Anthropic(api_key=api_key)
+    response = _anthropic_client.messages.create(
         model=model,
         max_tokens=4096,
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
+        posthog_distinct_id=distinct_id,
+        posthog_properties={"source": "cv_generation"},
     )
     return response.content[0].text
 
 
-def _call_openai(system_prompt: str, user_prompt: str, model_override: str) -> str:
+def _call_openai(
+    system_prompt: str,
+    user_prompt: str,
+    model_override: str,
+    distinct_id: str | None,
+) -> str:
+    global _openai_client
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
         raise RuntimeError(
@@ -90,16 +125,19 @@ def _call_openai(system_prompt: str, user_prompt: str, model_override: str) -> s
             "Set it in .env or your deployment environment."
         )
 
-    import openai
+    from posthog.ai.openai import OpenAI  # noqa: PLC0415
 
     model = model_override or _DEFAULTS["openai"]
-    client = openai.OpenAI(api_key=api_key)
-    response = client.chat.completions.create(
+    if _openai_client is None:
+        _openai_client = OpenAI(api_key=api_key)
+    response = _openai_client.chat.completions.create(
         model=model,
         max_tokens=4096,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
+        posthog_distinct_id=distinct_id,
+        posthog_properties={"source": "cv_generation"},
     )
     return response.choices[0].message.content
