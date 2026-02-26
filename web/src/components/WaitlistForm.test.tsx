@@ -14,9 +14,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test('renders email input and submit button', () => {
+test('renders email input with accessible label and submit button', () => {
   render(<WaitlistForm source="hero" />);
-  expect(screen.getByRole('textbox')).toBeInTheDocument();
+  expect(screen.getByLabelText('Email address')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /get early access/i })).toBeInTheDocument();
 });
 

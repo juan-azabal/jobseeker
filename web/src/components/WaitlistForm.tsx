@@ -68,7 +68,15 @@ export default function WaitlistForm({ source }: Props) {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-2 sm:flex-row sm:gap-3">
       <div className="flex flex-col gap-1.5 flex-1">
+        <label
+          htmlFor="waitlist-email"
+          className="absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0"
+          style={{ clip: 'rect(0,0,0,0)' }}
+        >
+          Email address
+        </label>
         <input
+          id="waitlist-email"
           type="email"
           value={email}
           onChange={(e) => {
@@ -85,7 +93,7 @@ export default function WaitlistForm({ source }: Props) {
             disabled:opacity-50`}
         />
         {errorMsg && (
-          <p className="text-xs text-red-400">{errorMsg}</p>
+          <p role="alert" className="text-xs text-red-400">{errorMsg}</p>
         )}
       </div>
       <button
