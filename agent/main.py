@@ -18,6 +18,7 @@ from datetime import datetime
 import structlog
 
 from logging_setup import configure_logging
+from models import RawJob
 from scraper import run_scraper
 from ats_scraper import run_watchlist_scraper
 from wttj_scraper import run_wttj_scraper
@@ -28,6 +29,22 @@ from user_config import load_profile, list_profiles, is_profile_active, resolve_
 
 configure_logging()
 logger = structlog.get_logger("agent.main")
+
+
+def _to_dicts(jobs: list[RawJob]) -> list[dict]:
+    """Convert list[RawJob] → list[dict] for downstream pipeline compatibility.
+
+    Temporary shim while prefilter/parser/scorer still consume plain dicts.
+    Uses model_dump() which includes the computed is_remote field.
+    Phase 2 will replace this with a proper merge step.
+    """
+    result = []
+    for j in jobs:
+        d = j.model_dump()
+        # Ensure is_remote is included as a plain bool (computed field)
+        d["is_remote"] = j.is_remote
+        result.append(d)
+    return result
 
 
 _ph_client = None  # module-level Posthog singleton; created on first use
@@ -878,30 +895,34 @@ def main():
         print("(--notify: email digest will be sent)")
     print("=" * 70)
 
-    # Step 1a: Scrape job boards
-    jobs = run_scraper(config_path=searches_path)
+    # Step 1a: Scrape job boards → list[RawJob]
+    raw_jobs: list[RawJob] = run_scraper(config_path=searches_path)
 
-    # Step 1b: Poll ATS watchlist
-    existing_ids = {j["id"] for j in jobs}
+    # Step 1b: Poll ATS watchlist → list[RawJob]
+    existing_ids = {j.id for j in raw_jobs}
     try:
         ats_jobs = run_watchlist_scraper(config_path=watchlist_path)
         for j in ats_jobs:
-            if j["id"] not in existing_ids:
-                jobs.append(j)
-                existing_ids.add(j["id"])
+            if j.id not in existing_ids:
+                raw_jobs.append(j)
+                existing_ids.add(j.id)
     except Exception as e:
         print(f"\nWatchlist error (continuing without): {e}")
 
-    # Step 1c: Welcome to the Jungle
+    # Step 1c: Welcome to the Jungle → list[RawJob]
     try:
         wttj_countries = profile.get("target", {}).get("wttj_countries") or ["ES"]
         wttj_jobs = run_wttj_scraper(target_countries=wttj_countries)
         for j in wttj_jobs:
-            if j["id"] not in existing_ids:
-                jobs.append(j)
-                existing_ids.add(j["id"])
+            if j.id not in existing_ids:
+                raw_jobs.append(j)
+                existing_ids.add(j.id)
     except Exception as e:
         print(f"\nWTTJ error (continuing without): {e}")
+
+    # Convert to dicts for downstream (prefilter/parser/scorer still use plain dicts)
+    # Phase 2 will replace this shim with a proper merge step.
+    jobs = _to_dicts(raw_jobs)
 
     logger.info("scrape_complete", total_jobs=len(jobs))
     print(f"\nCombined: {len(jobs)} total jobs")
