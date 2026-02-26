@@ -3,10 +3,25 @@ Scraper module: wraps JobSpy to fetch jobs from multiple boards.
 Returns a list of standardized job dicts.
 """
 
+import math
 import re
 import yaml
 import hashlib
 from jobspy import scrape_jobs
+
+
+def _sanitize_str(val) -> str:
+    """Convert a DataFrame field value to a clean string.
+
+    Replaces pandas NaN (float), None, and the string literal 'nan'
+    (produced by str(float('nan'))) with an empty string.
+    """
+    if val is None:
+        return ""
+    if isinstance(val, float) and math.isnan(val):
+        return ""
+    s = str(val).strip()
+    return "" if s.lower() == "nan" else s
 
 
 def load_search_config(path="config/searches.yaml"):
@@ -89,9 +104,9 @@ def run_scraper(config_path="config/searches.yaml"):
             results = scrape_jobs(**kwargs)
 
             for _, row in results.iterrows():
-                title = str(row.get("title", "")).strip()
-                company = str(row.get("company", "")).strip()
-                loc = str(row.get("location", "")).strip()
+                title = _sanitize_str(row.get("title", ""))
+                company = _sanitize_str(row.get("company", ""))
+                loc = _sanitize_str(row.get("location", ""))
 
                 if not title or not company:
                     continue
@@ -104,16 +119,16 @@ def run_scraper(config_path="config/searches.yaml"):
                         "title": title,
                         "company": company,
                         "location": loc,
-                        "description": str(row.get("description", "")),
-                        "job_url": str(row.get("job_url", "")),
-                        "date_posted": str(row.get("date_posted", "")),
-                        "job_type": str(row.get("job_type", "")),
+                        "description": _sanitize_str(row.get("description", "")),
+                        "job_url": _sanitize_str(row.get("job_url", "")),
+                        "date_posted": _sanitize_str(row.get("date_posted", "")),
+                        "job_type": _sanitize_str(row.get("job_type", "")),
                         "is_remote": bool(row.get("is_remote", False)),
                         "min_amount": row.get("min_amount"),
                         "max_amount": row.get("max_amount"),
-                        "currency": str(row.get("currency", "")),
-                        "interval": str(row.get("interval", "")),
-                        "site": str(row.get("site", "")),
+                        "currency": _sanitize_str(row.get("currency", "")),
+                        "interval": _sanitize_str(row.get("interval", "")),
+                        "site": _sanitize_str(row.get("site", "")),
                         "search_term_used": term,
                     }
 

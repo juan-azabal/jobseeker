@@ -83,6 +83,96 @@ def load_applied(path: str):
     }
 
 
+# Map of lowercase country name/adjective fragments → canonical country name.
+# Used by the reject_if_requires_relocation_outside filter.
+# Conservative: only well-known unambiguous names included to avoid false positives.
+_COUNTRY_FRAGMENTS: dict[str, str] = {
+    "france": "France", "french": "France",
+    "germany": "Germany", "german": "Germany", "deutschland": "Germany",
+    "netherlands": "Netherlands", "dutch": "Netherlands", "holland": "Netherlands",
+    "italy": "Italy", "italian": "Italy",
+    "portugal": "Portugal",
+    "spain": "Spain", "spanish": "Spain",
+    "poland": "Poland", "polish": "Poland",
+    "sweden": "Sweden", "swedish": "Sweden",
+    "norway": "Norway", "norwegian": "Norway",
+    "denmark": "Denmark", "danish": "Denmark",
+    "finland": "Finland", "finnish": "Finland",
+    "belgium": "Belgium", "belgian": "Belgium",
+    "switzerland": "Switzerland", "swiss": "Switzerland",
+    "austria": "Austria", "austrian": "Austria",
+    "czechia": "Czechia", "czech republic": "Czechia",
+    "romania": "Romania",
+    "ukraine": "Ukraine",
+    "hungary": "Hungary",
+    "ireland": "Ireland", "irish": "Ireland",
+    "united kingdom": "United Kingdom", "england": "United Kingdom",
+    "turkey": "Turkey", "türkiye": "Turkey",
+    "israel": "Israel",
+    "india": "India", "indian": "India",
+    "singapore": "Singapore",
+    "australia": "Australia", "australian": "Australia",
+    "canada": "Canada", "canadian": "Canada",
+    "brazil": "Brazil", "brazilian": "Brazil",
+}
+
+
+def _detect_country_in_location(location: str) -> str | None:
+    """Return the detected country name from a location string, or None if unrecognised."""
+    loc_lower = location.lower()
+    for fragment, country in _COUNTRY_FRAGMENTS.items():
+        if fragment in loc_lower:
+            return country
+    return None
+
+
+def _is_non_target_onsite(
+    job: dict,
+    reject_outside: str,
+    accept_onsite_cities: list[str],
+    home_locations: list[str],
+) -> bool:
+    """Return True if job requires relocation to a non-target country.
+
+    Conditions for rejection:
+    - job is NOT remote (is_remote=False)
+    - location contains a recognisable country name
+    - that country differs from the target (reject_outside)
+    - location does NOT contain any accept_onsite_cities or home_locations
+
+    Conservative: empty or unrecognised location → False (pass through).
+
+    NOTE: This filter has limited value while 75% of jobs have empty locations.
+    Its effectiveness increases after Phase 1 adds structured country/city fields.
+    """
+    is_remote = job.get("is_remote", False)
+    if is_remote:
+        return False  # remote jobs always pass
+
+    location = (job.get("location") or "").strip()
+    if not location:
+        return False  # unknown location → conservative pass
+
+    detected = _detect_country_in_location(location)
+    if detected is None:
+        return False  # unrecognised country → conservative pass
+
+    target_lower = reject_outside.lower()
+    if detected.lower() == target_lower:
+        return False  # same as target country → pass
+
+    # Check if the location contains a recognised city/region in the accept list
+    loc_lower = location.lower()
+    for city in accept_onsite_cities:
+        if city.lower() in loc_lower:
+            return False  # accepted onsite city → pass
+    for loc in home_locations:
+        if loc.lower() in loc_lower:
+            return False  # home location → pass
+
+    return True  # non-target onsite → reject
+
+
 def _is_us_only(job):
     """Detect non-EU roles (US, Canada, APAC) that won't offer visa sponsorship to EU candidates."""
     location = (job.get("location") or "").lower()
@@ -168,6 +258,7 @@ def prefilter_jobs(jobs, config_path, applied_path, seen_path, home_locations=No
     title_exclude = [kw.lower() for kw in pf.get("title_exclude", [])]
     exclude_companies = [c.lower() for c in pf.get("exclude_companies", [])]
     accept_locations = [loc.lower() for loc in pf.get("location", {}).get("accept_onsite_cities", [])]
+    reject_outside = pf.get("location", {}).get("reject_if_requires_relocation_outside")
 
     # home_locations: user's base locations — used to rescue jobs that appear US-only
     # but actually include the user's home city/country.
@@ -189,6 +280,7 @@ def prefilter_jobs(jobs, config_path, applied_path, seen_path, home_locations=No
         "no_pm_keyword": 0,
         "title_excluded": 0,
         "us_only": 0,
+        "non_target_geography": 0,
         "aggregator": 0,
         "role_function_mismatch": 0,
     }
@@ -249,6 +341,14 @@ def prefilter_jobs(jobs, config_path, applied_path, seen_path, home_locations=No
                 else:
                     reason = "US-only role (no EU location)"
                     stat_key = "us_only"
+
+        # 4b. Non-target onsite geography (e.g. France when target is Spain)
+        # NOTE: limited value while 75% of locations are empty. Becomes effective
+        # after Phase 1 adds structured country field.
+        if not reason and reject_outside:
+            if _is_non_target_onsite(job, reject_outside, accept_locations, _home_locs):
+                reason = f"requires relocation outside {reject_outside}: {job.get('location', '')}"
+                stat_key = "non_target_geography"
 
         # 5. Filter job aggregators
         if not reason:
