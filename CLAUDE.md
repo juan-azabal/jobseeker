@@ -48,13 +48,16 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `web/src/analytics.ts` — posthog-js wrapper (initPostHog, identifyUser, resetPostHog)
 - Agent: `agent/`
   - `agent/main.py` — pipeline orchestrator (scrape → parse → score → notify)
+  - `agent/models.py` — RawJob Pydantic model (source-agnostic scraper output)
+  - `agent/merger.py` — merge duplicate RawJobs from multiple scrapers (source-group field priority)
+  - `agent/preseed.py` — maps structured RawJob fields to parser schema (pre-seeds before LLM call)
   - `agent/logging_setup.py` — structlog configuration for the agent
   - `agent/api_cache.py` — cross-user parsed-job cache via Railway DB
-  - `agent/scraper.py` — JobSpy wrapper + `make_job_id()` dedup
-  - `agent/ats_scraper.py` — Greenhouse/Lever/Ashby API poller
-  - `agent/wttj_scraper.py` — Welcome to the Jungle (Algolia API)
+  - `agent/scraper.py` — JobSpy wrapper + `make_job_id()` dedup → returns `list[RawJob]`
+  - `agent/ats_scraper.py` — Greenhouse/Lever/Ashby API poller → returns `list[RawJob]`
+  - `agent/wttj_scraper.py` — Welcome to the Jungle (Algolia API) → returns `list[RawJob]`
   - `agent/prefilter.py` — keyword filter + US-only detection (no API calls)
-  - `agent/parser.py` — gpt-4o-mini: structured JSON extraction from JD
+  - `agent/parser.py` — gpt-4o-mini: structured JSON extraction from JD; pre-seeded with structured fields
   - `agent/scorer.py` — gpt-4o: RAG scoring against full CV via ChromaDB
   - `agent/notifier.py` — Gmail SMTP digest sender (Jinja2 template)
   - `agent/user_config.py` — profile loading + seniority weight computation
@@ -123,13 +126,24 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 
 ## Architecture
 
+### Ingestion Pipeline (enriched, post-overhaul)
+```
+Step 1:  JobSpy + ATS + WTTJ → RawJob (Pydantic, source-specific fields)
+Step 1b: Merge by job_id — per-field source priority (salary from WTTJ, job_level from LinkedIn,
+         company_industry from Indeed, departments from ATS, etc.)
+Step 2:  Prefilter (uses structured country/city when available, falls back to freetext)
+Step 3:  Pre-seed ParsedJob from structured fields (seniority, salary, location_type, domain)
+Step 4:  LLM Parse ONLY null fields (gpt-4o-mini, reduced token cost)
+Step 5:  Post-parse validation — structured source wins for factual conflicts
+```
+
 ### Agent Pipeline (12 steps)
 ```
-Step 1a-c: Scrape (JobSpy + ATS watchlist + WTTJ) → dedup via make_job_id()
+Step 1a-c: Scrape (JobSpy + ATS watchlist + WTTJ) → RawJob → merge_jobs() → dicts
 Step 2:    Prefilter (keywords, US-only, deal breakers, seen_ids — no API calls)
 Step 3:    Local cache split (cached vs new jobs)
 Step 3b:   Cross-user DB cache (fetch already-parsed from Railway DB via api_cache.py)
-Step 4:    Parse new jobs (gpt-4o-mini, ~$0.001/job)
+Step 4:    Parse new jobs (gpt-4o-mini, ~$0.001/job; pre-seeded from structured fields)
 Step 5:    RAG score (gpt-4o via ChromaDB, ~$0.04/job)
 Step 5b:   Gap tracking (persist strengths/gaps to JSONL)
 Step 6:    Update local cache
@@ -243,7 +257,31 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - Responsive: MockJobDetail hides gap card + reduces to 1 strength on mobile
 
 ### Current
-Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1–17.7 complete)
+Ingestion Overhaul — complete (2026-02-26)
+- Phase 0.1: WTTJ geographic filter — run_wttj_scraper(target_countries) + Algolia geo filter; juan.yaml: target.wttj_countries: [ES, NL, DE, GB, IE]; 6 tests
+- Phase 0.2: make_job_id normalization — _normalize_for_id() strips gender/legal suffixes + punctuation; location param removed; call sites updated; migrate_job_ids.py; 13 tests
+- Phase 0.3: nan location sanitization + geography rejection — _sanitize_str() in scraper.py; _is_non_target_onsite() in prefilter.py; 10 tests
+- Phase 0.4: smoke test suite — @pytest.mark.smoke, skips without output files; pytest.ini registers marker
+- GATE Phase 0 (closed): 246 agent tests passing, 5 smoke tests skipping (no output files in worktree)
+- Phase 1.1: RawJob Pydantic model — agent/models.py; required: id/title/company/source; is_remote computed from remote_type; extra='ignore'; 10 tests
+- Phase 1.2: JobSpy field enrichment — run_scraper() returns list[RawJob]; captures salary, company metadata (employees_label, revenue_label, industry, url, logo), role metadata (job_level, job_function), emails; remote_type from is_remote bool; 13 tests
+- Phase 1.3: WTTJ field enrichment — _search_wttj_algolia() returns list[RawJob]; captures remote_type, locations_structured (raw offices[]), country/city from first office, experience_min/max, language, source_category; 15 tests
+- Phase 1.4: ATS field enrichment — _fetch_greenhouse/lever/ashby() return list[RawJob]; Greenhouse: departments[] names; Lever: departments from categories.department, team from categories.team; Ashby: department, team fields; 18 tests
+- Phase 1.5: Pipeline wiring — main.py uses attribute access (j.id) for merge; _to_dicts() shim converts list[RawJob]→list[dict] before prefilter; 8 tests
+- GATE Phase 1 (closed): 310 agent tests passing (1 pre-existing failure); patterns/scraper.md updated
+- Phase 2.1: merge_jobs() — agent/merger.py; SOURCE_RANK + FIELD_GROUPS + FIELD_TO_GROUP; description prefers longer plain text over HTML; list fields (departments, locations_structured, emails) unioned; sources list tracks all contributing sources; 22 tests
+- Phase 2.2: Wire merge_jobs() into main.py — all_raw collects all scrapers, merge_jobs() replaces set-based dedup, _to_dicts() shim retained for downstream dicts
+- Phase 2.3: Smart description merge — _merge_description() in merger.py; prefers plain text over HTML, then longer; integrated into Phase 2.1
+- GATE Phase 2 (closed): 332 agent tests passing (1 pre-existing failure); merger.py documented in project structure
+- Phase 3.1: preseed_parsed() — agent/preseed.py; maps job_level→seniority, remote_type→location_type, structured salary (direct_data only), company_industry/source_category→domain, experience_min/max, locations_structured→locations_mentioned; returns only non-null fields; 35 tests
+- Phase 3.2: Parser pre-seed integration — parser.py calls preseed_parsed() before LLM; seed appended to system prompt; _FACTUAL_FIELDS (seniority, salary_mentioned, location_type, years_experience_min/max, locations_mentioned) override LLM; interpretive fields (domain, skills, etc.) use LLM; divergences logged at INFO; 9 tests
+- GATE Phase 3 (closed): 376 agent tests passing (1 pre-existing failure); preseed.py + parser.py documented in project structure
+- Phase 4.1: Migration 019 — adds 14 enriched columns to jobs table: company_url, company_logo, company_industry, company_size, job_level, salary_min, salary_max, salary_currency, salary_interval, salary_source, country, city, remote_type, sources (JSON array); 1 test
+- Phase 4.2: Ingest enriched fields — upsert_job() persists all 14 new columns from raw dict; COALESCE on conflict preserves richer existing data for all enriched fields (sources always updated); ingest.py extracts from raw: salary via min_amount/max_amount, company_size from company_employees_label; 10 tests
+- Phase 4.3: Expose enriched fields in API — get_jobs() CTE includes all enriched columns; list + detail endpoints parse sources JSON→list; null enriched fields omitted from response; 10 tests
+- GATE Phase 4 (closed): 562 backend tests + 376 agent tests passing (1 pre-existing failure); enriched pipeline end-to-end: scrape→merge→preseed→parse→ingest→DB→API
+
+Phase 17 — Decomposed Hybrid Scoring (complete: 17.1–17.7)
 - Phase 17.1 — Parser + DB + Ingest: role_function enum
   - Parser prompt v1.4: emits role_function (product|engineering|design|data|marketing|sales|ops|support|other)
   - DB migration 017: role_function column on jobs table, backfilled from parsed JSON
@@ -289,6 +327,11 @@ Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1–17.7 complete)
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
+- WTTJ geographic filter (Phase 0.1): offices.country_code is a filterable Algolia attribute (verified live). Filter: PM_filter AND (country_code:X OR ... OR remote:fulltime OR remote:partial). target_countries explicit list in profile YAML (not derived from country_weights to avoid name→ISO complexity). Default: [ES] + remote.
+- make_job_id migration (Phase 0.2): ID hash changes mean new IDs for existing jobs. Chosen option A: accept one-time re-run cost. Clear seen_ids/<profile>.txt after deploy. migrate_job_ids.py handles SQLite in-place UPDATE; collision resolution keeps record with more non-null parsed fields.
+- nan sanitization (Phase 0.3): _sanitize_str() in scraper.py handles float NaN, None, and string literal 'nan'. Applied to all string fields in run_scraper(). ats_scraper.py and wttj_scraper.py already avoided this via explicit str() conversion, but wttj already had proper handling.
+- Non-target geo rejection (Phase 0.3): limited value until Phase 1 adds structured country field (currently ~75% empty locations). Filter conservative: empty/unrecognised location → pass. ~30 EU/major country fragments in _COUNTRY_FRAGMENTS dict. reject_if_requires_relocation_outside read from preferences YAML.
+- Smoke test (Phase 0.4): uses AGENT_OUTPUT_DIR env var (defaults to agent/output/). Skips when no files present. pytest.ini in agent/ registers 'smoke' marker.
 - reparse_rescore.py (Phase 17.3.4): reads from local `output/cache.json` (not Railway API — no auth-free "get jobs" endpoint exists). Excludes jobs listed in `applied.yaml` (covers both applied and auto-skipped). Cost estimate = n_jobs × $0.041 (parse $0.001 + score $0.040). Ingests to Railway via `POST /api/ingest` with `X-Ingest-Key`. Also refreshes local cache so next run uses v2 data immediately.
 - react-router v7 uses `react-router` package (not `react-router-dom`)
 - `vitest/config` required in vite.config.ts to fix TypeScript `test` key error
@@ -370,6 +413,9 @@ Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1–17.7 complete)
 - Global skill_lookup removed (2026-02-26): batching all unique job skills at once (300+) exceeded the 500-pair embedding limit → silent substring fallback → inflated scores. Both list and detail now score per-job via `db_path` using the SQLite embedding cache. Consistent, semantically correct.
 - `remote_restriction` injection (2026-02-26): `get_job_by_id()` uses `SELECT *` which has no `remote_restriction` column (only computed via `json_extract` in `get_jobs()`). Injected from `parsed` dict after JSON-parsing in `get_job()`. Architectural fix: add as a real DB column in a future migration.
 - Scoring parity rule: scoring functions must never read fields that differ between `get_jobs()` CTE and `SELECT * FROM jobs`. Only fields from `parsed` (JSON blob) or real DB columns are safe. See `docs/scoring-parity-postmortem.md`.
+- Enriched field naming (Phase 4): DB column is `company_size` (plan name); raw dict field is `company_employees_label` (RawJob model name). Ingest maps `company_employees_label → company_size` at upsert_job boundary.
+- Enriched upsert strategy (Phase 4): COALESCE(excluded.field, jobs.field) for all enriched scalar fields — new value wins if non-null, existing value preserved if new is null. `sources` (JSON array) always updated — reflects scraper origins from the current pipeline run, not accumulated history.
+- Enriched API null omission (Phase 4): `_ENRICHED_FIELDS` constant in list_jobs and get_job strips keys where value is None. Prevents sending `"company_industry": null` for every job that has no industry data.
 
 ### Known Bugs
 

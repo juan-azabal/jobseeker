@@ -20,6 +20,7 @@ target:
   role_type: "Product Manager"
   role_function: product
   geography: "EU or remote"
+  wttj_countries: ["ES", "NL", "DE", "GB", "IE"]
   seniority_weights:
     principal: 15
     staff: 12
