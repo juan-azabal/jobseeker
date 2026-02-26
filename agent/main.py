@@ -19,6 +19,7 @@ import structlog
 
 from logging_setup import configure_logging
 from models import RawJob
+from merger import merge_jobs
 from scraper import run_scraper
 from ats_scraper import run_watchlist_scraper
 from wttj_scraper import run_wttj_scraper
@@ -896,16 +897,12 @@ def main():
     print("=" * 70)
 
     # Step 1a: Scrape job boards → list[RawJob]
-    raw_jobs: list[RawJob] = run_scraper(config_path=searches_path)
+    all_raw: list[RawJob] = run_scraper(config_path=searches_path)
 
     # Step 1b: Poll ATS watchlist → list[RawJob]
-    existing_ids = {j.id for j in raw_jobs}
     try:
         ats_jobs = run_watchlist_scraper(config_path=watchlist_path)
-        for j in ats_jobs:
-            if j.id not in existing_ids:
-                raw_jobs.append(j)
-                existing_ids.add(j.id)
+        all_raw.extend(ats_jobs)
     except Exception as e:
         print(f"\nWatchlist error (continuing without): {e}")
 
@@ -913,15 +910,14 @@ def main():
     try:
         wttj_countries = profile.get("target", {}).get("wttj_countries") or ["ES"]
         wttj_jobs = run_wttj_scraper(target_countries=wttj_countries)
-        for j in wttj_jobs:
-            if j.id not in existing_ids:
-                raw_jobs.append(j)
-                existing_ids.add(j.id)
+        all_raw.extend(wttj_jobs)
     except Exception as e:
         print(f"\nWTTJ error (continuing without): {e}")
 
+    # Step 1.5: Merge duplicates across sources (field-group priority)
+    raw_jobs: list[RawJob] = merge_jobs(all_raw)
+
     # Convert to dicts for downstream (prefilter/parser/scorer still use plain dicts)
-    # Phase 2 will replace this shim with a proper merge step.
     jobs = _to_dicts(raw_jobs)
 
     logger.info("scrape_complete", total_jobs=len(jobs))
