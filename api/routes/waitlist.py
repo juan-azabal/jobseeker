@@ -62,6 +62,7 @@ def join_waitlist(body: WaitlistRequest, request: Request):
         logger.info("Waitlist signup", email=email)
         return {"status": "ok"}
     except sqlite3.IntegrityError:
+        logger.info("Waitlist duplicate", email=email)
         raise HTTPException(status_code=409, detail="already_registered")
 
 
