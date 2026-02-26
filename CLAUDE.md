@@ -243,7 +243,14 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - Responsive: MockJobDetail hides gap card + reduces to 1 strength on mobile
 
 ### Current
-Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1–17.7 complete)
+Ingestion Overhaul — Phase 0 complete (2026-02-26)
+- Phase 0.1: WTTJ geographic filter — run_wttj_scraper(target_countries) + Algolia geo filter; juan.yaml: target.wttj_countries: [ES, NL, DE, GB, IE]; 6 tests
+- Phase 0.2: make_job_id normalization — _normalize_for_id() strips gender/legal suffixes + punctuation; location param removed; call sites updated; migrate_job_ids.py; 13 tests
+- Phase 0.3: nan location sanitization + geography rejection — _sanitize_str() in scraper.py; _is_non_target_onsite() in prefilter.py; 10 tests
+- Phase 0.4: smoke test suite — @pytest.mark.smoke, skips without output files; pytest.ini registers marker
+- GATE Phase 0 (closed): 246 agent tests passing, 5 smoke tests skipping (no output files in worktree)
+
+Phase 17 — Decomposed Hybrid Scoring (complete: 17.1–17.7)
 - Phase 17.1 — Parser + DB + Ingest: role_function enum
   - Parser prompt v1.4: emits role_function (product|engineering|design|data|marketing|sales|ops|support|other)
   - DB migration 017: role_function column on jobs table, backfilled from parsed JSON
@@ -289,6 +296,11 @@ Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1–17.7 complete)
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
+- WTTJ geographic filter (Phase 0.1): offices.country_code is a filterable Algolia attribute (verified live). Filter: PM_filter AND (country_code:X OR ... OR remote:fulltime OR remote:partial). target_countries explicit list in profile YAML (not derived from country_weights to avoid name→ISO complexity). Default: [ES] + remote.
+- make_job_id migration (Phase 0.2): ID hash changes mean new IDs for existing jobs. Chosen option A: accept one-time re-run cost. Clear seen_ids/<profile>.txt after deploy. migrate_job_ids.py handles SQLite in-place UPDATE; collision resolution keeps record with more non-null parsed fields.
+- nan sanitization (Phase 0.3): _sanitize_str() in scraper.py handles float NaN, None, and string literal 'nan'. Applied to all string fields in run_scraper(). ats_scraper.py and wttj_scraper.py already avoided this via explicit str() conversion, but wttj already had proper handling.
+- Non-target geo rejection (Phase 0.3): limited value until Phase 1 adds structured country field (currently ~75% empty locations). Filter conservative: empty/unrecognised location → pass. ~30 EU/major country fragments in _COUNTRY_FRAGMENTS dict. reject_if_requires_relocation_outside read from preferences YAML.
+- Smoke test (Phase 0.4): uses AGENT_OUTPUT_DIR env var (defaults to agent/output/). Skips when no files present. pytest.ini in agent/ registers 'smoke' marker.
 - reparse_rescore.py (Phase 17.3.4): reads from local `output/cache.json` (not Railway API — no auth-free "get jobs" endpoint exists). Excludes jobs listed in `applied.yaml` (covers both applied and auto-skipped). Cost estimate = n_jobs × $0.041 (parse $0.001 + score $0.040). Ingests to Railway via `POST /api/ingest` with `X-Ingest-Key`. Also refreshes local cache so next run uses v2 data immediately.
 - react-router v7 uses `react-router` package (not `react-router-dom`)
 - `vitest/config` required in vite.config.ts to fix TypeScript `test` key error
