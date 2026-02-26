@@ -12,19 +12,21 @@ def _connect(db_path: str) -> sqlite3.Connection:
 # ── Jobs (common data) ────────────────────────────────────────────────────
 
 def upsert_job(db_path: str, job: dict[str, Any]) -> None:
+    job = {**job, "role_function": job.get("role_function")}  # ensure key present
     con = _connect(db_path)
     con.execute(
         """
         INSERT INTO jobs
           (job_id, title, company, location, url, location_type, domain,
-           parsed, first_seen, last_seen, ingested_at)
+           parsed, role_function, first_seen, last_seen, ingested_at)
         VALUES
           (:job_id, :title, :company, :location, :url, :location_type, :domain,
-           :parsed, :first_seen, :last_seen, :ingested_at)
+           :parsed, :role_function, :first_seen, :last_seen, :ingested_at)
         ON CONFLICT(job_id) DO UPDATE SET
-          last_seen   = excluded.last_seen,
-          ingested_at = excluded.ingested_at,
-          parsed      = excluded.parsed
+          last_seen     = excluded.last_seen,
+          ingested_at   = excluded.ingested_at,
+          parsed        = excluded.parsed,
+          role_function = excluded.role_function
         """,
         job,
     )

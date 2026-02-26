@@ -59,6 +59,7 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None 
             parsed["description"] = raw["description"]
         location_type = parsed.get("location_type") or ("remote" if raw.get("is_remote") else "unknown")
         domain = parsed.get("domain")
+        role_function = parsed.get("role_function")
 
         date_posted = _to_date(raw.get("date_posted"))
         existing = get_job_by_id(db_path, job_id)
@@ -73,6 +74,7 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None 
             "location_type": location_type,
             "domain": domain,
             "parsed": json.dumps(parsed),
+            "role_function": role_function,
             "first_seen": existing["first_seen"] if existing else date_posted,
             "last_seen": date_posted,
             "ingested_at": now,
