@@ -283,7 +283,29 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
 
     # Per-user score
     ujs = get_user_job_score(_db_path(), user["id"], job_id)
-    if ujs:
+    profile = load_profile_data(user.get("profile_id"))
+    home_locations, home_regions = _load_user_geo(user.get("profile_id"))
+    is_reloc = _compute_reloc(row, home_locations, home_regions) if home_locations else False
+    domain_override = get_domain_override(_db_path(), user["id"], job_id)
+
+    if ujs and ujs.get("scored_v2") == 1 and profile:
+        # v2: hybrid_score with actual LLM grades
+        score = hybrid_score(
+            profile, row["parsed"] or {}, row, is_reloc,
+            technical_grade=ujs.get("technical_grade"),
+            profile_grade=ujs.get("profile_grade"),
+            db_path=_db_path(),
+            domain_override=domain_override,
+        )
+        row["score"] = score
+        row["tier"] = compute_tier(score)
+        try:
+            row["scored"] = json.loads(ujs["scored"]) if ujs.get("scored") else None
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Malformed scored JSON for job_id=%s user_id=%s", job_id, user["id"])
+            row["scored"] = None
+    elif ujs:
+        # v1: use stored RAG score unchanged
         row["score"] = ujs["score"]
         row["tier"] = ujs["tier"]
         try:
@@ -292,11 +314,12 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
             logger.warning("Malformed scored JSON for job_id=%s user_id=%s", job_id, user["id"])
             row["scored"] = None
     else:
-        profile = load_profile_data(user.get("profile_id"))
-        home_locations, home_regions = _load_user_geo(user.get("profile_id"))
-        is_reloc = _compute_reloc(row, home_locations, home_regions) if home_locations else False
+        # unscored: hybrid_score with default grades
         if profile:
-            score = heuristic_score(profile, row["parsed"] or {}, row, is_reloc, db_path=_db_path())
+            score = hybrid_score(
+                profile, row["parsed"] or {}, row, is_reloc,
+                db_path=_db_path(), domain_override=domain_override,
+            )
             if is_reloc and score > 0:
                 loc_type = row.get("location_type") or (row.get("parsed") or {}).get("location_type") or ""
                 penalty = 5 if loc_type == "remote" else 15
@@ -312,11 +335,9 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
     row["applied_at"] = status.get("applied_at") if status else None
     row["dismissed_at"] = status.get("dismissed_at") if status else None
 
-    # Per-user domain override
-    row["domain_override"] = get_domain_override(_db_path(), user["id"], job_id)
-
-    home_locations, home_regions = _load_user_geo(user.get("profile_id"))
-    row["geo_restricted"] = _compute_reloc(row, home_locations, home_regions) if home_locations else False
+    # Expose domain override in response (already computed above for scoring)
+    row["domain_override"] = domain_override
+    row["geo_restricted"] = is_reloc
 
     # Skill matches: compute semantic match status for each skill
     row["skill_matches"] = _compute_skill_matches(row, user)
