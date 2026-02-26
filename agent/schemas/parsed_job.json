@@ -1,5 +1,5 @@
 {
-  "_comment": "Output schema for parser.py / parse_jd(). Fields added to job dict under job['parsed']. Source: PARSER_PROMPT in prompts/parser-prompt.md. v1.3: domain enum expanded to 30 values (canonical names: adtech|ai_ml|automotive|biotech|climate|construction|cybersecurity|data|defense|devtools|ecommerce|edtech|energy|fintech|food_bev|gaming|govtech|healthtech|hr_tech|infra|legal_tech|logistics|manufacturing|marketplace|media|retail|saas|telecom|travel|other).",
+  "_comment": "Output schema for parser.py / parse_jd(). Fields added to job dict under job['parsed']. Source: PARSER_PROMPT in prompts/parser-prompt.md. v1.4: role_function enum added (product|engineering|design|data|marketing|sales|ops|support|other).",
   "seniority": "junior|mid|senior|staff|principal|director|vp|unknown",
   "years_experience_min": null,
   "years_experience_max": null,
@@ -10,6 +10,7 @@
   "technical_stack": ["all specific technologies, tools, platforms mentioned anywhere in the JD"],
   "experience_requirements": ["years of experience, domain background, education/degree, soft skills, and competency requirements"],
   "domain": "adtech|ai_ml|automotive|biotech|climate|construction|cybersecurity|data|defense|devtools|ecommerce|edtech|energy|fintech|food_bev|gaming|govtech|healthtech|hr_tech|infra|legal_tech|logistics|manufacturing|marketplace|media|retail|saas|telecom|travel|other",
+  "role_function": "product|engineering|design|data|marketing|sales|ops|support|other",
   "responsibilities_summary": "2-3 sentence summary of what the role does",
   "team_size_hints": "any mentions of team size or reports, or null",
   "salary_mentioned": "any salary info found as string, or null",
