@@ -49,6 +49,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 - Agent: `agent/`
   - `agent/main.py` — pipeline orchestrator (scrape → parse → score → notify)
   - `agent/models.py` — RawJob Pydantic model (source-agnostic scraper output)
+  - `agent/merger.py` — merge duplicate RawJobs from multiple scrapers (source-group field priority)
   - `agent/logging_setup.py` — structlog configuration for the agent
   - `agent/api_cache.py` — cross-user parsed-job cache via Railway DB
   - `agent/scraper.py` — JobSpy wrapper + `make_job_id()` dedup → returns `list[RawJob]`
@@ -256,6 +257,10 @@ Ingestion Overhaul — Phase 1 complete (2026-02-26)
 - Phase 1.4: ATS field enrichment — _fetch_greenhouse/lever/ashby() return list[RawJob]; Greenhouse: departments[] names; Lever: departments from categories.department, team from categories.team; Ashby: department, team fields; 18 tests
 - Phase 1.5: Pipeline wiring — main.py uses attribute access (j.id) for merge; _to_dicts() shim converts list[RawJob]→list[dict] before prefilter; 8 tests
 - GATE Phase 1 (closed): 310 agent tests passing (1 pre-existing failure); patterns/scraper.md updated
+- Phase 2.1: merge_jobs() — agent/merger.py; SOURCE_RANK + FIELD_GROUPS + FIELD_TO_GROUP; description prefers longer plain text over HTML; list fields (departments, locations_structured, emails) unioned; sources list tracks all contributing sources; 22 tests
+- Phase 2.2: Wire merge_jobs() into main.py — all_raw collects all scrapers, merge_jobs() replaces set-based dedup, _to_dicts() shim retained for downstream dicts
+- Phase 2.3: Smart description merge — _merge_description() in merger.py; prefers plain text over HTML, then longer; integrated into Phase 2.1
+- GATE Phase 2 (closed): 332 agent tests passing (1 pre-existing failure); merger.py documented in project structure
 
 Phase 17 — Decomposed Hybrid Scoring (complete: 17.1–17.7)
 - Phase 17.1 — Parser + DB + Ingest: role_function enum

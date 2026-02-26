@@ -80,17 +80,46 @@ Normalization removes gender suffixes, legal entity suffixes, punctuation varian
 | `run_scraper(config_path)` | `scraper.py` | JobSpy (Indeed, Google, LinkedIn, Glassdoor) | `list[RawJob]` |
 | `run_watchlist_scraper(config_path)` | `ats_scraper.py` | Greenhouse, Lever, Ashby public APIs | `list[RawJob]` |
 | `run_wttj_scraper(target_countries)` | `wttj_scraper.py` | Welcome to the Jungle (Algolia, app ID CSEKHVMS53) | `list[RawJob]` |
+| `merge_jobs(jobs)` | `merger.py` | all scrapers combined | `list[RawJob]` |
 
 ## Pipeline wiring (main.py)
 
 ```python
-raw_jobs: list[RawJob] = run_scraper(...)      # Step 1a
-ats_jobs: list[RawJob] = run_watchlist_scraper(...)  # Step 1b
-wttj_jobs: list[RawJob] = run_wttj_scraper(...)  # Step 1c
-# Merge by id (attribute access)
-...
-jobs: list[dict] = _to_dicts(raw_jobs)  # shim until Phase 2
+all_raw: list[RawJob] = run_scraper(...)           # Step 1a
+all_raw.extend(run_watchlist_scraper(...))          # Step 1b
+all_raw.extend(run_wttj_scraper(...))               # Step 1c
+raw_jobs: list[RawJob] = merge_jobs(all_raw)        # Step 1.5: dedup + field-group merge
+jobs: list[dict] = _to_dicts(raw_jobs)             # shim: list[RawJob] → list[dict]
 ```
+
+## Merger (merger.py)
+
+`merge_jobs()` groups by job id and picks the richest data per field group:
+
+```python
+SOURCE_RANK = {
+    "greenhouse": 1, "lever": 2, "ashby": 3,
+    "wttj": 4, "linkedin": 5,
+    "indeed": 6, "glassdoor": 7, "google": 8,
+}
+```
+
+Field groups and their preferred source order:
+
+| Group | Preferred sources (first = wins) |
+|---|---|
+| `description` | greenhouse, lever, ashby, linkedin, wttj, indeed, glassdoor, google |
+| `salary` | wttj, indeed, glassdoor, linkedin, google, greenhouse, lever, ashby |
+| `company_meta` | indeed, glassdoor, linkedin, wttj, greenhouse, lever, ashby, google |
+| `job_level` | linkedin, indeed, wttj, greenhouse, lever, ashby, glassdoor, google |
+| `remote_type` | wttj, linkedin, indeed, glassdoor, google, greenhouse, lever, ashby |
+| `org_structure` | greenhouse, lever, ashby, wttj, linkedin, indeed, glassdoor, google |
+| `location` | indeed, linkedin, glassdoor, google, wttj, greenhouse, lever, ashby |
+
+Special rules:
+- **description**: prefers longer plain text over HTML, then longer length
+- **List fields** (`departments`, `locations_structured`, `emails`): union across all sources
+- **`sources`**: list of all contributing source names, ordered by SOURCE_RANK
 
 ## Adding a New Scraper
 
