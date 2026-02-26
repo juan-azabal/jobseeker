@@ -12,21 +12,59 @@ def _connect(db_path: str) -> sqlite3.Connection:
 # ── Jobs (common data) ────────────────────────────────────────────────────
 
 def upsert_job(db_path: str, job: dict[str, Any]) -> None:
-    job = {**job, "role_function": job.get("role_function")}  # ensure key present
+    # Ensure all expected keys are present (None for missing fields)
+    defaults: dict[str, Any] = {
+        "role_function": None,
+        "company_url": None,
+        "company_logo": None,
+        "company_industry": None,
+        "company_size": None,
+        "job_level": None,
+        "salary_min": None,
+        "salary_max": None,
+        "salary_currency": None,
+        "salary_interval": None,
+        "salary_source": None,
+        "country": None,
+        "city": None,
+        "remote_type": None,
+        "sources": None,
+    }
+    job = {**defaults, **job}
     con = _connect(db_path)
     con.execute(
         """
         INSERT INTO jobs
           (job_id, title, company, location, url, location_type, domain,
-           parsed, role_function, first_seen, last_seen, ingested_at)
+           parsed, role_function, first_seen, last_seen, ingested_at,
+           company_url, company_logo, company_industry, company_size,
+           job_level, salary_min, salary_max, salary_currency, salary_interval,
+           salary_source, country, city, remote_type, sources)
         VALUES
           (:job_id, :title, :company, :location, :url, :location_type, :domain,
-           :parsed, :role_function, :first_seen, :last_seen, :ingested_at)
+           :parsed, :role_function, :first_seen, :last_seen, :ingested_at,
+           :company_url, :company_logo, :company_industry, :company_size,
+           :job_level, :salary_min, :salary_max, :salary_currency, :salary_interval,
+           :salary_source, :country, :city, :remote_type, :sources)
         ON CONFLICT(job_id) DO UPDATE SET
-          last_seen     = excluded.last_seen,
-          ingested_at   = excluded.ingested_at,
-          parsed        = excluded.parsed,
-          role_function = excluded.role_function
+          last_seen        = excluded.last_seen,
+          ingested_at      = excluded.ingested_at,
+          parsed           = excluded.parsed,
+          role_function    = excluded.role_function,
+          company_url      = COALESCE(excluded.company_url,      jobs.company_url),
+          company_logo     = COALESCE(excluded.company_logo,     jobs.company_logo),
+          company_industry = COALESCE(excluded.company_industry, jobs.company_industry),
+          company_size     = COALESCE(excluded.company_size,     jobs.company_size),
+          job_level        = COALESCE(excluded.job_level,        jobs.job_level),
+          salary_min       = COALESCE(excluded.salary_min,       jobs.salary_min),
+          salary_max       = COALESCE(excluded.salary_max,       jobs.salary_max),
+          salary_currency  = COALESCE(excluded.salary_currency,  jobs.salary_currency),
+          salary_interval  = COALESCE(excluded.salary_interval,  jobs.salary_interval),
+          salary_source    = COALESCE(excluded.salary_source,    jobs.salary_source),
+          country          = COALESCE(excluded.country,          jobs.country),
+          city             = COALESCE(excluded.city,             jobs.city),
+          remote_type      = COALESCE(excluded.remote_type,      jobs.remote_type),
+          sources          = excluded.sources
         """,
         job,
     )

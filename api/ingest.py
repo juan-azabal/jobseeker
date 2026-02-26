@@ -65,6 +65,7 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None 
         existing = get_job_by_id(db_path, job_id)
 
         # Upsert common job data (shared across all users)
+        sources = raw.get("sources") or []
         record = {
             "job_id": job_id,
             "title": raw.get("title"),
@@ -78,6 +79,21 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None 
             "first_seen": existing["first_seen"] if existing else date_posted,
             "last_seen": date_posted,
             "ingested_at": now,
+            # Enriched scraper fields (populated by RawJob merger; null-safe)
+            "company_url": raw.get("company_url"),
+            "company_logo": raw.get("company_logo"),
+            "company_industry": raw.get("company_industry"),
+            "company_size": raw.get("company_employees_label"),
+            "job_level": raw.get("job_level"),
+            "salary_min": raw.get("min_amount"),
+            "salary_max": raw.get("max_amount"),
+            "salary_currency": raw.get("currency"),
+            "salary_interval": raw.get("interval"),
+            "salary_source": raw.get("salary_source"),
+            "country": raw.get("country"),
+            "city": raw.get("city"),
+            "remote_type": raw.get("remote_type"),
+            "sources": json.dumps(sources),
         }
 
         upsert_job(db_path, record)
