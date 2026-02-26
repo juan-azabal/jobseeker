@@ -46,7 +46,9 @@ class TestJuanProfile:
         assert "data, adtech" in self.rubric
 
     def test_contains_adjacent_domains(self):
-        assert "Adjacent domains (saas, martech, ia, llm)" in self.rubric
+        # v2: adjacent domains not injected into prompt (domain scoring is code-side)
+        # Core domains still present
+        assert "data, adtech" in self.rubric
 
     def test_no_hardcoded_pm_abbreviation(self):
         # The rubric should say "Product Manager", not just "PM" as a role type
@@ -92,9 +94,9 @@ class TestDataEngineerProfile:
         assert "data, ml" in self.rubric
 
     def test_no_adjacent_fallback(self):
-        # Both domains are >= 12, so no adjacent domains exist
+        # v2: adjacent_clause not in prompt at all (domain scoring is code-side)
         assert "SaaS, B2B" not in self.rubric
-        assert "Tangentially related domains" in self.rubric
+        assert "Tangentially related domains" not in self.rubric
 
 
 class TestNoRoleTypeNoGeography:
@@ -170,8 +172,9 @@ class TestNoAdjacentDomains:
         assert "SaaS, B2B" not in self.rubric
 
     def test_tangentially_related(self):
-        assert "Tangentially related domains" in self.rubric
+        # v2: adjacent_clause not injected into prompt (domain scoring is code-side)
+        assert "Tangentially related domains" not in self.rubric
 
     def test_reads_cleanly(self):
-        # The line should be a complete, readable sentence
-        assert "- 12-19: Tangentially related domains" in self.rubric
+        # v2: no numeric scoring tiers in prompt (deterministic code-side)
+        assert "12-19:" not in self.rubric

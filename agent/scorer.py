@@ -15,10 +15,11 @@ load_dotenv()
 
 SCORE_MODEL = "gpt-4o-mini"  # ADR-003: mini scores tier correctly ~90% of the time at 17x lower cost
 
-# Scoring rubric is read from prompts/scoring-rubric.md (source of truth).
+# Scoring rubric v2 is read from prompts/scoring-rubric-v2.md (source of truth).
 # _build_scoring_prompt() interpolates profile-specific values at runtime.
-# To change scoring criteria, edit prompts/scoring-rubric.md — no code change needed.
-_SCORING_RUBRIC_PATH = Path(__file__).parent / "prompts" / "scoring-rubric.md"
+# v2: asks for 2 categorical grades (technical_depth, profile_evidence) instead of
+# numerical sub-scores. Domain/seniority/location scoring is now deterministic in code.
+_SCORING_RUBRIC_PATH = Path(__file__).parent / "prompts" / "scoring-rubric-v2.md"
 _SCORING_RUBRIC_CACHE: str | None = None
 
 
@@ -249,7 +250,7 @@ def score_job(job, collection, profile: dict, n_chunks=8):
                     {"role": "user", "content": user_content},
                 ],
                 temperature=0,
-                max_tokens=1200,
+                max_tokens=800,
             )
 
             raw = response.choices[0].message.content.strip()

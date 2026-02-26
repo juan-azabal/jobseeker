@@ -134,8 +134,9 @@ class TestRubricPromptBaseline:
         assert "data, adtech" in self.rubric
 
     def test_rubric_contains_adjacent_domains(self):
-        # Juan's adjacent domains (6 <= weight < 12): saas, martech, ia, llm (all weight 10)
-        assert "Adjacent domains (saas, martech, ia, llm)" in self.rubric
+        # v2 rubric: adjacent domains are not injected separately into the prompt
+        # (domain scoring is deterministic in code). Core domains still present.
+        assert "data, adtech" in self.rubric
 
     def test_rubric_contains_target_levels(self):
         # Juan's seniority_weights: principal=15, staff=12 (both >= 10)
@@ -146,9 +147,8 @@ class TestRubricPromptBaseline:
         assert "SaaS, B2B" not in self.rubric
 
     def test_rubric_contains_role_type(self):
-        # Parameterized in 7.2 — Juan's profile sets role_type: "Product Manager"
+        # v2 rubric: role_type still interpolated; "Generic tech {role_type}" line was v1 only
         assert "experienced Product Manager" in self.rubric
-        assert "Generic tech Product Manager" in self.rubric
 
     def test_rubric_contains_geography(self):
         # Parameterized in 7.2 — Juan's profile sets geography: "EU or remote"

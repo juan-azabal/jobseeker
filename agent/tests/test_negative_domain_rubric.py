@@ -1,12 +1,15 @@
 """
-Tests for Phase 13.1: Graduated negative domain penalty injection into RAG scoring rubric.
+Tests for domain scoring behavior in the scoring prompt.
 
-Verifies:
-(a) Strong penalty (weight ≤ -15) → cap domain_fit at 3.
-(b) Mild penalty (-15 < weight < 0) → cap domain_fit at 10.
-(c) Both tiers present when profile has domains in each tier.
-(d) No penalty clause when no negative domains.
-(e) Positive domains appear in core/adjacent, NOT in penalty.
+Phase 13.1 originally tested penalty clause injection into the LLM rubric.
+Phase 17.2: domain_fit is now computed deterministically in code (hybrid_score/heuristic_score).
+The LLM rubric v2 no longer asks the LLM to score domain_fit; it asks only for
+technical_depth and profile_evidence grades.
+
+These tests verify the v2 prompt behavior:
+- No "cap domain_fit" language in generated prompt (domain scoring is code-side)
+- Prompt still contains correct profile context values
+- No score_breakdown in prompt
 """
 
 import sys
@@ -22,171 +25,61 @@ def _reset_rubric_cache():
     scorer._SCORING_RUBRIC_CACHE = None
 
 
-class TestStrongPenalty:
-    """Weight ≤ -15 → strong penalty tier (cap 3)."""
+def _profile_with_domains(domains):
+    return {
+        "user": {"name": "Test User"},
+        "target": {
+            "role_type": "Product Manager",
+            "geography": "Remote",
+            "domains": domains,
+            "seniority": {"senior": 15},
+        },
+        "skills": [],
+    }
+
+
+class TestV2DomainPromptBehavior:
+    """v2: domain_fit cap language must NOT appear in the LLM prompt (it's code-side now)."""
 
     def setup_method(self):
         _reset_rubric_cache()
-        self.profile = {
-            "user": {"name": "Test User"},
-            "target": {
-                "role_type": "Product Manager",
-                "geography": "Remote",
-                "domains": {"gaming": -25, "data": 15},
-                "seniority": {"senior": 15},
-            },
-            "skills": [],
-        }
-        self.rubric = _build_scoring_prompt(self.profile)
 
-    def test_penalty_clause_present(self):
-        assert "PENALTY" in self.rubric
+    def test_strong_negative_domain_no_cap_language(self):
+        """Profile with gaming=-25 must NOT produce 'cap domain_fit' in prompt."""
+        rubric = _build_scoring_prompt(_profile_with_domains({"gaming": -25, "data": 15}))
+        assert "cap domain_fit" not in rubric
 
-    def test_strong_tier_names_domain(self):
-        penalty_start = self.rubric.find("PENALTY")
-        assert penalty_start != -1
-        penalty_section = self.rubric[penalty_start:penalty_start + 500]
-        assert "gaming" in penalty_section.lower()
+    def test_mild_negative_domain_no_cap_language(self):
+        """Profile with media=-5 must NOT produce 'cap domain_fit' in prompt."""
+        rubric = _build_scoring_prompt(_profile_with_domains({"media": -5, "data": 15}))
+        assert "cap domain_fit" not in rubric
 
-    def test_strong_tier_caps_at_3(self):
-        assert "cap domain_fit at 3" in self.rubric
+    def test_no_negative_domains_no_cap_language(self):
+        """All-positive domains also produces no domain_fit cap language."""
+        rubric = _build_scoring_prompt(_profile_with_domains({"data": 15, "saas": 10}))
+        assert "cap domain_fit" not in rubric
 
-    def test_strong_tier_does_not_say_cap_at_10(self):
-        assert "cap domain_fit at 10" not in self.rubric
+    def test_prompt_has_no_score_breakdown(self):
+        """v2 prompt must not contain score_breakdown field."""
+        rubric = _build_scoring_prompt(_profile_with_domains({"data": 15}))
+        assert "score_breakdown" not in rubric
 
-    def test_positive_domain_in_core(self):
-        assert "data" in self.rubric
+    def test_prompt_has_technical_depth(self):
+        """v2 prompt must contain technical_depth grade field."""
+        rubric = _build_scoring_prompt(_profile_with_domains({"data": 15}))
+        assert "technical_depth" in rubric
 
-    def test_cap_4_language_gone(self):
-        assert "cap domain_fit at 4" not in self.rubric
+    def test_prompt_has_profile_evidence(self):
+        """v2 prompt must contain profile_evidence grade field."""
+        rubric = _build_scoring_prompt(_profile_with_domains({"data": 15}))
+        assert "profile_evidence" in rubric
 
+    def test_prompt_contains_candidate_name(self):
+        """Prompt must still interpolate candidate name."""
+        rubric = _build_scoring_prompt(_profile_with_domains({"data": 15}))
+        assert "Test User" in rubric
 
-class TestMildPenalty:
-    """Weight between -1 and -14 → mild penalty tier (cap 10)."""
-
-    def setup_method(self):
-        _reset_rubric_cache()
-        self.profile = {
-            "user": {"name": "Test User"},
-            "target": {
-                "role_type": "Product Manager",
-                "geography": "Remote",
-                "domains": {"media": -5, "data": 15},
-                "seniority": {"senior": 15},
-            },
-            "skills": [],
-        }
-        self.rubric = _build_scoring_prompt(self.profile)
-
-    def test_penalty_clause_present(self):
-        assert "PENALTY" in self.rubric
-
-    def test_mild_tier_names_domain(self):
-        penalty_start = self.rubric.find("PENALTY")
-        penalty_section = self.rubric[penalty_start:penalty_start + 500]
-        assert "media" in penalty_section.lower()
-
-    def test_mild_tier_caps_at_10(self):
-        assert "cap domain_fit at 10" in self.rubric
-
-    def test_mild_tier_does_not_say_cap_at_3(self):
-        assert "cap domain_fit at 3" not in self.rubric
-
-    def test_cap_4_language_gone(self):
-        assert "cap domain_fit at 4" not in self.rubric
-
-
-class TestBothTiers:
-    """Profile has domains in both strong (≤-15) and mild (<0, >-15) tiers."""
-
-    def setup_method(self):
-        _reset_rubric_cache()
-        self.profile = {
-            "user": {"name": "Test User"},
-            "target": {
-                "role_type": "Product Manager",
-                "geography": "Remote",
-                "domains": {"gaming": -25, "media": -5, "data": 15},
-                "seniority": {"senior": 15},
-            },
-            "skills": [],
-        }
-        self.rubric = _build_scoring_prompt(self.profile)
-
-    def test_both_tiers_present(self):
-        assert "cap domain_fit at 3" in self.rubric
-        assert "cap domain_fit at 10" in self.rubric
-
-    def test_strong_domain_in_strong_tier(self):
-        idx_cap3 = self.rubric.find("cap domain_fit at 3")
-        assert idx_cap3 != -1
-        context = self.rubric[max(0, idx_cap3 - 200):idx_cap3 + 50]
-        assert "gaming" in context.lower()
-
-    def test_mild_domain_in_mild_tier(self):
-        idx_cap10 = self.rubric.find("cap domain_fit at 10")
-        assert idx_cap10 != -1
-        context = self.rubric[max(0, idx_cap10 - 200):idx_cap10 + 50]
-        assert "media" in context.lower()
-
-    def test_positive_domain_not_in_penalty(self):
-        penalty_start = self.rubric.find("PENALTY")
-        penalty_section = self.rubric[penalty_start:penalty_start + 600]
-        assert "data" not in penalty_section.lower()
-
-    def test_cap_4_language_gone(self):
-        assert "cap domain_fit at 4" not in self.rubric
-
-
-class TestNoPenaltyWhenNoNegative:
-    """No negative domains → no penalty clause."""
-
-    def setup_method(self):
-        _reset_rubric_cache()
-        self.profile = {
-            "user": {"name": "Test User"},
-            "target": {
-                "role_type": "Product Manager",
-                "geography": "Remote",
-                "domains": {"data": 15, "saas": 10},
-                "seniority": {"senior": 15},
-            },
-            "skills": [],
-        }
-        self.rubric = _build_scoring_prompt(self.profile)
-
-    def test_no_penalty_clause(self):
-        assert "PENALTY" not in self.rubric
-
-    def test_no_cap_language(self):
-        assert "cap domain_fit at 3" not in self.rubric
-        assert "cap domain_fit at 10" not in self.rubric
-        assert "cap domain_fit at 4" not in self.rubric
-
-
-class TestBoundaryAtMinus15:
-    """Exact boundary: -15 is strong, -14 is mild."""
-
-    def _rubric_for(self, domains):
-        scorer._SCORING_RUBRIC_CACHE = None
-        profile = {
-            "user": {"name": "Test User"},
-            "target": {
-                "role_type": "PM",
-                "geography": "Remote",
-                "domains": domains,
-                "seniority": {"senior": 15},
-            },
-            "skills": [],
-        }
-        return _build_scoring_prompt(profile)
-
-    def test_minus_15_is_strong(self):
-        rubric = self._rubric_for({"gaming": -15, "data": 10})
-        assert "cap domain_fit at 3" in rubric
-        assert "cap domain_fit at 10" not in rubric
-
-    def test_minus_14_is_mild(self):
-        rubric = self._rubric_for({"gaming": -14, "data": 10})
-        assert "cap domain_fit at 10" in rubric
-        assert "cap domain_fit at 3" not in rubric
+    def test_prompt_contains_role_type(self):
+        """Prompt must still interpolate role_type."""
+        rubric = _build_scoring_prompt(_profile_with_domains({"data": 15}))
+        assert "Product Manager" in rubric
