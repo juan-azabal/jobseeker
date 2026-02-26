@@ -15,6 +15,9 @@ import sys
 import time
 from datetime import datetime
 
+import structlog
+
+from logging_setup import configure_logging
 from scraper import run_scraper
 from ats_scraper import run_watchlist_scraper
 from wttj_scraper import run_wttj_scraper
@@ -22,6 +25,23 @@ from prefilter import prefilter_jobs
 from parser import parse_all
 from jobcache import load_cache, save_cache, split_by_cache, update_cache, cache_stats
 from user_config import load_profile, list_profiles, is_profile_active, resolve_profile_paths, compute_seniority_weights
+
+configure_logging()
+logger = structlog.get_logger("agent.main")
+
+
+def _capture(profile_id: str, event: str, props: dict) -> None:
+    """Fire a PostHog server-side event. No-op when POSTHOG_API_KEY is absent."""
+    key = os.environ.get("POSTHOG_API_KEY")
+    if not key:
+        return
+    try:
+        import posthog as _ph  # noqa: PLC0415
+        _ph.api_key = key
+        _ph.host = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com")
+        _ph.capture(profile_id, event, props)
+    except Exception:
+        pass
 
 
 SEEN_IDS_PATH = "config/seen_ids/juan.txt"  # fallback only; main() always passes profile-derived path
@@ -808,6 +828,26 @@ def main():
 
     start_time = time.time()
 
+    mode = "full"
+    if full_refresh:
+        mode = "refresh"
+    elif rescore_only:
+        mode = "rescore"
+    elif skip_scoring:
+        mode = "no_score"
+
+    logger.info(
+        "pipeline_start",
+        profile_id=profile_id,
+        mode=mode,
+        notify=send_email,
+    )
+    _capture(profile_id, "agent_pipeline_start", {
+        "profile_id": profile_id,
+        "mode": mode,
+        "notify": send_email,
+    })
+
     print(f"JobAgent - Phase 2: Scrape > Pre-filter > Parse > RAG Score > Rank  [{profile_id}]")
     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M')}")
     if full_refresh:
@@ -844,6 +884,7 @@ def main():
     except Exception as e:
         print(f"\nWTTJ error (continuing without): {e}")
 
+    logger.info("scrape_complete", total_jobs=len(jobs))
     print(f"\nCombined: {len(jobs)} total jobs")
 
     if not jobs:
@@ -869,6 +910,7 @@ def main():
     if full_refresh:
         save_cache(cache)  # wipe the file immediately
     cached_jobs, new_jobs = split_by_cache(passed, cache)
+    logger.info("cache_split", cache_hits=len(cached_jobs), cache_misses=len(new_jobs))
     print(f"\n📦 Cache: {cache_stats(cache)} | {len(cached_jobs)} hits, {len(new_jobs)} new this run")
 
     # Step 3b: Cross-user dedup — check Railway DB for jobs already parsed by another user
@@ -881,6 +923,7 @@ def main():
                 if job["id"] in db_parsed and not job.get("parsed"):
                     job["parsed"] = db_parsed[job["id"]]
                     n_restored += 1
+            logger.info("db_cache_restore", jobs_restored=n_restored)
             print(f"   ♻  {n_restored} jobs restored from DB (cross-user cache)")
 
     # --rescore: move cached jobs back to new_jobs but keep their parsed data
@@ -906,12 +949,19 @@ def main():
     # Skipped jobs are still saved and visible in the digest with heuristic tier.
     jobs_to_score, heuristic_only = _heuristic_gate(new_jobs, profile)
     if heuristic_only:
+        logger.info("heuristic_gate", to_score=len(jobs_to_score), heuristic_only=len(heuristic_only))
         print(f"\n🔍 Heuristic gate: {len(jobs_to_score)} → RAG, {len(heuristic_only)} → heuristic-only")
     new_jobs = jobs_to_score
 
     # Step 5: RAG score new jobs (and re-scored ones)
     # Hard cap as a backstop — the heuristic gate should do most of the work.
     if len(new_jobs) > MAX_SCORE_PER_RUN:
+        logger.warning(
+            "score_cap_applied",
+            total=len(new_jobs),
+            cap=MAX_SCORE_PER_RUN,
+            deferred=len(new_jobs) - MAX_SCORE_PER_RUN,
+        )
         print(f"\n⚠️  {len(new_jobs)} jobs past gate — capping at {MAX_SCORE_PER_RUN} to limit cost.")
         print(f"   Remaining {len(new_jobs) - MAX_SCORE_PER_RUN} jobs will be scored in future runs.")
         heuristic_only.extend(new_jobs[MAX_SCORE_PER_RUN:])
@@ -926,6 +976,7 @@ def main():
             new_jobs = score_all(new_jobs, collection, profile=profile)
             n_scored = sum(1 for j in new_jobs if j.get("rag_score"))
         except Exception as e:
+            logger.error("rag_score_error", error=str(e), exc_info=True)
             print(f"\nRAG scoring error (continuing with heuristic only): {e}")
 
         # Step 5b: Persist gap/strength data for trend analysis
@@ -944,6 +995,7 @@ def main():
     if all_new:
         added = update_cache(cache, all_new)
         save_cache(cache)
+        logger.info("cache_updated", jobs_added=added)
         print(f"   Cache updated: +{added} jobs ({cache_stats(cache)})")
 
     # Step 7: Combine cached + new for digest (RAG-scored jobs ranked first)
@@ -970,6 +1022,35 @@ def main():
     duration_s = int(time.time() - start_time)
     # Rough cost estimate: gpt-4o-mini parse ~$0.001/job, gpt-4o RAG score ~$0.04/job
     cost_usd = round(n_parsed * 0.001 + n_scored * 0.04, 3)
+
+    tier_a = sum(1 for j in all_parsed if (j.get("rag_score") or {}).get("tier") == "A")
+    tier_b = sum(1 for j in all_parsed if (j.get("rag_score") or {}).get("tier") == "B")
+    tier_c = sum(1 for j in all_parsed if (j.get("rag_score") or {}).get("tier") == "C")
+
+    logger.info(
+        "pipeline_complete",
+        profile_id=profile_id,
+        duration_s=duration_s,
+        cost_usd=cost_usd,
+        total_jobs=len(all_parsed),
+        n_parsed=n_parsed,
+        n_scored=n_scored,
+        tier_a=tier_a,
+        tier_b=tier_b,
+        tier_c=tier_c,
+    )
+    _capture(profile_id, "agent_pipeline_complete", {
+        "profile_id": profile_id,
+        "mode": mode,
+        "duration_s": duration_s,
+        "cost_usd": cost_usd,
+        "total_jobs": len(all_parsed),
+        "n_parsed": n_parsed,
+        "n_scored": n_scored,
+        "tier_a": tier_a,
+        "tier_b": tier_b,
+        "tier_c": tier_c,
+    })
 
     print(f"\n✅ Done in {duration_s}s. Cache: {cache_stats(cache)}")
     if cost_usd > 0:
@@ -1004,8 +1085,10 @@ def main():
             }
             email_sent = send_digest(all_parsed, prefilter_stats, run_meta, profile=profile)
             if not email_sent:
+                logger.warning("email_skipped", reason="seen_ids_already_updated")
                 print("⚠  Email not sent (seen_ids already updated — sync will persist them)")
         except Exception as e:
+            logger.error("email_error", error=str(e), exc_info=True)
             print(f"⚠  Email notify error (pipeline succeeded): {e}")
 
 
