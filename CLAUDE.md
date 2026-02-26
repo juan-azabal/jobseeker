@@ -74,8 +74,11 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `agent/schemas/` — JSON output contracts (parsed_job, scored_job, digest_context, gap_history_entry)
   - `agent/patterns/` — interface contracts per module
   - `agent/docs/decisions/` — ADRs (001–007)
-- Tests: `tests/` (backend, 449 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 195 tests)
+- Tests: `tests/` (backend, 562 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 400 tests)
   - `agent/tests/fixtures.py` — shared BASELINE_PROFILE fixture (fixed dict, not from juan.yaml)
+  - `agent/tests/test_notifier_v2.py` — v2 rag_score compat in _build_context (P15 fix)
+  - `agent/tests/test_ranked_jobs_v2.py` — hybrid score in ranked_jobs + print_summary mode label (P16/P18 fix)
+  - `agent/tests/test_gap_tracker_v2.py` — grade points stored in gap history for v2 jobs (P17 fix)
 - DB: `data/jobseeker.db` (gitignored)
 - Static build: `web/dist/` (gitignored)
 - Scripts: `scripts/seed_dev.py` — dev database seeder, `scripts/backfill_embeddings.py` — one-time skill embedding backfill
@@ -416,6 +419,10 @@ Phase 17 — Decomposed Hybrid Scoring (complete: 17.1–17.7)
 - Enriched field naming (Phase 4): DB column is `company_size` (plan name); raw dict field is `company_employees_label` (RawJob model name). Ingest maps `company_employees_label → company_size` at upsert_job boundary.
 - Enriched upsert strategy (Phase 4): COALESCE(excluded.field, jobs.field) for all enriched scalar fields — new value wins if non-null, existing value preserved if new is null. `sources` (JSON array) always updated — reflects scraper origins from the current pipeline run, not accumulated history.
 - Enriched API null omission (Phase 4): `_ENRICHED_FIELDS` constant in list_jobs and get_job strips keys where value is None. Prevents sending `"company_industry": null` for every job that has no industry data.
+- `_grade_to_points()` in agent (P16 fix): added to `agent/main.py` as module-level helper, mirrors `api/grade_mapping.py:grade_to_points()`. Used by `ranked_jobs()`, `_auto_skip_reloc()`, and `notifier._build_context()`. If grade thresholds change, update both copies.
+- v2 `_display_score` logic: three branches in all three scoring sites — `rag is None` → heuristic; `"score" in rag` (v1) → stored numeric; else (v2) → `min(100, max(0, _fit_score + grade_to_points(tech) + grade_to_points(prof)))`.
+- Gap tracker v2 score (P17 fix): `gap_tracker.py` uses inline `_gp` dict (not imported from main to avoid circular import). v2 score = sum of grade points only (no heuristic component — profile not available at Step 5b). Ranges: A+A=40, B+C=17, unknown+unknown=20.
+- `print_summary()` mode label (P18 fix): `has_v2 = any("technical_depth" in (j.get("rag_score") or {}))`. v2 takes priority: "hybrid score" > "RAG score" > "heuristic fit".
 
 ### Known Bugs
 
