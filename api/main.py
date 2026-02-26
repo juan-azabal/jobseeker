@@ -15,6 +15,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from api.logging_config import configure_logging
 from api.db.init import init_db
+from api.routes.health import router as health_router
 from api.routes.jobs import router as jobs_router
 from api.routes.auth import router as auth_router
 from api.routes.onboard import router as onboard_router
@@ -96,16 +97,12 @@ def on_startup():
 
 
 # --- API routes (must be registered before the SPA catch-all) ---
+app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(jobs_router)
 app.include_router(onboard_router)
 app.include_router(ingest_router)
 app.include_router(admin_router)
-
-
-@app.get("/api/health")
-async def health():
-    return {"status": "ok"}
 
 
 # --- Static file serving (production SPA) ---
