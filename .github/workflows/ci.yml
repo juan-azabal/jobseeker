@@ -27,7 +27,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run backend tests
-        run: pytest tests/ -x -q --tb=short
+        run: python -m pytest tests/ -x -q --tb=short
 
   agent-tests:
     runs-on: ubuntu-latest
@@ -45,7 +45,7 @@ jobs:
         run: pip install -r agent/requirements.txt
 
       - name: Run agent tests
-        run: cd agent && pytest tests/ -x -q --tb=short -m "not smoke"
+        run: cd agent && python -m pytest tests/ -x -q --tb=short -m "not smoke"
 
   lint:
     runs-on: ubuntu-latest
