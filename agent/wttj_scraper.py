@@ -178,24 +178,47 @@ def _search_wttj_google(queries):
     return list(all_jobs.values())
 
 
-def run_wttj_scraper():
-    """Search WTTJ for PM roles via Algolia. Falls back to Google on failure."""
+def _build_geo_filter(target_countries: list[str]) -> str:
+    """Build Algolia geo filter: target country offices OR any remote job.
+
+    Args:
+        target_countries: ISO 2-letter country codes (e.g. ["ES", "NL", "DE"]).
+
+    Returns:
+        Algolia filter string fragment, e.g.:
+        "(offices.country_code:ES OR offices.country_code:NL OR remote:fulltime OR remote:partial)"
+    """
+    parts = [f"offices.country_code:{code}" for code in target_countries]
+    parts += ["remote:fulltime", "remote:partial"]
+    return "(" + " OR ".join(parts) + ")"
+
+
+def run_wttj_scraper(target_countries: list[str] | None = None):
+    """Search WTTJ for PM roles via Algolia. Falls back to Google on failure.
+
+    Args:
+        target_countries: ISO 2-letter country codes to include as onsite targets
+            (e.g. ["ES", "NL", "DE", "GB", "IE"]). Remote jobs from any country
+            always pass. Defaults to ["ES"] when not provided.
+    """
+    if target_countries is None:
+        target_countries = ["ES"]
 
     # Primary: Algolia search
     # new_profession.sub_category_reference:product-management-wNjYw ensures all results are PM
     # roles (not engineers, data analysts, etc.) - no need to prefilter by title anymore.
-    # Location/remote filtering is left to prefilter.py (handles edge cases better).
-    # Filter to PM profession category only - eliminates engineers, analysts, etc.
-    # Query terms are intentionally broad since Algolia matches against title+description.
+    # Geographic filter: onsite jobs restricted to target_countries; remote jobs always pass.
     _PM = "new_profession.sub_category_reference:product-management-wNjYw"
+    _GEO = _build_geo_filter(target_countries)
+    _FILTER = f"{_PM} AND {_GEO}"
 
     queries = [
-        {"term": "data",         "filters": _PM, "results_wanted": 40},
-        {"term": "platform",     "filters": _PM, "results_wanted": 40},
-        {"term": "analytics",    "filters": _PM, "results_wanted": 30},
-        {"term": "AI machine learning", "filters": _PM, "results_wanted": 30},
-        {"term": "adtech advertising",  "filters": _PM, "results_wanted": 30},
-        {"term": "principal staff",     "filters": _PM, "results_wanted": 25},
+        {"term": "data",         "filters": _FILTER, "results_wanted": 40},
+        {"term": "platform",     "filters": _FILTER, "results_wanted": 40},
+        {"term": "analytics",    "filters": _FILTER, "results_wanted": 30},
+        {"term": "AI machine learning", "filters": _FILTER, "results_wanted": 30},
+        {"term": "adtech advertising",  "filters": _FILTER, "results_wanted": 30},
+        {"term": "principal staff",     "filters": _FILTER, "results_wanted": 25},
     ]
 
     google_queries = [

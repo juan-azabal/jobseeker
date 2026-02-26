@@ -894,7 +894,8 @@ def main():
 
     # Step 1c: Welcome to the Jungle
     try:
-        wttj_jobs = run_wttj_scraper()
+        wttj_countries = profile.get("target", {}).get("wttj_countries") or ["ES"]
+        wttj_jobs = run_wttj_scraper(target_countries=wttj_countries)
         for j in wttj_jobs:
             if j["id"] not in existing_ids:
                 jobs.append(j)
