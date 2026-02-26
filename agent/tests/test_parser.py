@@ -81,11 +81,11 @@ class TestParseJdRoleFunction:
         mock_response.usage.completion_tokens = 200
         return mock_response
 
-    @patch("agent.parser._make_openai_client")
+    @patch("parser._make_openai_client")
     def test_parse_jd_stores_role_function(self, mock_factory):
         """parse_jd must store role_function from LLM response."""
-        from agent.parser import parse_jd, _PARSER_PROMPT_CACHE  # noqa: F401
-        import agent.parser as parser_mod
+        from parser import parse_jd, _PARSER_PROMPT_CACHE  # noqa: F401
+        import parser as parser_mod
         # Reset cache so fresh prompt is loaded
         parser_mod._PARSER_PROMPT_CACHE = None
 
@@ -104,11 +104,11 @@ class TestParseJdRoleFunction:
         assert result["parsed"] is not None
         assert result["parsed"]["role_function"] == "product"
 
-    @patch("agent.parser._make_openai_client")
+    @patch("parser._make_openai_client")
     def test_parse_jd_handles_missing_role_function(self, mock_factory):
         """parse_jd gracefully handles LLM response without role_function (backward compat)."""
-        from agent.parser import parse_jd  # noqa: F811
-        import agent.parser as parser_mod
+        from parser import parse_jd  # noqa: F811
+        import parser as parser_mod
         parser_mod._PARSER_PROMPT_CACHE = None
 
         response = self._make_llm_response("product")

@@ -1,13 +1,7 @@
 {
-  "_comment": "Output schema for scorer.py / score_job(). Fields stored under job['rag_score']. Source: _build_scoring_prompt() in scorer.py and prompts/scoring-rubric.md.",
-  "score": 75,
-  "score_breakdown": {
-    "domain_fit": 20,
-    "seniority_fit": 16,
-    "technical_depth": 15,
-    "profile_evidence": 14,
-    "strategic_impact": 10
-  },
+  "_comment": "Output schema for scorer.py / score_job(). Fields stored under job['rag_score']. Source: _build_scoring_prompt() in scorer.py and prompts/scoring-rubric-v2.md.",
+  "technical_depth": "A|B|C",
+  "profile_evidence": "A|B|C",
   "strengths": [
     {
       "claim": "1-sentence strength statement",
@@ -24,6 +18,5 @@
   ],
   "deal_breakers": ["anything that makes this a hard no"],
   "talking_points": ["1-2 sentence angle to open with in interview"],
-  "one_line_verdict": "10-15 word summary of fit",
-  "stories_to_prepare": ["H4", "H1", "H5"]
+  "one_line_verdict": "10-15 word summary of fit"
 }

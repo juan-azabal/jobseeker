@@ -25,9 +25,9 @@ score_job(
 After scoring, each job has two new fields:
 
 ```python
-job["rag_score"] = {        # dict if scoring succeeded, None if failed/skipped
-    "score":            int,             # 0-100
-    "score_breakdown":  dict,            # 5 sub-scores, see schemas/scored_job.json
+job["rag_score"] = {           # dict if scoring succeeded, None if failed/skipped
+    "technical_depth":  str,   # "A"|"B"|"C" — LLM grade (v2)
+    "profile_evidence": str,   # "A"|"B"|"C" — LLM grade (v2)
     "strengths":        list[dict],      # [{"claim": str, "evidence": str}]
     "gaps":             list[dict],      # [{"gap": str, "severity": str, "category": str, "mitigation": str}]
     "deal_breakers":    list[str],
@@ -51,9 +51,11 @@ See `schemas/scored_job.json` for the full output contract.
 
 ## Business Logic Prompt
 
-The scoring rubric (dimensions, score ranges, JSON output format) lives at `prompts/scoring-rubric.md`. The `_build_scoring_prompt()` function in `scorer.py` dynamically interpolates profile-specific values (name, target domains, seniority levels) into the static rubric.
+The scoring rubric (grade definitions, JSON output format) lives at `prompts/scoring-rubric-v2.md`. The `_build_scoring_prompt()` function in `scorer.py` dynamically interpolates profile-specific values (name, target domains, seniority levels) into the static rubric.
 
-**Do not modify the rubric inline in `scorer.py`. Edit `prompts/scoring-rubric.md` and update the f-string accordingly.**
+**Do not modify the rubric inline in `scorer.py`. Edit `prompts/scoring-rubric-v2.md` and update the f-string accordingly.**
+
+The archived v1 rubric (numerical sub-scores) is at `prompts/scoring-rubric-v1.md`.
 
 ## Heuristic Score (main.py + api/scoring.py)
 
@@ -75,14 +77,9 @@ The API heuristic scorer resolves domain through a 4-stage cascade:
 Domain weight may be negative (user deprioritized that domain). Total heuristic score clamped to 0 minimum.
 `domain_override` is stored per-user in `user_job_status.domain_override` (migration 014).
 
-### RAG Penalty Clause (Phase 13)
+### RAG Penalty Clause (v1 only — removed in v2)
 
-`_build_scoring_prompt()` injects a graduated PENALTY clause into the rubric when the profile has negative-weight domains:
-- Strong penalty (weight ≤ -15): LLM caps `domain_fit` at 3
-- Mild penalty (-15 < weight < 0): LLM caps `domain_fit` at 10
-- No negative domains → penalty clause omitted entirely
-
-Prompt: `prompts/scoring-rubric.md` v1.2, `{penalty_clause}` placeholder after "0-4: Unrelated domains" line.
+v1 rubric (`scoring-rubric-v1.md`) injected a graduated PENALTY clause for negative-weight domains. In v2, domain scoring is entirely deterministic (code-side) — the LLM no longer scores domain fit. The `{penalty_clause}` placeholder is no longer used.
 
 ## Invariants
 
