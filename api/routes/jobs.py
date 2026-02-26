@@ -117,6 +117,41 @@ def _compute_reloc(job: dict, home_locations: list[str], home_regions: list[str]
     return not any(h in job_loc for h in home_locations)
 
 
+def _score_single_job(
+    job: dict,
+    parsed: dict,
+    profile: dict | None,
+    home_locations: list[str],
+    home_regions: list[str],
+    user_id: int | None,
+    db_path: str,
+    skill_lookup: dict | None = None,
+) -> int:
+    """Score an unscored job using the heuristic path (no LLM grades).
+
+    Computes relocation, loads domain_override from DB, calls hybrid_score
+    with default grade bonus (+20 neutral), then applies relocation penalty.
+    Returns 0 if profile is None.
+    """
+    if not profile:
+        return 0
+    is_reloc = _compute_reloc(job, home_locations, home_regions) if home_locations else False
+    domain_override = (
+        get_domain_override(db_path, user_id, job.get("job_id", ""))
+        if user_id is not None else None
+    )
+    score = hybrid_score(
+        profile, parsed, job, is_reloc,
+        db_path=db_path, skill_lookup=skill_lookup,
+        domain_override=domain_override,
+    )
+    if is_reloc and score > 0:
+        loc_type = job.get("location_type") or parsed.get("location_type") or ""
+        penalty = 5 if loc_type == "remote" else 15
+        score = max(0, score - penalty)
+    return score
+
+
 def _score_and_tier_jobs(
     jobs: list[dict],
     profile: dict | None,
@@ -177,26 +212,20 @@ def _score_and_tier_jobs(
                 db_path=_db_path(), skill_lookup=skill_lookup,
                 domain_override=job_domain_override,
             )
+            # Relocation penalty (v1 RAG already accounts for location; v2 does not)
+            if is_reloc and score > 0:
+                loc_type = (job.get("location_type") or job["_parsed_dict"].get("location_type") or "")
+                penalty = 5 if loc_type == "remote" else 15
+                score = max(0, score - penalty)
         elif job.get("ujs_score") is not None:
             # v1: use stored RAG score unchanged
             score = job["ujs_score"]
-        elif profile:
-            # unscored: hybrid_score with default grades (+20 neutral)
-            score = hybrid_score(
-                profile, job["_parsed_dict"], job, is_reloc,
-                db_path=_db_path(), skill_lookup=skill_lookup,
-                domain_override=job_domain_override,
-            )
         else:
-            score = 0
-
-        # Relocation penalty on non-RAG scores (v1 RAG already accounts for location)
-        # Remote geo-restricted (e.g. "US only"): user works from home, penalty is smaller.
-        # Onsite/hybrid outside home: requires physical relocation, full penalty.
-        if job.get("ujs_score") is None and is_reloc and score > 0:
-            loc_type = (job.get("location_type") or job["_parsed_dict"].get("location_type") or "")
-            penalty = 5 if loc_type == "remote" else 15
-            score = max(0, score - penalty)
+            # unscored: shared helper (includes relocation penalty)
+            score = _score_single_job(
+                job, job["_parsed_dict"], profile, home_locations, home_regions,
+                user_id, _db_path(), skill_lookup,
+            )
 
         job["score"] = score
         job["tier"] = compute_tier(score)
@@ -314,19 +343,11 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
             logger.warning("Malformed scored JSON for job_id=%s user_id=%s", job_id, user["id"])
             row["scored"] = None
     else:
-        # unscored: hybrid_score with default grades
-        if profile:
-            score = hybrid_score(
-                profile, row["parsed"] or {}, row, is_reloc,
-                db_path=_db_path(), domain_override=domain_override,
-            )
-            if is_reloc and score > 0:
-                loc_type = row.get("location_type") or (row.get("parsed") or {}).get("location_type") or ""
-                penalty = 5 if loc_type == "remote" else 15
-                score = max(0, score - penalty)
-            row["score"] = score
-        else:
-            row["score"] = 0
+        # unscored: shared helper (includes relocation penalty)
+        row["score"] = _score_single_job(
+            row, row["parsed"] or {}, profile, home_locations, home_regions,
+            user["id"], _db_path(),
+        )
         row["tier"] = compute_tier(row["score"])
         row["scored"] = None
 
