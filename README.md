@@ -17,6 +17,7 @@ A personal job search platform. Web CRM + autonomous scraping/scoring engine in 
 - **Cross-user dedup** — jobs parsed by one user are reused by subsequent users (saves LLM costs)
 - **Semantic skill matching** — cosine similarity matching between profile skills and job requirements; skill chips colored by match status in job detail
 - **Domain scoring** — 30-domain canonical system with per-user weights (positive/negative); editable per-job with grouped dropdown; keyword reparse and correction analytics in admin
+- **Enriched job data** — scrapers capture structured salary, company metadata (industry, size, URL, logo), seniority level, remote type; merged across sources with field-priority rules; pre-seeds LLM parser to reduce token cost and hallucination
 - **Admin panel** — trigger pipeline, view users, keyword reparse, domain corrections, manage system
 
 ---
@@ -116,7 +117,7 @@ jobsearch/
 │   ├── routes/             # auth, jobs, onboard, ingest, admin
 │   ├── middleware/          # session auth, admin guards
 │   ├── cv/                 # CV generation pipeline (plan → prompt → LLM → validate → docx)
-│   ├── db/                 # SQLite init, migrations (001–016), queries
+│   ├── db/                 # SQLite init, migrations (001–019), queries
 │   ├── ingest.py           # agent output → SQLite
 │   ├── scoring.py          # per-user heuristic scoring (no LLM)
 │   ├── embeddings.py       # OpenAI embedding service with SQLite cache
@@ -130,13 +131,16 @@ jobsearch/
 │       ├── context/        # AuthContext
 │       └── types/          # TypeScript types
 ├── agent/                  # Scraping/scoring engine
-│   ├── main.py             # Pipeline orchestrator (12 steps)
+│   ├── main.py             # Pipeline orchestrator (scrape → merge → pre-seed → parse → score → notify)
+│   ├── models.py           # RawJob Pydantic model (source-agnostic intermediate representation)
+│   ├── merger.py           # Merge duplicate RawJobs across sources (field-priority rules)
+│   ├── preseed.py          # Map structured fields to parser schema (pre-seeds before LLM call)
 │   ├── api_cache.py        # Cross-user parsed-job cache via Railway DB
-│   ├── scraper.py          # JobSpy (Indeed/Google/LinkedIn)
-│   ├── ats_scraper.py      # Greenhouse/Lever/Ashby APIs
-│   ├── wttj_scraper.py     # Welcome to the Jungle (Algolia)
+│   ├── scraper.py          # JobSpy (Indeed/Google/LinkedIn/Glassdoor) → list[RawJob]
+│   ├── ats_scraper.py      # Greenhouse/Lever/Ashby APIs → list[RawJob]
+│   ├── wttj_scraper.py     # Welcome to the Jungle (Algolia) → list[RawJob]
 │   ├── prefilter.py        # Keyword filtering (no API calls)
-│   ├── parser.py           # gpt-4o-mini structured extraction
+│   ├── parser.py           # gpt-4o-mini structured extraction (pre-seeded)
 │   ├── scorer.py           # gpt-4o RAG scoring via ChromaDB
 │   ├── notifier.py         # Gmail SMTP digest
 │   ├── config/profiles/    # Per-user YAML profiles
@@ -146,7 +150,7 @@ jobsearch/
 │   ├── scripts/            # reparse, rescore, ingest payload builder
 │   ├── schemas/            # JSON output contracts
 │   └── patterns/           # Module interface contracts
-├── tests/                  # Backend tests (457), frontend tests (56)
+├── tests/                  # Backend tests (562), frontend tests (56)
 ├── data/                   # jobseeker.db (gitignored)
 ├── scripts/                # seed_dev.py, backfill_embeddings.py, audit_domain_scoring.py
 └── requirements.txt        # Merged deps
@@ -191,6 +195,8 @@ jobsearch/
 | 14 | Instrumentation + observability (structlog, PostHog, LLM telemetry) | ✅ |
 | 15 | Landing page + waitlist (public landing, WaitlistForm, MockDashboard, branding) | ✅ |
 | 16 | Landing iteration: MockJobDetail, MockCVButton, CV callout, 4-step How it works | ✅ |
+| 17 | Decomposed hybrid scoring: role_function gate, LLM grade rubric (A/B/C), hybrid_score() | ✅ |
+| Ingestion Overhaul | RawJob schema, source-group merge, pre-seed parser, enriched DB (14 fields) + API | ✅ |
 | N | Onboarding UX for new profile fields | 🔜 |
 | R | Refactor & test coverage | 🔜 |
 | F | Ship: Dockerfile, README, deploy | 🔜 |
