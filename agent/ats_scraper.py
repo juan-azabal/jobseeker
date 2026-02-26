@@ -1,12 +1,13 @@
 """
 ATS Direct Scraper: polls Greenhouse, Lever, and Ashby public APIs.
-No auth required. Returns standardized job dicts compatible with pipeline.
+No auth required. Returns list[RawJob].
 """
 
 import yaml
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from scraper import make_job_id
+from models import RawJob
 
 
 def load_watchlist(path="config/watchlist.yaml"):
@@ -14,8 +15,8 @@ def load_watchlist(path="config/watchlist.yaml"):
         return yaml.safe_load(f)
 
 
-def _fetch_greenhouse(token, company_name, title_patterns):
-    """Fetch all jobs from a Greenhouse board, filter by title."""
+def _fetch_greenhouse(token, company_name, title_patterns) -> list[RawJob]:
+    """Fetch all jobs from a Greenhouse board, filter by title. Returns list[RawJob]."""
     url = f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true"
     try:
         r = requests.get(url, timeout=15)
@@ -31,32 +32,36 @@ def _fetch_greenhouse(token, company_name, title_patterns):
         if not any(p in title.lower() for p in title_patterns):
             continue
 
-        loc = j.get("location", {}).get("name", "")
-        content = j.get("content", "")
+        loc = j.get("location", {}).get("name", "") or None
+        content = j.get("content", "") or None
 
-        jobs.append({
-            "id": make_job_id(title, company_name),
-            "title": title,
-            "company": company_name,
-            "location": loc,
-            "description": content,
-            "job_url": j.get("absolute_url", ""),
-            "date_posted": j.get("updated_at", ""),
-            "job_type": "",
-            "is_remote": "remote" in loc.lower() or "remote" in title.lower(),
-            "min_amount": None,
-            "max_amount": None,
-            "currency": "",
-            "interval": "",
-            "site": "greenhouse",
-            "search_term_used": f"watchlist:{token}",
-        })
+        # departments: list of {id, name, ...} dicts → list[str] of names
+        raw_depts = j.get("departments") or []
+        dept_names = [d["name"] for d in raw_depts if isinstance(d, dict) and d.get("name")]
+        departments = dept_names if dept_names else None
+
+        is_remote = "remote" in (loc or "").lower() or "remote" in title.lower()
+        remote_type = "fulltime" if is_remote else "no"
+
+        jobs.append(RawJob(
+            id=make_job_id(title, company_name),
+            title=title,
+            company=company_name,
+            source="greenhouse",
+            location=loc,
+            description=content,
+            job_url=j.get("absolute_url") or None,
+            date_posted=j.get("updated_at") or None,
+            search_term_used=f"watchlist:{token}",
+            remote_type=remote_type,
+            departments=departments,
+        ))
 
     return jobs
 
 
-def _fetch_lever(token, company_name, title_patterns):
-    """Fetch all jobs from a Lever postings page."""
+def _fetch_lever(token, company_name, title_patterns) -> list[RawJob]:
+    """Fetch all jobs from a Lever postings page. Returns list[RawJob]."""
     url = f"https://api.lever.co/v0/postings/{token}"
     try:
         r = requests.get(url, timeout=15)
@@ -72,37 +77,44 @@ def _fetch_lever(token, company_name, title_patterns):
         if not any(p in title.lower() for p in title_patterns):
             continue
 
-        loc = j.get("categories", {}).get("location", "")
-        # Lever doesn't include description in list, need individual fetch
-        desc_plain = j.get("descriptionPlain", "")
+        cats = j.get("categories", {}) or {}
+        loc = cats.get("location", "") or None
+        # Lever doesn't include description in list
+        desc_plain = j.get("descriptionPlain", "") or ""
         lists_text = ""
         for lst in j.get("lists", []):
             lists_text += lst.get("text", "") + "\n"
             lists_text += "\n".join(lst.get("content", "")) + "\n"
+        description = (desc_plain + "\n" + lists_text).strip() or None
 
-        jobs.append({
-            "id": make_job_id(title, company_name),
-            "title": title,
-            "company": company_name,
-            "location": loc,
-            "description": desc_plain + "\n" + lists_text,
-            "job_url": j.get("hostedUrl", ""),
-            "date_posted": "",
-            "job_type": j.get("categories", {}).get("commitment", ""),
-            "is_remote": "remote" in loc.lower(),
-            "min_amount": None,
-            "max_amount": None,
-            "currency": "",
-            "interval": "",
-            "site": "lever",
-            "search_term_used": f"watchlist:{token}",
-        })
+        # departments from categories.department; team from categories.team
+        dept = cats.get("department")
+        departments = [dept] if dept else None
+        team = cats.get("team") or None
+
+        is_remote = "remote" in (loc or "").lower()
+        remote_type = "fulltime" if is_remote else "no"
+
+        jobs.append(RawJob(
+            id=make_job_id(title, company_name),
+            title=title,
+            company=company_name,
+            source="lever",
+            location=loc,
+            description=description,
+            job_url=j.get("hostedUrl") or None,
+            job_type=cats.get("commitment") or None,
+            search_term_used=f"watchlist:{token}",
+            remote_type=remote_type,
+            departments=departments,
+            team=team,
+        ))
 
     return jobs
 
 
-def _fetch_ashby(token, company_name, title_patterns):
-    """Fetch all jobs from an Ashby job board."""
+def _fetch_ashby(token, company_name, title_patterns) -> list[RawJob]:
+    """Fetch all jobs from an Ashby job board. Returns list[RawJob]."""
     url = f"https://api.ashbyhq.com/posting-api/job-board/{token}"
     try:
         r = requests.get(url, timeout=15)
@@ -121,32 +133,39 @@ def _fetch_ashby(token, company_name, title_patterns):
         loc = j.get("location", "")
         if isinstance(loc, dict):
             loc = loc.get("name", "")
+        loc = loc or None
 
-        desc = j.get("descriptionHtml", "") or j.get("descriptionPlain", "")
+        desc = (j.get("descriptionHtml", "") or j.get("descriptionPlain", "")) or None
 
-        jobs.append({
-            "id": make_job_id(title, company_name),
-            "title": title,
-            "company": company_name,
-            "location": loc,
-            "description": desc,
-            "job_url": j.get("jobUrl", j.get("applyUrl", "")),
-            "date_posted": j.get("publishedAt", ""),
-            "job_type": j.get("employmentType", ""),
-            "is_remote": "remote" in (loc or "").lower(),
-            "min_amount": None,
-            "max_amount": None,
-            "currency": "",
-            "interval": "",
-            "site": "ashby",
-            "search_term_used": f"watchlist:{token}",
-        })
+        # department and team from top-level Ashby fields
+        dept = j.get("department") or None
+        departments = [dept] if dept else None
+        team = j.get("team") or None
+
+        is_remote = "remote" in (loc or "").lower()
+        remote_type = "fulltime" if is_remote else "no"
+
+        jobs.append(RawJob(
+            id=make_job_id(title, company_name),
+            title=title,
+            company=company_name,
+            source="ashby",
+            location=loc,
+            description=desc,
+            job_url=j.get("jobUrl") or j.get("applyUrl") or None,
+            date_posted=j.get("publishedAt") or None,
+            job_type=j.get("employmentType") or None,
+            search_term_used=f"watchlist:{token}",
+            remote_type=remote_type,
+            departments=departments,
+            team=team,
+        ))
 
     return jobs
 
 
-def run_watchlist_scraper(config_path="config/watchlist.yaml"):
-    """Poll all ATS in watchlist concurrently. Returns list of job dicts."""
+def run_watchlist_scraper(config_path="config/watchlist.yaml") -> list[RawJob]:
+    """Poll all ATS in watchlist concurrently. Returns list[RawJob]."""
     config = load_watchlist(config_path)
     title_patterns = [p.lower() for p in config.get("title_patterns", ["product manager"])]
 
@@ -160,7 +179,7 @@ def run_watchlist_scraper(config_path="config/watchlist.yaml"):
 
     print(f"\nPolling {len(tasks)} ATS boards...")
 
-    all_jobs = {}
+    all_jobs: dict[str, RawJob] = {}
     fetchers = {
         "greenhouse": _fetch_greenhouse,
         "lever": _fetch_lever,
@@ -178,8 +197,8 @@ def run_watchlist_scraper(config_path="config/watchlist.yaml"):
             try:
                 jobs = future.result()
                 for j in jobs:
-                    if j["id"] not in all_jobs:
-                        all_jobs[j["id"]] = j
+                    if j.id not in all_jobs:
+                        all_jobs[j.id] = j
                 if jobs:
                     print(f"   {name}: {len(jobs)} PM roles found")
             except Exception as e:
@@ -193,5 +212,5 @@ def run_watchlist_scraper(config_path="config/watchlist.yaml"):
 if __name__ == "__main__":
     jobs = run_watchlist_scraper()
     for j in jobs:
-        print(f"\n{j['title']} @ {j['company']} ({j['location']})")
-        print(f"  {j['job_url']}")
+        print(f"\n{j.title} @ {j.company} ({j.location})")
+        print(f"  {j.job_url}")
