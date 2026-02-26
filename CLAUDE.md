@@ -366,12 +366,17 @@ Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1–17.7 complete)
 - CV callout (Phase 16): compact card (max-w-3xl, rounded-2xl, bg-zinc-900/60), NOT full-width section. 80px vertical margin vs 120-160px for major sections. Two-column desktop, stacked mobile.
 - Landing section order (Phase 16): Hero → MockDashboard → MockJobDetail → CV callout → How it works (4 steps) → Bottom CTA → Footer.
 - Eyebrow "Behind the score" (Phase 16): neutral, advances narrative. Avoids defensive framing.
+- Scoring parity (2026-02-26): `_score_single_job()` helper shared by list and detail endpoints. Three branches: v2 hybrid (LLM grades + `hybrid_score()`) → v1 RAG (stored score unchanged) → unscored (`hybrid_score()` with default +20 neutral grades + relocation penalty). See `docs/scoring-parity-postmortem.md` for root causes and architectural fixes needed.
+- Global skill_lookup removed (2026-02-26): batching all unique job skills at once (300+) exceeded the 500-pair embedding limit → silent substring fallback → inflated scores. Both list and detail now score per-job via `db_path` using the SQLite embedding cache. Consistent, semantically correct.
+- `remote_restriction` injection (2026-02-26): `get_job_by_id()` uses `SELECT *` which has no `remote_restriction` column (only computed via `json_extract` in `get_jobs()`). Injected from `parsed` dict after JSON-parsing in `get_job()`. Architectural fix: add as a real DB column in a future migration.
+- Scoring parity rule: scoring functions must never read fields that differ between `get_jobs()` CTE and `SELECT * FROM jobs`. Only fields from `parsed` (JSON blob) or real DB columns are safe. See `docs/scoring-parity-postmortem.md`.
 
 ### Known Bugs
 
 {none}
 
 ### Resolved
+- **P14** (2026-02-26) — List and detail endpoints produced different scores for the same job (diffs 3–20 pts). Root causes: `remote_restriction` absent from `SELECT *`, global skill_lookup triggering substring fallback, divergent scoring paths. Fixed via `_score_single_job()` helper and per-job semantic matching. 0 mismatches across 57 jobs; 541 tests passing.
 - **P2** (2026-02-26) — Removed unused `LoginPage` import from `App.tsx`; was breaking production TS build.
 - **P1** (2026-02-26) — Appended `'Z'` when parsing `entry.created_at` in AdminPage so UTC timestamps are not mis-parsed as local time.
 - **P3** (2026-02-26) — Wrapped WaitlistForm fetch with `AbortController` + 10 s timeout; AbortError surfaces as generic error state.
