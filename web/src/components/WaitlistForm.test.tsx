@@ -55,6 +55,15 @@ test('on empty input shows validation error and does NOT call fetch', async () =
   expect(global.fetch).not.toHaveBeenCalled();
 });
 
+test('email with subdomain (user@sub.example.com) passes validation', async () => {
+  global.fetch = vi.fn().mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ status: 'ok' }) } as Response);
+  render(<WaitlistForm source="hero" />);
+  await userEvent.type(screen.getByRole('textbox'), 'user@sub.example.com');
+  await userEvent.click(screen.getByRole('button', { name: /get early access/i }));
+  expect(global.fetch).toHaveBeenCalled();
+  expect(screen.queryByText(/enter a valid email/i)).not.toBeInTheDocument();
+});
+
 test('fetch abort (timeout) shows generic error', async () => {
   global.fetch = vi.fn().mockRejectedValueOnce(
     Object.assign(new Error('Aborted'), { name: 'AbortError' }),

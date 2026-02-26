@@ -7,7 +7,7 @@ interface Props {
 
 type State = 'idle' | 'submitting' | 'success' | 'error';
 
-const _EMAIL_RE = /^[^@]+@[^@.]+\.[^@]+$/;
+const _EMAIL_RE = /^[^@]+@[^@]+\.[^@]+$/;
 
 export default function WaitlistForm({ source }: Props) {
   const [email, setEmail] = useState('');
