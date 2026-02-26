@@ -181,27 +181,16 @@ def _score_and_tier_jobs(
         else:
             job["_parsed_dict"] = parsed or {}
 
-    # Pre-compute skill lookup: one match_skills call for all unique job skills
-    skill_lookup = None
-    if profile and profile.get("skills"):
-        all_unique_skills: set[str] = set()
-        for job in jobs:
-            p = job["_parsed_dict"]
-            for key in ("must_have_skills", "nice_to_have_skills", "technical_stack"):
-                for s in (p.get(key) or []):
-                    if isinstance(s, str) and s.strip():
-                        all_unique_skills.add(s.strip())
-        if all_unique_skills:
-            skill_lookup = precompute_skill_lookup(
-                profile["skills"], list(all_unique_skills), _db_path(),
-            )
-
     for job in jobs:
         # Compute relocation
         is_reloc = _compute_reloc(job, home_locations, home_regions) if home_locations else False
         job["geo_restricted"] = is_reloc
 
         # Score: v2 hybrid → v1 RAG → hybrid with defaults
+        # skill_lookup is intentionally NOT pre-computed globally: batching all
+        # jobs' skills at once (300+ unique) exceeds the embedding pair limit and
+        # triggers substring fallback, producing inflated scores. Per-job semantic
+        # matching via db_path is consistent and uses the SQLite embedding cache.
         job_domain_override = domain_overrides.get(job["job_id"]) if profile else None
         if job.get("ujs_scored_v2") == 1 and profile:
             # v2: hybrid_score with actual LLM grades
@@ -211,7 +200,7 @@ def _score_and_tier_jobs(
                 profile, job["_parsed_dict"], job, is_reloc,
                 technical_grade=job.get("ujs_technical_grade"),
                 profile_grade=job.get("ujs_profile_grade"),
-                db_path=_db_path(), skill_lookup=skill_lookup,
+                db_path=_db_path(),
                 domain_override=job_domain_override,
             )
         elif job.get("ujs_score") is not None:
@@ -221,7 +210,7 @@ def _score_and_tier_jobs(
             # unscored: shared helper (includes relocation penalty)
             score = _score_single_job(
                 job, job["_parsed_dict"], profile, home_locations, home_regions,
-                user_id, _db_path(), skill_lookup,
+                user_id, _db_path(),
             )
 
         job["score"] = score
