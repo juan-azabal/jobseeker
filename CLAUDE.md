@@ -316,5 +316,23 @@ Phase 15 — Completed
 - Google OAuth in test mode acts as access gate — only invited emails can authenticate. No additional whitelist logic needed.
 - IntersectionObserver guard (Phase 15): `useScrollReveal` hook checks `typeof IntersectionObserver === 'undefined'` and falls back to adding `.revealed` class immediately. Avoids jsdom test failures.
 
+### Known Bugs
+
+#### P1 — `waitlist.created_at` parsed as local time (AdminPage timestamps wrong)
+- **Root cause**: SQLite `strftime('%Y-%m-%dT%H:%M:%S', 'now')` stores UTC without the `Z` suffix (e.g. `2026-02-26T10:37:00`). `new Date("2026-02-26T10:37:00")` in V8/browsers treats ISO strings without a timezone designator as **local time**, not UTC. Result: `diffMs` in AdminPage is off by the user's UTC offset (e.g. in UTC+1, a fresh signup shows "1h ago" instead of "just now").
+- **Fix**: append `'Z'` when parsing in AdminPage (`new Date(entry.created_at + 'Z')`), or fix the migration DEFAULT to store `datetime('now')` (SQLite ISO format already includes no TZ, but consistent with other tables) and suffix at parse time.
+
+#### P2 — `LoginPage` imported but unused in `App.tsx`
+- **Root cause**: Phase 15.7 replaced `<LoginPage />` with `<LandingPage />` but left the `import LoginPage` line. Tree-shaking removes it from production bundles, but it's dead code.
+- **Fix**: remove `import LoginPage from './pages/LoginPage'` from `App.tsx`.
+
+#### P3 — WaitlistForm fetch has no timeout (indefinite submitting state)
+- **Root cause**: `fetch('/api/waitlist', ...)` has no `AbortController`. If the backend is slow or unreachable the form stays in `submitting` forever with no recovery.
+- **Fix**: wrap with `AbortController` + `setTimeout(abort, 10_000)`, catch `AbortError` and surface as the generic error state.
+
+#### P4 — Scroll-reveal stagger CSS only covers 5 children; hero RevealSection has 6
+- **Root cause**: Inline `<style>` in `LandingPage.tsx` defines `transition-delay` for `nth-child(1–5)`. The hero section has 6 children (beta badge, product name, h1, subheadline, form, sign-in link). The sign-in link (`nth-child(6)`) gets 0ms delay — it animates with the badge instead of last.
+- **Fix**: extend the CSS to `nth-child(6) { transition-delay: 500ms }` and add a `nth-child(7)` guard.
+
 ### Blockers
 {none}
