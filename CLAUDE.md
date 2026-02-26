@@ -370,5 +370,6 @@ Phase 15 — Completed
 - **Root cause**: `logger.info("Waitlist signup", email=email)` only fires on success. When `IntegrityError` is caught and re-raised as 409, nothing is logged. Impossible to distinguish repeated submissions from different users vs. a single user clicking submit twice.
 - **Fix**: add `logger.info("Waitlist duplicate", email=email)` in the `except IntegrityError` block before re-raising.
 
+
 ### Blockers
 {none}
