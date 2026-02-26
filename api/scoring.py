@@ -12,6 +12,7 @@ import yaml
 
 import structlog
 from api.skill_matcher import SkillMatch, match_skills
+from api.grade_mapping import grade_to_points
 
 logger = structlog.get_logger(__name__)
 
@@ -698,3 +699,32 @@ def heuristic_score(
     score -= min(15, len(real_flags) * 5)
 
     return max(0, min(100, score))
+
+
+def hybrid_score(
+    profile: dict, parsed: dict, job: dict, is_reloc: bool,
+    technical_grade: str | None = None,
+    profile_grade: str | None = None,
+    db_path: str | None = None,
+    skill_lookup: dict[str, SkillMatch] | None = None,
+    domain_override: str | None = None,
+) -> int:
+    """Combine deterministic heuristic score with LLM categorical grades.
+
+    Score = heuristic_score(...) + grade_to_points(technical_grade)
+                                 + grade_to_points(profile_grade)
+
+    Grade points: A→20, B→12, C→5, None→10 (neutral midpoint).
+    Result is clamped to [0, 100].
+
+    For v2-scored jobs: pass technical_grade and profile_grade from user_job_scores.
+    For unscored jobs: omit grades → defaults add +20 (neutral LLM signal).
+    """
+    det = heuristic_score(
+        profile, parsed, job, is_reloc,
+        db_path=db_path,
+        skill_lookup=skill_lookup,
+        domain_override=domain_override,
+    )
+    grades = grade_to_points(technical_grade) + grade_to_points(profile_grade)
+    return max(0, min(100, det + grades))
