@@ -157,7 +157,8 @@ def _build_context(jobs, rejected_stats, run_meta, profile=None):
         if "_display_score" not in j:
             j["_fit_score"] = _heuristic_score(j)
             rag = j.get("rag_score")
-            j["_display_score"] = rag["score"] if rag else j["_fit_score"]
+            rag_score_val = rag.get("score") if rag else None
+            j["_display_score"] = rag_score_val if rag_score_val is not None else j["_fit_score"]
 
     # Split tiers and flatten
     tier_a_raw = sorted([j for j in parsed_jobs if j["_display_score"] >= 50],
