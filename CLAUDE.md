@@ -290,8 +290,31 @@ Phase 14 — Completed
 - structlog configuration (Phase 14): `api/logging_config.py` and `agent/logging_setup.py` both check `CI=true` or `LOG_FORMAT=json` to emit JSON. Locally uses ConsoleRenderer with colors. All api/ loggers use `structlog.get_logger(__name__)`.
 - PostHog AI wrappers (Phase 14): `posthog.ai.anthropic.Anthropic` and `posthog.ai.openai.OpenAI` are drop-in replacements. Pass `posthog_distinct_id` and `posthog_properties` at `.create()` call level (not constructor). `distinct_id` is threaded from the route layer as `str(user["id"])`. No-op when PostHog is not initialised (POSTHOG_API_KEY absent).
 - posthog-js frontend (Phase 14): `VITE_POSTHOG_KEY` and optional `VITE_POSTHOG_HOST` env vars. `initPostHog()` called in main.tsx before first render. `identifyUser()` called in AuthContext when `/api/auth/me` returns non-null data. `resetPostHog()` called on logout.
-- Agent PostHog events (Phase 14): `_capture()` helper in `agent/main.py` reads `POSTHOG_API_KEY` at call time (no module-level init). Events: `agent_pipeline_start` (profile_id, mode, notify), `agent_pipeline_complete` (profile_id, mode, duration_s, cost_usd, n_parsed, n_scored, tier_a/b/c).
+- Agent PostHog events (Phase 14): `_capture()` helper in `agent/main.py` uses a module-level `Posthog` singleton (created on first use). Pattern: `if _ph_client is None: _ph_client = Posthog(key, host=host)`. Events: `agent_pipeline_start` (profile_id, mode, notify), `agent_pipeline_complete` (profile_id, mode, duration_s, cost_usd, n_parsed, n_scored, tier_a/b/c).
 - Health check endpoint (Phase 14): `GET /api/health/ready` runs a lightweight `SELECT COUNT(*) FROM jobs` to verify DB connectivity. Returns `{"status":"ok","jobs":N}` or `{"status":"error","detail":"..."}` with 503. Safe to poll every minute from Railway / GHA `verify-health` job.
+
+### Known Bugs
+
+#### P1 — Agent: `agent_pipeline_complete` not emitted on early exits
+**File**: `agent/main.py` → `main()`
+**Symptoms**: Pipeline runs that exit early (inactive profile, zero scrape results, all jobs filtered) produce no `agent_pipeline_complete` PostHog event. Dashboards show a `pipeline_start` with no matching `pipeline_complete`, making early-exit runs invisible in observability.
+**Root cause**: Early-return paths (`return` before the tier-counting and `_capture` block at the bottom of `main()`) silently skip the event.
+**Workaround**: None. Look for unmatched `agent_pipeline_start` events in PostHog.
+**Fix**: Wrap the pipeline body in try/finally and emit `agent_pipeline_complete` (with `status="early_exit"`) in the finally block.
+
+#### P2 — Agent LLM calls not tracked via PostHog AI
+**File**: `agent/parser.py`, `agent/scorer.py`
+**Symptoms**: Token usage and latency for gpt-4o-mini (parse) and gpt-4o (RAG score) in the agent are not visible in PostHog. Only CV-generation LLM calls (api-side) appear in PostHog AI dashboards.
+**Root cause**: `parser.py` and `scorer.py` use plain `openai.OpenAI()` clients. They were not updated to `posthog.ai.openai.OpenAI` during Phase 14 because they run in the agent process (not API) and the scope was limited to `api/`.
+**Workaround**: Use the rough cost estimate logged in `agent_pipeline_complete.cost_usd` (n_parsed × $0.001 + n_scored × $0.04).
+**Fix**: Replace `openai.OpenAI()` in `parser.py` and `scorer.py` with `posthog.ai.openai.OpenAI()`, threading `profile_id` as `posthog_distinct_id`.
+
+#### P3 — PostHog AI wrapper creates new `WrappedMessages` on each CV generation
+**File**: `api/cv/llm.py` → `_call_anthropic()`, `_call_openai()`
+**Symptoms**: Each `generate_cv()` call creates a new `posthog.ai.anthropic.Anthropic(api_key=...)` instance. On validation failure the fix pass creates a second instance. Minor memory/init overhead per request.
+**Root cause**: The client is created inside `_call_anthropic()` / `_call_openai()` rather than at module level.
+**Workaround**: Not needed in practice (overhead is ~1ms, negligible vs LLM latency).
+**Fix**: Hoist the PostHog AI client to module-level singleton, similar to `_ph_client` in `agent/main.py`.
 
 ### Blockers
 {none}

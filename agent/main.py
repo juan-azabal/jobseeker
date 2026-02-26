@@ -30,16 +30,27 @@ configure_logging()
 logger = structlog.get_logger("agent.main")
 
 
+_ph_client = None  # module-level Posthog singleton; created on first use
+
+
 def _capture(profile_id: str, event: str, props: dict) -> None:
-    """Fire a PostHog server-side event. No-op when POSTHOG_API_KEY is absent."""
+    """Fire a PostHog server-side event. No-op when POSTHOG_API_KEY is absent.
+
+    Uses Posthog class directly (not the deprecated module-level proxy) so the
+    client is created with explicit credentials and not reliant on setup().
+    """
+    global _ph_client
     key = os.environ.get("POSTHOG_API_KEY")
     if not key:
         return
     try:
-        import posthog as _ph  # noqa: PLC0415
-        _ph.api_key = key
-        _ph.host = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com")
-        _ph.capture(profile_id, event, props)
+        if _ph_client is None:
+            from posthog import Posthog  # noqa: PLC0415
+            _ph_client = Posthog(
+                key,
+                host=os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com"),
+            )
+        _ph_client.capture(profile_id, event, props)
     except Exception:
         pass
 
