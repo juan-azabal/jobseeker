@@ -3,6 +3,7 @@ Scraper module: wraps JobSpy to fetch jobs from multiple boards.
 Returns a list of standardized job dicts.
 """
 
+import re
 import yaml
 import hashlib
 from jobspy import scrape_jobs
@@ -13,12 +14,40 @@ def load_search_config(path="config/searches.yaml"):
         return yaml.safe_load(f)
 
 
-def make_job_id(title, company, location=""):
+def _normalize_for_id(text: str) -> str:
+    """Normalize title or company name for stable deduplication across sources.
+
+    Strips gender suffixes, legal entity suffixes, punctuation variants, and
+    extra whitespace so the same job from different sources gets the same ID.
+    """
+    s = text.lower().strip()
+    # Strip gender/diversity parenthetical suffixes (e.g. (f/m/d), (h/f), (all genders))
+    s = re.sub(r'\s*\([fmhwd/]+\)\s*$', '', s)
+    s = re.sub(r'\s*\(all\s+genders?\)\s*$', '', s)
+    # Strip common legal entity suffixes from company names
+    for suffix in [', inc.', ', inc', ' inc.', ' inc',
+                   ', ltd', ' ltd', ', s.l.', ' s.l.',
+                   ', s.a.', ' s.a.', ', gmbh', ' gmbh',
+                   ', b.v.', ' b.v.', ', llc.', ' llc.',
+                   ', llc', ' llc', ', corp.', ' corp.',
+                   ', corp', ' corp', ', ag', ' ag']:
+        if s.endswith(suffix):
+            s = s[:-len(suffix)].strip()
+    # Replace all punctuation with spaces, then collapse whitespace
+    s = re.sub(r'[^\w\s]', ' ', s)
+    s = ' '.join(s.split())
+    return s
+
+
+def make_job_id(title: str, company: str) -> str:
     """Deterministic ID for deduplication across sources.
-    Uses title+company only (normalized) to catch cross-source dupes."""
-    # Normalize: strip whitespace, lowercase, remove extra spaces
-    t = " ".join(title.lower().split())
-    c = " ".join(company.lower().split())
+
+    Uses title+company only (normalized) to catch cross-source dupes.
+    Normalization removes gender suffixes, legal entity suffixes,
+    punctuation variants, and extra whitespace.
+    """
+    t = _normalize_for_id(title)
+    c = _normalize_for_id(company)
     raw = f"{t}|{c}"
     return hashlib.md5(raw.encode()).hexdigest()[:12]
 
@@ -67,7 +96,7 @@ def run_scraper(config_path="config/searches.yaml"):
                 if not title or not company:
                     continue
 
-                job_id = make_job_id(title, company, loc)
+                job_id = make_job_id(title, company)
 
                 if job_id not in all_jobs:
                     all_jobs[job_id] = {

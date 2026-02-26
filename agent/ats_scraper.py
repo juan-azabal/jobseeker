@@ -35,7 +35,7 @@ def _fetch_greenhouse(token, company_name, title_patterns):
         content = j.get("content", "")
 
         jobs.append({
-            "id": make_job_id(title, company_name, loc),
+            "id": make_job_id(title, company_name),
             "title": title,
             "company": company_name,
             "location": loc,
@@ -81,7 +81,7 @@ def _fetch_lever(token, company_name, title_patterns):
             lists_text += "\n".join(lst.get("content", "")) + "\n"
 
         jobs.append({
-            "id": make_job_id(title, company_name, loc),
+            "id": make_job_id(title, company_name),
             "title": title,
             "company": company_name,
             "location": loc,
@@ -125,7 +125,7 @@ def _fetch_ashby(token, company_name, title_patterns):
         desc = j.get("descriptionHtml", "") or j.get("descriptionPlain", "")
 
         jobs.append({
-            "id": make_job_id(title, company_name, loc),
+            "id": make_job_id(title, company_name),
             "title": title,
             "company": company_name,
             "location": loc,
