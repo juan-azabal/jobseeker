@@ -13,6 +13,7 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 from api.middleware.auth import get_current_user
+from api import analytics
 from api.db.queries import (
     save_user_cv_md, get_user_cv_md,
     save_user_profile_yaml, get_user_profile_yaml,
@@ -508,6 +509,11 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
     except Exception:
         logger.exception("Pipeline sync/trigger failed for %s (non-fatal)", profile_id)
 
+    analytics.capture(user["id"], "onboard_completed", {
+        "profile_id": profile_id,
+        "domains_count": len(body.profile.get("domains") or {}),
+        "skills_count": len(body.profile.get("skills") or []),
+    })
     return {"profile_id": profile_id}
 
 
@@ -810,6 +816,11 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
     except Exception:
         logger.exception("Preferences regeneration failed for %s (non-fatal)", profile_id)
 
+    analytics.capture(user["id"], "profile_saved", {
+        "domains_count": len(body.domains),
+        "skills_count": len(body.skills),
+        "fields_changed": list(UpdateProfileRequest.model_fields.keys()),
+    })
     return {"ok": True}
 
 
@@ -866,6 +877,7 @@ async def add_skill(body: AddSkillRequest, user: dict = Depends(get_current_user
     except Exception:
         pass  # best-effort, don't block response
 
+    analytics.capture(user["id"], "skill_added", {"skill_name": skill, "source": "job_detail"})
     return {"skills": skills}
 
 
