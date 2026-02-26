@@ -6,7 +6,7 @@ import App from './App';
 
 afterEach(() => vi.restoreAllMocks());
 
-test('shows login page when unauthenticated', async () => {
+test('shows landing page when unauthenticated', async () => {
   global.fetch = vi.fn().mockResolvedValue({
     ok: false,
     status: 401,
@@ -15,7 +15,7 @@ test('shows login page when unauthenticated', async () => {
 
   render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>);
   await waitFor(() =>
-    expect(screen.getByRole('link', { name: /sign in with google/i })).toBeInTheDocument()
+    expect(screen.getByText('Know your fit before you apply')).toBeInTheDocument()
   );
 });
 

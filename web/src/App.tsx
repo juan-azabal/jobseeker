@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import JobsPage from './pages/JobsPage';
 import JobDetailPage from './pages/JobDetailPage';
 import LoginPage from './pages/LoginPage';
+import LandingPage from './pages/LandingPage';
 import OnboardPage from './pages/OnboardPage';
 import ProfilePage from './pages/ProfilePage';
 import AdminPage from './pages/AdminPage';
@@ -151,7 +152,7 @@ function AppRoutes() {
   const { isAuthenticated, isLoading, user } = useAuth();
 
   if (isLoading) return <div className="min-h-screen bg-zinc-950" />;
-  if (!isAuthenticated) return <LoginPage />;
+  if (!isAuthenticated) return <LandingPage />;
 
   return (
     <div className="min-h-screen bg-zinc-950">
