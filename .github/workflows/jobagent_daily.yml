@@ -209,7 +209,7 @@ jobs:
             exit 0
           fi
           git commit -m "update seen jobs [skip ci]"
-          git pull --rebase origin "${{ github.ref_name }}"
+          git pull --no-rebase -X ours origin "${{ github.ref_name }}"
           git push
 
   # ── Job 4: Health check ────────────────────────────────────────────────────
