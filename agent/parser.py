@@ -9,7 +9,20 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 
+from preseed import preseed_parsed
+
 load_dotenv()
+
+# Pre-seeded fields that are factual (structured data wins over LLM interpretation).
+# LLM wins for everything else (domain, skills, responsibilities, etc.).
+_FACTUAL_FIELDS = frozenset({
+    "seniority",
+    "salary_mentioned",
+    "location_type",
+    "years_experience_min",
+    "years_experience_max",
+    "locations_mentioned",
+})
 
 
 def _make_openai_client():
@@ -72,6 +85,19 @@ def parse_jd(job, model="gpt-4o-mini"):
 
     client = _make_openai_client()
 
+    # Pre-seed from structured scraper fields (reduces LLM hallucination on factual data)
+    seed = preseed_parsed(job)
+
+    system_prompt = _get_parser_prompt()
+    if seed:
+        seed_json = json.dumps(seed, ensure_ascii=False)
+        system_prompt = (
+            system_prompt
+            + "\n\nThe following fields have been pre-determined from structured source data. "
+            "Use these values unless the job description CLEARLY contradicts them:\n"
+            + seed_json
+        )
+
     user_content = f"""Job Title: {job['title']}
 Company: {job['company']}
 Location: {job.get('location', 'Not specified')}
@@ -103,7 +129,7 @@ Job Description:
         response = client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": _get_parser_prompt()},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
             ],
             temperature=0,
@@ -118,6 +144,23 @@ Job Description:
         raw = raw.strip()
 
         parsed = json.loads(raw)
+
+        # Apply factual pre-seed overrides (structured data wins for factual fields).
+        # Log divergences for analysis.
+        for field, value in seed.items():
+            if field in _FACTUAL_FIELDS:
+                llm_val = parsed.get(field)
+                if llm_val is not None and llm_val != value:
+                    import structlog as _sl
+                    _sl.get_logger("agent.parser").info(
+                        "preseed_divergence",
+                        job_id=job.get("id"),
+                        field=field,
+                        preseed=value,
+                        llm=llm_val,
+                    )
+                parsed[field] = value
+
         job["parsed"] = parsed
         job["parse_error"] = None
 
