@@ -2,29 +2,32 @@ export default function MockCVButton() {
   return (
     <div className="relative" style={{ height: '42px' }}>
       <style>{`
+        /* 6s total cycle: Generate(1.5s) → Generating(1.5s) → Downloaded(3s) */
         @keyframes cv-frame-1 {
           0%, 100% { opacity: 0; }
-          4.4%  { opacity: 1; }
-          28.9% { opacity: 1; }
-          33.3% { opacity: 0; }
+          3.3%  { opacity: 1; }
+          21.7% { opacity: 1; }
+          25%   { opacity: 0; }
         }
         @keyframes cv-frame-2 {
-          0%, 100% { opacity: 0; }
-          37.8% { opacity: 1; }
-          62.2% { opacity: 1; }
-          66.7% { opacity: 0; }
+          0%, 25%  { opacity: 0; }
+          28.3% { opacity: 1; }
+          46.7% { opacity: 1; }
+          50%   { opacity: 0; }
+          100%  { opacity: 0; }
         }
         @keyframes cv-frame-3 {
-          0%, 100% { opacity: 0; }
-          71.1% { opacity: 1; }
-          95.6% { opacity: 1; }
+          0%, 50%  { opacity: 0; }
+          53.3% { opacity: 1; }
+          96.7% { opacity: 1; }
+          100%  { opacity: 0; }
         }
       `}</style>
 
       {/* Frame 1: Generate CV */}
       <div
         className="absolute inset-0 flex items-center justify-center"
-        style={{ animation: 'cv-frame-1 4.5s ease infinite', animationDelay: '0s', opacity: 0 }}
+        style={{ animation: 'cv-frame-1 6s ease infinite', animationDelay: '0s', opacity: 0 }}
       >
         <button
           type="button"
@@ -38,7 +41,7 @@ export default function MockCVButton() {
       {/* Frame 2: Generating CV... */}
       <div
         className="absolute inset-0 flex items-center justify-center"
-        style={{ animation: 'cv-frame-2 4.5s ease infinite', animationDelay: '0s', opacity: 0 }}
+        style={{ animation: 'cv-frame-2 6s ease infinite', animationDelay: '0s', opacity: 0 }}
       >
         <button
           type="button"
@@ -56,7 +59,7 @@ export default function MockCVButton() {
       {/* Frame 3: CV downloaded */}
       <div
         className="absolute inset-0 flex items-center justify-center"
-        style={{ animation: 'cv-frame-3 4.5s ease infinite', animationDelay: '0s', opacity: 0 }}
+        style={{ animation: 'cv-frame-3 6s ease infinite', animationDelay: '0s', opacity: 0 }}
       >
         <button
           type="button"
