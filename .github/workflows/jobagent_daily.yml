@@ -13,6 +13,10 @@ on:
         type: boolean
         required: false
         default: false
+      mode:
+        description: 'Pipeline mode: digest (default) or reparse_rescore (digest + re-parse/re-score cache)'
+        required: false
+        default: 'digest'
 
 jobs:
   # ── Job 1: Resolve active profiles ─────────────────────────────────────────
@@ -73,6 +77,8 @@ jobs:
         run: |
           set +e  # don't abort on individual profile failure
           profiles='${{ needs.list-profiles.outputs.profiles }}'
+          mode="${{ github.event.inputs.mode }}"
+          mode="${mode:-digest}"
           notify_flag=""
           if [ "$SHOULD_NOTIFY" = "true" ]; then
             notify_flag="--notify"
@@ -126,6 +132,19 @@ jobs:
               done
             else
               echo "Railway secrets not set — skipping sync"
+            fi
+
+            # --- Optional: reparse + rescore cached jobs with v1.4/v2 ---
+            if [ "$mode" = "reparse_rescore" ]; then
+              echo ""
+              echo "── Reparse + Rescore for $profile (v1.4 parser + rubric v2)..."
+              cd "$GITHUB_WORKSPACE/agent"
+              if python scripts/reparse_rescore.py --profile "$profile"; then
+                echo "✅ Reparse+rescore completed for $profile"
+              else
+                echo "⚠  Reparse+rescore failed for $profile — continuing"
+                any_failed=true
+              fi
             fi
 
             # Clean output for next profile (seen_ids stay on disk)

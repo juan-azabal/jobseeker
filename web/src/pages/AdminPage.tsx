@@ -28,6 +28,8 @@ export default function AdminPage() {
   const [triggerResult, setTriggerResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [backfilling, setBackfilling] = useState(false);
   const [backfillResult, setBackfillResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [reparseScoring, setReparseScoring] = useState(false);
+  const [reparseScoringResult, setReparseScoringResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   // Domain reparse state
   const [reparsePreviewing, setReparsePreviewing] = useState(false);
@@ -124,6 +126,31 @@ export default function AdminPage() {
       setTriggerResult({ ok: false, message: 'Network error' });
     } finally {
       setTriggering(false);
+    }
+  }
+
+  async function handleReparseRescore() {
+    setReparseScoring(true);
+    setReparseScoringResult(null);
+    try {
+      const body: Record<string, string> = { mode: 'reparse_rescore' };
+      if (profile.trim()) body.profile = profile.trim();
+      const r = await fetch('/api/admin/trigger-pipeline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      if (r.ok) {
+        const label = data.profile ? `profile "${data.profile}"` : 'all active profiles';
+        setReparseScoringResult({ ok: true, message: `Reparse+rescore triggered for ${label}` });
+      } else {
+        setReparseScoringResult({ ok: false, message: data.detail || 'Trigger failed' });
+      }
+    } catch {
+      setReparseScoringResult({ ok: false, message: 'Network error' });
+    } finally {
+      setReparseScoring(false);
     }
   }
 
@@ -294,6 +321,13 @@ export default function AdminPage() {
           >
             {backfilling ? 'Computing embeddings…' : 'Backfill embeddings'}
           </button>
+          <button
+            onClick={handleReparseRescore}
+            disabled={reparseScoring}
+            className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:border-zinc-500 disabled:opacity-50"
+          >
+            {reparseScoring ? 'Triggering…' : 'Reparse & Rescore'}
+          </button>
         </div>
         {triggerResult && (
           <p className={`mt-3 text-sm ${triggerResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -303,6 +337,11 @@ export default function AdminPage() {
         {backfillResult && (
           <p className={`mt-3 text-sm ${backfillResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
             {backfillResult.message}
+          </p>
+        )}
+        {reparseScoringResult && (
+          <p className={`mt-3 text-sm ${reparseScoringResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+            {reparseScoringResult.message}
           </p>
         )}
       </section>

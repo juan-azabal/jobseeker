@@ -19,6 +19,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 class TriggerRequest(BaseModel):
     profile: str | None = None  # None → run all active profiles
+    mode: str | None = None     # None/"digest" → normal; "reparse_rescore" → digest + re-parse/re-score
 
 
 class SetProfileIdRequest(BaseModel):
@@ -434,7 +435,11 @@ async def trigger_pipeline(body: TriggerRequest = TriggerRequest(), admin: dict 
     }
 
     dispatch_url = f"https://api.github.com/repos/{gh_repo}/actions/workflows/{gh_workflow}/dispatches"
-    inputs = {"profile": body.profile} if body.profile else {}
+    inputs: dict = {}
+    if body.profile:
+        inputs["profile"] = body.profile
+    if body.mode:
+        inputs["mode"] = body.mode
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.post(
@@ -445,8 +450,9 @@ async def trigger_pipeline(body: TriggerRequest = TriggerRequest(), admin: dict 
 
     if resp.status_code == 204:
         profile_label = body.profile or "all active profiles"
-        logger.info("Pipeline triggered for %s by admin %s", profile_label, admin["email"])
-        return {"status": "triggered", "profile": body.profile}
+        mode_label = body.mode or "digest"
+        logger.info("Pipeline triggered for %s (mode=%s) by admin %s", profile_label, mode_label, admin["email"])
+        return {"status": "triggered", "profile": body.profile, "mode": body.mode}
 
     logger.warning(
         "Pipeline trigger returned %s: %s (triggered by %s)",
