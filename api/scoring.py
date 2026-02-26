@@ -727,4 +727,10 @@ def hybrid_score(
         domain_override=domain_override,
     )
     grades = grade_to_points(technical_grade) + grade_to_points(profile_grade)
-    return max(0, min(100, det + grades))
+
+    # role_function gate: -15 when both profile and job declare role_function and they differ
+    profile_rf = (profile.get("role_function") or "").strip().lower()
+    job_rf = (parsed.get("role_function") or "").strip().lower()
+    role_penalty = 15 if (profile_rf and job_rf and profile_rf != job_rf) else 0
+
+    return max(0, min(100, det + grades - role_penalty))
