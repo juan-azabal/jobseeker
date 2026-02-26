@@ -4,7 +4,6 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 
 import JobsPage from './pages/JobsPage';
 import JobDetailPage from './pages/JobDetailPage';
-import LoginPage from './pages/LoginPage';
 import LandingPage from './pages/LandingPage';
 import OnboardPage from './pages/OnboardPage';
 import ProfilePage from './pages/ProfilePage';
