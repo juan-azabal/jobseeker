@@ -205,6 +205,8 @@ def _score_and_tier_jobs(
         job_domain_override = domain_overrides.get(job["job_id"]) if profile else None
         if job.get("ujs_scored_v2") == 1 and profile:
             # v2: hybrid_score with actual LLM grades
+            # No relocation penalty: v2 ingest stores score=0 (not NULL), so the
+            # original ujs_score-is-None guard never fired for v2 jobs either.
             score = hybrid_score(
                 profile, job["_parsed_dict"], job, is_reloc,
                 technical_grade=job.get("ujs_technical_grade"),
@@ -212,11 +214,6 @@ def _score_and_tier_jobs(
                 db_path=_db_path(), skill_lookup=skill_lookup,
                 domain_override=job_domain_override,
             )
-            # Relocation penalty (v1 RAG already accounts for location; v2 does not)
-            if is_reloc and score > 0:
-                loc_type = (job.get("location_type") or job["_parsed_dict"].get("location_type") or "")
-                penalty = 5 if loc_type == "remote" else 15
-                score = max(0, score - penalty)
         elif job.get("ujs_score") is not None:
             # v1: use stored RAG score unchanged
             score = job["ujs_score"]
