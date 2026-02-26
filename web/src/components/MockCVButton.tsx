@@ -2,33 +2,33 @@ export default function MockCVButton() {
   return (
     <div className="relative" style={{ height: '42px' }}>
       <style>{`
-        /* 6s total cycle: Generate(1.5s) → Generating(1.5s) → Downloaded(3s) */
+        /* 12s total cycle: Generate(1.5s) → Generating(2.5s) → Downloaded(8s) */
         @keyframes cv-frame-1 {
           0%, 100% { opacity: 0; }
-          3.3%  { opacity: 1; }
-          21.7% { opacity: 1; }
-          25%   { opacity: 0; }
+          2%   { opacity: 1; }
+          11%  { opacity: 1; }
+          13%  { opacity: 0; }
         }
         @keyframes cv-frame-2 {
-          0%, 25%  { opacity: 0; }
-          28.3% { opacity: 1; }
-          46.7% { opacity: 1; }
-          50%   { opacity: 0; }
-          100%  { opacity: 0; }
+          0%, 13%  { opacity: 0; }
+          15%  { opacity: 1; }
+          31%  { opacity: 1; }
+          33%  { opacity: 0; }
+          100% { opacity: 0; }
         }
         @keyframes cv-frame-3 {
-          0%, 50%  { opacity: 0; }
-          53.3% { opacity: 1; }
-          96.7% { opacity: 1; }
-          100%  { opacity: 0; }
+          0%, 33%  { opacity: 0; }
+          35%  { opacity: 1; }
+          98%  { opacity: 1; }
+          100% { opacity: 0; }
         }
+        .cv-anim-1 { animation: cv-frame-1 12s ease infinite; opacity: 0; }
+        .cv-anim-2 { animation: cv-frame-2 12s ease infinite; opacity: 0; }
+        .cv-anim-3 { animation: cv-frame-3 12s ease infinite; opacity: 0; }
       `}</style>
 
       {/* Frame 1: Generate CV */}
-      <div
-        className="absolute inset-0 flex items-center justify-center"
-        style={{ animation: 'cv-frame-1 6s ease infinite', animationDelay: '0s', opacity: 0 }}
-      >
+      <div className="cv-anim-1 absolute inset-0 flex items-center justify-center">
         <button
           type="button"
           className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white"
@@ -39,10 +39,7 @@ export default function MockCVButton() {
       </div>
 
       {/* Frame 2: Generating CV... */}
-      <div
-        className="absolute inset-0 flex items-center justify-center"
-        style={{ animation: 'cv-frame-2 6s ease infinite', animationDelay: '0s', opacity: 0 }}
-      >
+      <div className="cv-anim-2 absolute inset-0 flex items-center justify-center">
         <button
           type="button"
           className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white"
@@ -57,10 +54,7 @@ export default function MockCVButton() {
       </div>
 
       {/* Frame 3: CV downloaded */}
-      <div
-        className="absolute inset-0 flex items-center justify-center"
-        style={{ animation: 'cv-frame-3 6s ease infinite', animationDelay: '0s', opacity: 0 }}
-      >
+      <div className="cv-anim-3 absolute inset-0 flex items-center justify-center">
         <button
           type="button"
           className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white"
