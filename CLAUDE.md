@@ -334,10 +334,6 @@ Phase 16 — Completed
 - **Root cause**: SQLite `strftime('%Y-%m-%dT%H:%M:%S', 'now')` stores UTC without the `Z` suffix (e.g. `2026-02-26T10:37:00`). `new Date("2026-02-26T10:37:00")` in V8/browsers treats ISO strings without a timezone designator as **local time**, not UTC. Result: `diffMs` in AdminPage is off by the user's UTC offset (e.g. in UTC+1, a fresh signup shows "1h ago" instead of "just now").
 - **Fix**: append `'Z'` when parsing in AdminPage (`new Date(entry.created_at + 'Z')`), or fix the migration DEFAULT to store `datetime('now')` (SQLite ISO format already includes no TZ, but consistent with other tables) and suffix at parse time.
 
-#### P2 — `LoginPage` imported but unused in `App.tsx`
-- **Root cause**: Phase 15.7 replaced `<LoginPage />` with `<LandingPage />` but left the `import LoginPage` line. Tree-shaking removes it from production bundles, but it's dead code.
-- **Fix**: remove `import LoginPage from './pages/LoginPage'` from `App.tsx`.
-
 #### P3 — WaitlistForm fetch has no timeout (indefinite submitting state)
 - **Root cause**: `fetch('/api/waitlist', ...)` has no `AbortController`. If the backend is slow or unreachable the form stays in `submitting` forever with no recovery.
 - **Fix**: wrap with `AbortController` + `setTimeout(abort, 10_000)`, catch `AbortError` and surface as the generic error state.
@@ -382,6 +378,9 @@ Phase 16 — Completed
 - **Root cause**: `logger.info("Waitlist signup", email=email)` only fires on success. When `IntegrityError` is caught and re-raised as 409, nothing is logged. Impossible to distinguish repeated submissions from different users vs. a single user clicking submit twice.
 - **Fix**: add `logger.info("Waitlist duplicate", email=email)` in the `except IntegrityError` block before re-raising.
 
+
+### Resolved
+- **P2** (2026-02-26) — Removed unused `LoginPage` import from `App.tsx`; was breaking production TS build.
 
 ### Blockers
 {none}
