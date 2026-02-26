@@ -243,12 +243,17 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - Responsive: MockJobDetail hides gap card + reduces to 1 strength on mobile
 
 ### Current
-Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1 complete)
+Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1 + 17.2 complete)
 - Phase 17.1 — Parser + DB + Ingest: role_function enum
   - Parser prompt v1.4: emits role_function (product|engineering|design|data|marketing|sales|ops|support|other)
   - DB migration 017: role_function column on jobs table, backfilled from parsed JSON
   - Ingest: extracts role_function from parsed, writes to jobs.role_function; upsert_job handles missing key defensively
   - Note: plan referenced migration 016 for role_function but 016 was already taken by waitlist index; used 017 instead; scoring grades will use 018
+- Phase 17.2 — Scoring rubric v2 + grade mapping
+  - scoring-rubric-v2.md: LLM returns technical_depth + profile_evidence as A/B/C grades; no score_breakdown
+  - scorer.py updated: reads rubric v2, max_tokens 800, parses categorical grades
+  - api/grade_mapping.py: grade_to_points() — A→20, B→12, C→5, None→10 (midpoint)
+  - Old rubric archived as scoring-rubric-v1.md; schemas/scored_job.json + patterns/scorer.md updated
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
