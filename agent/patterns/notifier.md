@@ -25,7 +25,7 @@ Raw pipeline job dicts are never passed directly to the template. `_flatten_job(
     "location_type":  str,       # "remote" | "hybrid" | "onsite" | "unknown"
     "requires_reloc": bool,      # True if role requires relocation (geo-restricted remote or non-home onsite/hybrid)
     "salary_display": str,       # "~€120K" or "" if unknown
-    "score":          int,       # _display_score (RAG if available, else heuristic)
+    "score":          int,       # _display_score: v2→hybrid (heuristic+grade_pts), v1→RAG numeric, else→heuristic
     "strength":       str,       # first RAG strength claim, or first must_have_skill
     "gap":            str,       # first RAG gap, or ""
     "url":            str,
