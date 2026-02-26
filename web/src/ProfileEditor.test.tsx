@@ -31,7 +31,7 @@ test('renders profile editor with extracted data', () => {
   );
   expect(screen.getByDisplayValue('Alice Martin')).toBeInTheDocument();
   expect(screen.getByText('python')).toBeInTheDocument();
-  expect(screen.getByText('data')).toBeInTheDocument();
+  expect(screen.getByText('Data')).toBeInTheDocument();
 });
 
 test('calls save API and triggers onSaved', async () => {
