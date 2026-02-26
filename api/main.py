@@ -9,12 +9,13 @@ load_dotenv()  # Must be before route imports — auth.py reads env vars at modu
 import structlog
 from asgi_correlation_id import CorrelationIdMiddleware, correlation_id
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from api.logging_config import configure_logging
 from api.db.init import init_db
+from api import analytics
 from api.routes.health import router as health_router
 from api.routes.jobs import router as jobs_router
 from api.routes.auth import router as auth_router
@@ -94,6 +95,20 @@ def on_startup():
 
     init_db(db_path)
     logger.info("DB ready", db_path=db_path)
+
+    analytics.init_posthog()
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Capture unhandled exceptions to PostHog and return HTTP 500."""
+    logger.error(
+        "Unhandled exception",
+        path=request.url.path,
+        exc_type=type(exc).__name__,
+    )
+    analytics.capture_exception(exc)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 # --- API routes (must be registered before the SPA catch-all) ---

@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from api.db.queries import create_session, delete_session, get_session, get_user_by_google_id, upsert_user, set_user_admin
 from api.middleware.auth import get_current_user
+from api.analytics import identify_user
 
 logger = structlog.get_logger(__name__)
 
@@ -77,6 +78,7 @@ async def callback(request: Request):
         profile_id=user.get("profile_id"),
         is_admin=bool(user.get("is_admin")),
     )
+    identify_user(user["id"], email=email or "", name=user.get("name") or "")
 
     session_token = secrets.token_urlsafe(32)
     expires_at = (datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS)).isoformat()
