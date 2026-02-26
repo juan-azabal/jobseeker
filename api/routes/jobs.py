@@ -473,7 +473,7 @@ def generate_cv_endpoint(
         )
 
     try:
-        cv_markdown = generate_cv(system_prompt, user_prompt)
+        cv_markdown = generate_cv(system_prompt, user_prompt, distinct_id=str(user["id"]))
     except Exception as e:
         return JSONResponse(
             status_code=500,
@@ -486,7 +486,7 @@ def generate_cv_endpoint(
     if not validation["passed"]:
         try:
             fix_system, fix_user = build_fix_prompt(cv_markdown, validation["errors"])
-            cv_markdown = generate_cv(fix_system, fix_user)
+            cv_markdown = generate_cv(fix_system, fix_user, distinct_id=str(user["id"]))
             fix_applied = True
         except Exception:
             pass
