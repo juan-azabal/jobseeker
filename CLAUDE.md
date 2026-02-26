@@ -243,7 +243,7 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - Responsive: MockJobDetail hides gap card + reduces to 1 strength on mobile
 
 ### Current
-Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1–17.5 complete)
+Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1–17.6 complete)
 - Phase 17.1 — Parser + DB + Ingest: role_function enum
   - Parser prompt v1.4: emits role_function (product|engineering|design|data|marketing|sales|ops|support|other)
   - DB migration 017: role_function column on jobs table, backfilled from parsed JSON
@@ -265,6 +265,12 @@ Phase 17 — Decomposed Hybrid Scoring (in progress: 17.1–17.5 complete)
   - hybrid_score(): -15 penalty when profile.role_function AND parsed.role_function both set and differ (case-insensitive)
   - get_jobs() CTE: selects j.role_function from jobs table
   - agent/prefilter.py: prefilter_jobs() accepts profile_role_function param; soft gate filters jobs where both sides have role_function and they mismatch; stats["role_function_mismatch"] counter
+- Phase 17.6 — Profile fields + onboarding
+  - api/scoring.py: load_profile_data() returns role_type and role_function from target block
+  - juan.yaml: role_function: product; noura.yaml: role_function: product, role_type: "Director of Product"
+  - api/prompts/onboard-extraction.md (+ agent copy): added role_type and role_function to schema + field rules
+  - api/onboard_utils.py + agent/onboard.py: _build_profile_yaml() includes role_type and role_function in target block when present
+  - web/src/components/ProfileEditor.tsx: role_type text input + role_function dropdown (9 values); wired to save; ROLE_FUNCTION_LABELS uses distinct labels to avoid DOM text collision with domain chips
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
