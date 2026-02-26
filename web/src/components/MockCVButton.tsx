@@ -1,6 +1,25 @@
+import { useEffect, useRef } from 'react';
+
 export default function MockCVButton() {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      el.classList.add('cv-playing');
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { el.classList.add('cv-playing'); observer.disconnect(); } },
+      { threshold: 0.5 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className="relative" style={{ height: '42px' }}>
+    <div ref={ref} className="relative" style={{ height: '42px' }}>
       <style>{`
         /* 12s total cycle: Generate(1.5s) → Generating(2.5s) → Downloaded(8s) */
         @keyframes cv-frame-1 {
@@ -22,9 +41,12 @@ export default function MockCVButton() {
           98%  { opacity: 1; }
           100% { opacity: 0; }
         }
-        .cv-anim-1 { animation: cv-frame-1 12s ease infinite; opacity: 0; }
-        .cv-anim-2 { animation: cv-frame-2 12s ease infinite; opacity: 0; }
-        .cv-anim-3 { animation: cv-frame-3 12s ease infinite; opacity: 0; }
+        .cv-anim-1 { animation: cv-frame-1 12s ease infinite; animation-play-state: paused; opacity: 0; }
+        .cv-anim-2 { animation: cv-frame-2 12s ease infinite; animation-play-state: paused; opacity: 0; }
+        .cv-anim-3 { animation: cv-frame-3 12s ease infinite; animation-play-state: paused; opacity: 0; }
+        .cv-playing .cv-anim-1,
+        .cv-playing .cv-anim-2,
+        .cv-playing .cv-anim-3 { animation-play-state: running; }
       `}</style>
 
       {/* Frame 1: Generate CV */}
