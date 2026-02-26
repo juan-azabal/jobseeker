@@ -155,10 +155,17 @@ def _build_context(jobs, rejected_stats, run_meta, profile=None):
         if "_salary_eur" not in j:
             j["_salary_eur"] = _extract_max_salary_eur(j)
         if "_display_score" not in j:
+            from main import _grade_to_points
             j["_fit_score"] = _heuristic_score(j)
             rag = j.get("rag_score")
-            rag_score_val = rag.get("score") if rag else None
-            j["_display_score"] = rag_score_val if rag_score_val is not None else j["_fit_score"]
+            if rag is None:
+                j["_display_score"] = j["_fit_score"]
+            elif "score" in rag:
+                j["_display_score"] = rag["score"]
+            else:
+                tech_pts = _grade_to_points(rag.get("technical_depth"))
+                prof_pts = _grade_to_points(rag.get("profile_evidence"))
+                j["_display_score"] = min(100, max(0, j["_fit_score"] + tech_pts + prof_pts))
 
     # Split tiers and flatten
     tier_a_raw = sorted([j for j in parsed_jobs if j["_display_score"] >= 50],

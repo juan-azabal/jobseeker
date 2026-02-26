@@ -61,15 +61,16 @@ class TestBuildContextV2RagScore:
             ctx = _build_context([job], REJECTED_STATS, RUN_META)
         assert isinstance(ctx, dict)
 
-    def test_v2_rag_score_falls_back_to_fit_score(self):
-        """v2 rag_score present but no 'score' → _display_score equals _fit_score."""
+    def test_v2_rag_score_computes_hybrid_score(self):
+        """v2 rag_score → _display_score = _fit_score + grade_to_points(tech) + grade_to_points(prof)."""
         job = _make_job(rag_score={"technical_depth": "A", "profile_evidence": "B"})
         with patch.multiple("main", **_PATCH_MAIN):
             ctx = _build_context([job], REJECTED_STATS, RUN_META)
         all_jobs = ctx["tier_a"] + ctx["tier_b"] + ctx["tier_c"]
         assert len(all_jobs) == 1
-        # _fit_score for this job: saas(10) + principal(15) + remote(10) + no skills = 35
-        assert all_jobs[0]["score"] == 35
+        # _fit_score = saas(10) + principal(15) + remote(10) + no skills = 35
+        # grade_to_points(A)=20, grade_to_points(B)=12 → hybrid = 35+20+12 = 67
+        assert all_jobs[0]["score"] == 67
 
     def test_v1_rag_score_still_works(self):
         """v1 rag_score (has numeric 'score') must continue to be used as display score."""
@@ -100,9 +101,9 @@ class TestBuildContextV2RagScore:
         assert len(all_jobs) == 3
 
     def test_v2_job_appears_in_correct_tier(self):
-        """v2 job with heuristic score 35 appears in tier_b (30-49)."""
+        """v2 job with A+A grades: hybrid = 35+20+20=75 → tier_a (≥50)."""
         job = _make_job(rag_score={"technical_depth": "A", "profile_evidence": "A"})
         with patch.multiple("main", **_PATCH_MAIN):
             ctx = _build_context([job], REJECTED_STATS, RUN_META)
-        assert len(ctx["tier_b"]) == 1
-        assert len(ctx["tier_a"]) == 0
+        assert len(ctx["tier_a"]) == 1
+        assert ctx["tier_a"][0]["score"] == 75

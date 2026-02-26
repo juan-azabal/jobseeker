@@ -42,12 +42,18 @@ def append_gap_history(jobs: list, profile: dict, history_dir: str = "data/gap_h
         strengths_list = rag.get("strengths") or []
         gaps_list = rag.get("gaps") or []
 
+        # Score: v1 = stored numeric; v2 = sum of grade points (LLM contribution only)
+        _gp = {"A": 20, "B": 12, "C": 5}
+        score = rag.get("score") if rag.get("score") is not None else (
+            _gp.get(str(rag.get("technical_depth") or "").upper(), 10)
+            + _gp.get(str(rag.get("profile_evidence") or "").upper(), 10)
+        )
         entry = {
             "date": today,
             "role_id": job.get("id", ""),
             "title": job.get("title", ""),
             "company": job.get("company", ""),
-            "score": rag.get("score", 0),
+            "score": score,
             "salary_eur": job.get("_salary_eur", 0) or 0,
             "domain": parsed.get("domain", ""),
             "seniority": parsed.get("seniority", ""),

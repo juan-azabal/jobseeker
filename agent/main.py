@@ -241,6 +241,21 @@ def save_results(jobs, folder="output", profile_id=None):
     return filepath
 
 
+# --- Grade-to-points conversion (mirrors api/grade_mapping.py) ---
+_GRADE_POINTS = {"A": 20, "B": 12, "C": 5}
+
+
+def _grade_to_points(grade, default=10):
+    """Convert a categorical grade (A/B/C) to integer points.
+
+    Default of 10 (neutral midpoint) is used when grade is None or unrecognised.
+    Mirrors api/grade_mapping.py:grade_to_points() — keep in sync if thresholds change.
+    """
+    if grade is None:
+        return default
+    return _GRADE_POINTS.get(str(grade).upper(), default)
+
+
 # --- Heuristic ranking (no API calls) ---
 # Values loaded from user profile at runtime — see config/profiles/<id>.yaml
 
@@ -718,8 +733,16 @@ def ranked_jobs(jobs):
         j["_salary_eur"] = _extract_max_salary_eur(j)
         j["_fit_score"] = _heuristic_score(j)
         rag = j.get("rag_score")
-        rag_score_val = rag.get("score") if rag else None
-        j["_display_score"] = rag_score_val if rag_score_val is not None else j["_fit_score"]
+        if rag is None:
+            j["_display_score"] = j["_fit_score"]
+        elif "score" in rag:
+            # v1: use stored numeric RAG score
+            j["_display_score"] = rag["score"]
+        else:
+            # v2: hybrid = heuristic + grade points, clamped [0, 100]
+            tech_pts = _grade_to_points(rag.get("technical_depth"))
+            prof_pts = _grade_to_points(rag.get("profile_evidence"))
+            j["_display_score"] = min(100, max(0, j["_fit_score"] + tech_pts + prof_pts))
 
     # Reloc jobs only appear in Tier A — not worth showing if score doesn't justify moving
     tier_a = sorted([j for j in parsed_jobs if j["_display_score"] >= 50], key=_sort_key)
@@ -730,8 +753,9 @@ def ranked_jobs(jobs):
 
 def print_summary(jobs):
     """Print tiered digest: A (≥50) → B (30-49) → C (<30)."""
-    has_rag = any(j.get("rag_score") for j in jobs if j.get("parsed"))
-    mode = "RAG score" if has_rag else "heuristic fit"
+    has_v2 = any("technical_depth" in (j.get("rag_score") or {}) for j in jobs if j.get("parsed"))
+    has_v1 = any("score" in (j.get("rag_score") or {}) for j in jobs if j.get("parsed"))
+    mode = "hybrid score" if has_v2 else ("RAG score" if has_v1 else "heuristic fit")
 
     tier_a, tier_b, tier_c = ranked_jobs(jobs)
     parsed_jobs = tier_a + tier_b + tier_c
@@ -789,8 +813,14 @@ def _auto_skip_reloc(jobs, applied_path="config/applied.yaml"):
             j["_salary_eur"] = _extract_max_salary_eur(j)
             j["_fit_score"] = _heuristic_score(j)
             rag = j.get("rag_score")
-            rag_score_val = rag.get("score") if rag else None
-            j["_display_score"] = rag_score_val if rag_score_val is not None else j["_fit_score"]
+            if rag is None:
+                j["_display_score"] = j["_fit_score"]
+            elif "score" in rag:
+                j["_display_score"] = rag["score"]
+            else:
+                tech_pts = _grade_to_points(rag.get("technical_depth"))
+                prof_pts = _grade_to_points(rag.get("profile_evidence"))
+                j["_display_score"] = min(100, max(0, j["_fit_score"] + tech_pts + prof_pts))
 
     # Find reloc jobs with score < 50 that aren't already tracked
     candidates = [
