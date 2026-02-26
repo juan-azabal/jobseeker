@@ -150,7 +150,7 @@ jobsearch/
 │   ├── scripts/            # reparse, rescore, ingest payload builder
 │   ├── schemas/            # JSON output contracts
 │   └── patterns/           # Module interface contracts
-├── tests/                  # Backend tests (562), frontend tests (56)
+├── tests/                  # Backend tests (562), frontend tests (56), agent tests (400)
 ├── data/                   # jobseeker.db (gitignored)
 ├── scripts/                # seed_dev.py, backfill_embeddings.py, audit_domain_scoring.py
 └── requirements.txt        # Merged deps
