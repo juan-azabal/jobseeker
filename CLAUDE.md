@@ -334,5 +334,41 @@ Phase 15 — Completed
 - **Root cause**: Inline `<style>` in `LandingPage.tsx` defines `transition-delay` for `nth-child(1–5)`. The hero section has 6 children (beta badge, product name, h1, subheadline, form, sign-in link). The sign-in link (`nth-child(6)`) gets 0ms delay — it animates with the badge instead of last.
 - **Fix**: extend the CSS to `nth-child(6) { transition-delay: 500ms }` and add a `nth-child(7)` guard.
 
+#### P5 — `POST /api/waitlist` has no rate limiting (spam / enumeration risk)
+- **Root cause**: The endpoint is public with no auth. An attacker can flood the table with arbitrary emails using `+` subaddressing tricks or disposable domains. SQLite UNIQUE constraint only prevents exact duplicate inserts — thousands of unique-email variants go through unimpeded.
+- **Fix**: add IP-based rate limiting via SlowAPI (`slowapi` package, already compatible with FastAPI) — e.g. 5 requests/IP/minute. Alternatively, a simple `_rate_limiter` dict keyed by client IP in-memory is enough for single-instance Railway deployment.
+
+#### P6 — WaitlistForm email regex is stricter than backend (frontend rejects valid emails)
+- **Root cause**: Frontend uses `/^[^@]+@[^@.]+\.[^@]+$/` — the `[^@.]+` forbids dots in the local part of the domain (before the first dot). Backend uses `r"^[^@]+@[^@]+\.[^@]+"` which allows dots there. Concretely, `user@sub.example.com` passes backend but fails frontend (`sub` matches `[^@.]+`, but emails like `user@co.uk-registrar.com` would be rejected client-side). In practice the pattern rarely fires since most emails have simple domains, but it's a correctness gap.
+- **Fix**: align frontend regex to `^[^@]+@[^@]+\.[^@]+$` (drop the `.` from the character class after `@`).
+
+#### P7 — WaitlistForm shows "Enter a valid email" for server errors (500, 503, 429)
+- **Root cause**: The `else` branch at line 41 of `WaitlistForm.tsx` catches all non-201, non-409 statuses and displays the same message as a 422 invalid email. A 500 backend crash or Railway restart returns a misleading client-side message.
+- **Fix**: parse `res.status`: show "Enter a valid email" only for 422, show "Something went wrong. Try again." for everything else (mirrors the catch block behaviour).
+
+#### P8 — AdminPage `diffMs` can be negative (clock skew → "NaN ago" / negative values)
+- **Root cause**: `Date.now() - date.getTime()` in AdminPage waitlist rows is not clamped. If the server clock is ahead of the browser clock (common in VMs/containers), `diffMs` is negative, causing `diffDays`/`diffHours`/`diffMins` to be negative and the display to show e.g. `-1d ago`.
+- **Fix**: `const diffMs = Math.max(0, Date.now() - date.getTime())` — one character change.
+
+#### P9 — `waitlist_submitted` PostHog event fires before the HTTP request is sent
+- **Root cause**: `posthog.capture('waitlist_submitted', { source })` (line 27 of WaitlistForm.tsx) is called right after `setState('submitting')` and before `fetch(...)`. If the user's browser blocks the request (offline, CORS misconfiguration) the event is recorded for a request that never happened.
+- **Fix**: rename to `waitlist_submit_attempted` to be semantically accurate, or move the capture inside the `if (res.status === 201)` block as `waitlist_submitted` and keep the current event as the attempt signal.
+
+#### P10 — `waitlist.py` DB connections not using context manager
+- **Root cause**: Both endpoints call `con = sqlite3.connect(...)` and `con.close()` manually. If an unexpected exception occurs in `con.execute()` or `con.commit()` outside the try/finally (e.g. in the finally itself), the connection could leak. The pattern also repeats across both endpoints without a shared helper.
+- **Fix**: use `with sqlite3.connect(db_path) as con:` — it auto-commits on exit and rolls back on exception. Matches the pattern used in other api/routes handlers.
+
+#### P11 — WaitlistForm has no accessible label (WCAG 1.3.1 failure)
+- **Root cause**: The email `<input>` has only a `placeholder` and no associated `<label>`. `placeholder` text disappears on typing and is not a substitute for a label. Screen readers announce "you@example.com, edit text" with no context on what the field is for. This fails WCAG 2.2 SC 1.3.1 (Info and Relationships) — which the plan explicitly requires at AA level.
+- **Fix**: add a visually-hidden `<label htmlFor="waitlist-email">Email address</label>` and `id="waitlist-email"` on the input. Also add `role="alert"` to the error `<p>` so screen readers announce validation errors immediately.
+
+#### P12 — Migration 015 missing index on `created_at`
+- **Root cause**: `GET /api/admin/waitlist` runs `ORDER BY created_at DESC` on the `waitlist` table. SQLite will full-scan and sort for every admin page load. Not an issue at 0–100 entries, but becomes notable at scale.
+- **Fix**: add to migration 015 (or a new 016): `CREATE INDEX IF NOT EXISTS idx_waitlist_created_at ON waitlist(created_at DESC);`
+
+#### P13 — `waitlist.py` does not log 409 duplicate attempts
+- **Root cause**: `logger.info("Waitlist signup", email=email)` only fires on success. When `IntegrityError` is caught and re-raised as 409, nothing is logged. Impossible to distinguish repeated submissions from different users vs. a single user clicking submit twice.
+- **Fix**: add `logger.info("Waitlist duplicate", email=email)` in the `except IntegrityError` block before re-raising.
+
 ### Blockers
 {none}
