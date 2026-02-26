@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import WaitlistForm from '../components/WaitlistForm';
 import MockDashboard from '../components/MockDashboard';
+import MockJobDetail from '../components/MockJobDetail';
 
 // ---- Scroll reveal hook ----
 function useScrollReveal() {
@@ -89,10 +90,35 @@ export default function LandingPage() {
         </RevealSection>
       </section>
 
-      {/* ---- Product showcase ---- */}
+      {/* ---- MockDashboard section ---- */}
       <section className="px-6 pb-24 md:pb-40">
         <RevealSection className="mx-auto max-w-[900px]">
+          <div className="mb-10 text-center">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-violet-400">Your daily feed</p>
+            <h2
+              className="text-3xl font-normal text-zinc-100 md:text-4xl"
+              style={{ fontFamily: "'Instrument Serif', serif" }}
+            >
+              Every job, scored and ranked
+            </h2>
+          </div>
           <MockDashboard />
+        </RevealSection>
+      </section>
+
+      {/* ---- MockJobDetail section ---- */}
+      <section className="px-6 pb-24 md:pb-40">
+        <RevealSection className="mx-auto max-w-[900px]">
+          <div className="mb-10 text-center">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-violet-400">Behind the score</p>
+            <h2
+              className="text-3xl font-normal text-zinc-100 md:text-4xl"
+              style={{ fontFamily: "'Instrument Serif', serif" }}
+            >
+              See exactly why each job fits — or doesn't
+            </h2>
+          </div>
+          <MockJobDetail />
         </RevealSection>
       </section>
 

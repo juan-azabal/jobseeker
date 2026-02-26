@@ -21,7 +21,7 @@ test('renders two WaitlistForm instances (hero + bottom)', () => {
 
 test('renders MockDashboard with job cards', () => {
   render(<MemoryRouter><LandingPage /></MemoryRouter>);
-  expect(screen.getByText('Head of Product')).toBeInTheDocument();
+  expect(screen.getAllByText('Head of Product').length).toBeGreaterThanOrEqual(1);
 });
 
 test('renders footer with Built by Juan Azabal', () => {
@@ -33,4 +33,14 @@ test('renders Sign in link pointing to /api/auth/login', () => {
   render(<MemoryRouter><LandingPage /></MemoryRouter>);
   const link = screen.getByRole('link', { name: /sign in/i });
   expect(link).toHaveAttribute('href', '/api/auth/login');
+});
+
+test('renders MockDashboard section heading', () => {
+  render(<MemoryRouter><LandingPage /></MemoryRouter>);
+  expect(screen.getByText('Every job, scored and ranked')).toBeInTheDocument();
+});
+
+test('renders MockJobDetail section heading', () => {
+  render(<MemoryRouter><LandingPage /></MemoryRouter>);
+  expect(screen.getByText(/See exactly why each job fits/)).toBeInTheDocument();
 });
