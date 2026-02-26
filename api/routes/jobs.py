@@ -263,7 +263,12 @@ def list_jobs(
     if hide_geo_restricted:
         jobs = [j for j in jobs if not j.get("geo_restricted")]
 
-    # Strip internal fields from response
+    # Strip internal fields and post-process enriched fields for response
+    _ENRICHED_FIELDS = (
+        "company_url", "company_logo", "company_industry", "company_size",
+        "job_level", "salary_min", "salary_max", "salary_currency",
+        "salary_interval", "salary_source", "country", "city", "remote_type", "sources",
+    )
     for job in jobs:
         job.pop("ujs_score", None)
         job.pop("ujs_tier", None)
@@ -273,6 +278,16 @@ def list_jobs(
         job.pop("ujs_scored_v2", None)
         job.pop("parsed", None)
         job.pop("_parsed_dict", None)
+        # Parse sources JSON string → list
+        if job.get("sources") is not None:
+            try:
+                job["sources"] = json.loads(job["sources"])
+            except (json.JSONDecodeError, TypeError):
+                job["sources"] = []
+        # Omit null enriched fields from response
+        for field in _ENRICHED_FIELDS:
+            if job.get(field) is None:
+                job.pop(field, None)
 
     total_in_db = get_total_job_count(_db_path())
 
@@ -354,6 +369,21 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
 
     # Skill matches: compute semantic match status for each skill
     row["skill_matches"] = _compute_skill_matches(row, user)
+
+    # Parse sources JSON string → list; omit null enriched fields
+    if row.get("sources") is not None:
+        try:
+            row["sources"] = json.loads(row["sources"])
+        except (json.JSONDecodeError, TypeError):
+            row["sources"] = []
+    _ENRICHED_FIELDS = (
+        "company_url", "company_logo", "company_industry", "company_size",
+        "job_level", "salary_min", "salary_max", "salary_currency",
+        "salary_interval", "salary_source", "country", "city", "remote_type", "sources",
+    )
+    for field in _ENRICHED_FIELDS:
+        if row.get(field) is None:
+            row.pop(field, None)
 
     analytics.capture(user["id"], "job_viewed", {
         "job_id": job_id,
