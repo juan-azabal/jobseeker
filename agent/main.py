@@ -718,7 +718,8 @@ def ranked_jobs(jobs):
         j["_salary_eur"] = _extract_max_salary_eur(j)
         j["_fit_score"] = _heuristic_score(j)
         rag = j.get("rag_score")
-        j["_display_score"] = rag["score"] if rag else j["_fit_score"]
+        rag_score_val = rag.get("score") if rag else None
+        j["_display_score"] = rag_score_val if rag_score_val is not None else j["_fit_score"]
 
     # Reloc jobs only appear in Tier A — not worth showing if score doesn't justify moving
     tier_a = sorted([j for j in parsed_jobs if j["_display_score"] >= 50], key=_sort_key)
@@ -788,7 +789,8 @@ def _auto_skip_reloc(jobs, applied_path="config/applied.yaml"):
             j["_salary_eur"] = _extract_max_salary_eur(j)
             j["_fit_score"] = _heuristic_score(j)
             rag = j.get("rag_score")
-            j["_display_score"] = rag["score"] if rag else j["_fit_score"]
+            rag_score_val = rag.get("score") if rag else None
+            j["_display_score"] = rag_score_val if rag_score_val is not None else j["_fit_score"]
 
     # Find reloc jobs with score < 50 that aren't already tracked
     candidates = [
