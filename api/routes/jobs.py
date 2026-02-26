@@ -26,7 +26,7 @@ from api.geo import (
     build_region_pattern, matches_region, is_pure_timezone,
 )
 from api.middleware.auth import get_current_user
-from api.scoring import compute_tier, heuristic_score, load_profile_data, precompute_skill_lookup, VALID_DOMAINS
+from api.scoring import compute_tier, heuristic_score, hybrid_score, load_profile_data, precompute_skill_lookup, VALID_DOMAINS
 from api.skill_matcher import match_skills
 from api import analytics
 
@@ -166,12 +166,23 @@ def _score_and_tier_jobs(
         is_reloc = _compute_reloc(job, home_locations, home_regions) if home_locations else False
         job["geo_restricted"] = is_reloc
 
-        # Score: prefer RAG (user_job_scores), fall back to heuristic
-        if job.get("ujs_score") is not None:
+        # Score: v2 hybrid → v1 RAG → hybrid with defaults
+        job_domain_override = domain_overrides.get(job["job_id"]) if profile else None
+        if job.get("ujs_scored_v2") == 1 and profile:
+            # v2: hybrid_score with actual LLM grades
+            score = hybrid_score(
+                profile, job["_parsed_dict"], job, is_reloc,
+                technical_grade=job.get("ujs_technical_grade"),
+                profile_grade=job.get("ujs_profile_grade"),
+                db_path=_db_path(), skill_lookup=skill_lookup,
+                domain_override=job_domain_override,
+            )
+        elif job.get("ujs_score") is not None:
+            # v1: use stored RAG score unchanged
             score = job["ujs_score"]
         elif profile:
-            job_domain_override = domain_overrides.get(job["job_id"])
-            score = heuristic_score(
+            # unscored: hybrid_score with default grades (+20 neutral)
+            score = hybrid_score(
                 profile, job["_parsed_dict"], job, is_reloc,
                 db_path=_db_path(), skill_lookup=skill_lookup,
                 domain_override=job_domain_override,
@@ -179,7 +190,7 @@ def _score_and_tier_jobs(
         else:
             score = 0
 
-        # Relocation penalty on heuristic scores (RAG scores already account for location)
+        # Relocation penalty on non-RAG scores (v1 RAG already accounts for location)
         # Remote geo-restricted (e.g. "US only"): user works from home, penalty is smaller.
         # Onsite/hybrid outside home: requires physical relocation, full penalty.
         if job.get("ujs_score") is None and is_reloc and score > 0:
@@ -242,6 +253,9 @@ def list_jobs(
         job.pop("ujs_score", None)
         job.pop("ujs_tier", None)
         job.pop("ujs_scored", None)
+        job.pop("ujs_technical_grade", None)
+        job.pop("ujs_profile_grade", None)
+        job.pop("ujs_scored_v2", None)
         job.pop("parsed", None)
         job.pop("_parsed_dict", None)
 
