@@ -44,3 +44,14 @@ test('renders MockJobDetail section heading', () => {
   render(<MemoryRouter><LandingPage /></MemoryRouter>);
   expect(screen.getByText(/See exactly why each job fits/)).toBeInTheDocument();
 });
+
+test('renders CV callout title', () => {
+  render(<MemoryRouter><LandingPage /></MemoryRouter>);
+  expect(screen.getByText('A CV that speaks to the job description')).toBeInTheDocument();
+});
+
+test('renders How it works step 3 and step 4', () => {
+  render(<MemoryRouter><LandingPage /></MemoryRouter>);
+  expect(screen.getByText('Understand the match')).toBeInTheDocument();
+  expect(screen.getByText('Apply with a tailored CV')).toBeInTheDocument();
+});

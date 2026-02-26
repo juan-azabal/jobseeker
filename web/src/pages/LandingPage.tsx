@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import WaitlistForm from '../components/WaitlistForm';
 import MockDashboard from '../components/MockDashboard';
 import MockJobDetail from '../components/MockJobDetail';
+import MockCVButton from '../components/MockCVButton';
 
 // ---- Scroll reveal hook ----
 function useScrollReveal() {
@@ -122,6 +123,30 @@ export default function LandingPage() {
         </RevealSection>
       </section>
 
+      {/* ---- CV callout ---- */}
+      <div className="px-6" style={{ marginTop: '80px', marginBottom: '80px' }}>
+        <RevealSection className="mx-auto max-w-3xl">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8 md:p-10">
+            <div className="flex flex-col gap-8 md:flex-row md:items-center md:gap-10">
+              <div className="flex-1">
+                <h3
+                  className="mb-3 text-2xl font-normal text-zinc-100 md:text-3xl"
+                  style={{ fontFamily: "'Instrument Serif', serif" }}
+                >
+                  A CV that speaks to the job description
+                </h3>
+                <p className="text-sm leading-relaxed text-zinc-400 md:text-base">
+                  For each job, generate a CV that highlights the experience that matters for that role. Strengths emphasized, gaps addressed, jargon matched. ATS-ready, one click.
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center justify-center md:justify-end">
+                <MockCVButton />
+              </div>
+            </div>
+          </div>
+        </RevealSection>
+      </div>
+
       {/* ---- How it works ---- */}
       <section className="px-6 py-24 md:py-40">
         <RevealSection className="mx-auto max-w-4xl">
@@ -131,7 +156,7 @@ export default function LandingPage() {
           >
             How it works
           </h2>
-          <div className="grid gap-10 md:grid-cols-3">
+          <div className="grid gap-10 md:grid-cols-4">
             {[
               {
                 num: '01',
@@ -145,8 +170,13 @@ export default function LandingPage() {
               },
               {
                 num: '03',
-                title: 'Apply with confidence',
-                body: 'See why each job scored the way it did. Strengths, gaps, and talking points before you write a single cover letter.',
+                title: 'Understand the match',
+                body: 'For each job, see your score breakdown by dimension, skill-by-skill matching, strengths to leverage, and gaps to address.',
+              },
+              {
+                num: '04',
+                title: 'Apply with a tailored CV',
+                body: 'Generate a CV customized to each role in one click. Your best experience highlighted, ATS-optimized, ready to send.',
               },
             ].map(({ num, title, body }) => (
               <div key={num} className="flex flex-col gap-4">
