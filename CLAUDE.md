@@ -419,11 +419,10 @@ Phase 17 — Decomposed Hybrid Scoring (complete: 17.1–17.7)
 
 ### Known Bugs
 
-- **P16** — `agent/main.py` `ranked_jobs()` and `_auto_skip_reloc()`: v2 jobs fall back to `_fit_score` (heuristic-only) for `_display_score` because the agent pipeline doesn't compute `hybrid_score()`. Digest ordering and auto-skip reloc logic ignore the LLM grades for v2 jobs. Architectural fix: port `grade_to_points()` + `hybrid_score()` into the agent.
-- **P17** — `agent/gap_tracker.py` stores `rag.get("score", 0)` in gap history JSONL. For v2 jobs this is always 0 (no numeric score in v2 dict). Gap/strength history loses scoring context for v2 jobs.
-- **P18** — `agent/main.py` `print_summary()`: `has_rag = any(j.get("rag_score") ...)` evaluates to `True` for v2 jobs (dict is truthy) but `_display_score` uses heuristic. Digest prints "RAG score" mode even though v2 jobs are ordered by heuristic score. Cosmetic only.
-
 ### Resolved
+- **P18** (2026-02-26) — `print_summary()` printed "RAG score" mode for v2 jobs (rag_score dict is truthy but has no numeric score). Fixed: now distinguishes v2→"hybrid score", v1→"RAG score", none→"heuristic fit".
+- **P17** (2026-02-26) — `gap_tracker.append_gap_history()` stored `score=0` for all v2 jobs. Fixed: v2 now stores sum of grade points (A+A=40, B+C=17, neutral=20). JSONL history retains LLM scoring context.
+- **P16** (2026-02-26) — `ranked_jobs()`, `_auto_skip_reloc()`, and `notifier._build_context()` used heuristic-only for v2 jobs. Fixed: added `_grade_to_points()` to `main.py`; v2 jobs now compute `hybrid_score = _fit_score + grade_to_points(tech) + grade_to_points(prof)` clamped [0,100]. 22 new tests across 3 test files.
 - **P15** (2026-02-26) — `notifier._build_context()` crashed with `KeyError: 'score'` on v2-scored jobs. Fixed via `rag.get("score")` with fallback to `_fit_score`, matching the fix already in `ranked_jobs()`. 6 tests added in `test_notifier_v2.py`.
 - **P14** (2026-02-26) — List and detail endpoints produced different scores for the same job (diffs 3–20 pts). Root causes: `remote_restriction` absent from `SELECT *`, global skill_lookup triggering substring fallback, divergent scoring paths. Fixed via `_score_single_job()` helper and per-job semantic matching. 0 mismatches across 57 jobs; 541 tests passing.
 - **P2** (2026-02-26) — Removed unused `LoginPage` import from `App.tsx`; was breaking production TS build.
