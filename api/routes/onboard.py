@@ -856,6 +856,9 @@ class UpdateProfileRequest(BaseModel):
     skills: list[str]
     salary_min: int = 60000
     location_preference: str = "b"
+    role_type: str = ""
+    role_function: str = ""
+    track: str = "ic"
 
 
 @router.patch("/profile")
@@ -912,6 +915,14 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
     # Replace skills as a plain list
     raw["skills"] = CommentedSeq(body.skills)
 
+    # role_type, role_function, track: write if non-empty, delete if empty
+    for field in ("role_type", "role_function", "track"):
+        val = getattr(body, field, "").strip()
+        if val:
+            raw["target"][field] = val
+        elif field in raw["target"]:
+            del raw["target"][field]
+
     buf = io.StringIO()
     ry.dump(raw, buf)
     updated_yaml = buf.getvalue()
@@ -922,19 +933,21 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
     save_user_profile_yaml(db_path_patch, user["id"], updated_yaml)
 
     # Regenerate per-user searches + preferences from the updated profile.
-    # seniority_weights from the request take priority; track still comes from YAML.
+    # Use request body fields; fall back to YAML for fields not in the request.
     target_block = raw.get("target") or {}
-    user_block = raw.get("user") or {}
     profile_for_gen = {
         "seniority_weights": body.seniority_weights or target_block.get("seniority_weights") or {},
         "target_level": target_block.get("level", "senior"),
-        "track": target_block.get("track", "ic"),
+        "track": body.track or target_block.get("track", "ic"),
+        "role_type": body.role_type or target_block.get("role_type", ""),
+        "role_function": body.role_function or target_block.get("role_function", ""),
         "domains": body.domains,
         "home_locations": body.home_locations,
         "skills": body.skills,
         "country_weights": dict(body.country_weights),
         "salary_min": body.salary_min,
-        "exclude_companies": list(user_block.get("exclude_companies") or []),
+        # exclude_companies lives at YAML root level (not under user block) — fix C5
+        "exclude_companies": list(raw.get("exclude_companies") or []),
     }
     try:
         searches_yaml = _generate_searches_yaml(profile_for_gen)
