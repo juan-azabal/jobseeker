@@ -100,6 +100,15 @@ def on_startup():
     init_db(db_path)
     logger.info("DB ready", db_path=db_path)
 
+    # Log CV references directory contents so we know at boot if files are present
+    refs_dir_env = os.environ.get("CV_REFERENCES_DIR", "").strip()
+    refs_dir = Path(refs_dir_env) if refs_dir_env else Path("api/cv/references")
+    if refs_dir.exists():
+        refs_files = [f.name for f in sorted(refs_dir.iterdir()) if f.is_file()]
+        logger.info("CV references dir", path=str(refs_dir), files=refs_files)
+    else:
+        logger.warning("CV references dir not found", path=str(refs_dir), cv_references_dir_env=refs_dir_env or "(not set)")
+
     analytics.init_posthog()
 
 

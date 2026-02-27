@@ -16,6 +16,10 @@ import json
 import os
 from pathlib import Path
 
+import structlog
+
+_log = structlog.get_logger(__name__)
+
 # Logic files committed to the repo — apply to every user.
 # The candidate's personal CV comes from users.cv_md (DB), not from files.
 _REFERENCE_FILES = [
@@ -267,17 +271,31 @@ def _load_reference_files(refs_dir: Path) -> str:
     Raises:
         FileNotFoundError: If any required file is missing, with the filename.
     """
+    _log.info("CV prompt: loading reference files", refs_dir=str(refs_dir))
     parts = []
     for filename in _REFERENCE_FILES:
         path = refs_dir / filename
         if not path.exists():
+            _log.error(
+                "CV reference file missing",
+                filename=filename,
+                refs_dir=str(refs_dir),
+                refs_dir_exists=refs_dir.exists(),
+                refs_dir_contents=(
+                    [f.name for f in sorted(refs_dir.iterdir()) if f.is_file()]
+                    if refs_dir.exists()
+                    else []
+                ),
+            )
             raise FileNotFoundError(
                 f"Required CV reference file not found: {filename} "
                 f"(looked in {refs_dir}). "
                 f"See api/cv/references/README.md for setup instructions."
             )
         content = path.read_text(encoding="utf-8")
+        _log.debug("CV reference file loaded", filename=filename, size=len(content))
         parts.append(f"--- SECTION: {filename} ---\n\n{content}")
+    _log.info("CV reference files loaded", count=len(parts))
     return "\n\n".join(parts)
 
 

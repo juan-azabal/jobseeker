@@ -596,13 +596,25 @@ def generate_cv_endpoint(
 
     # Prefer DB-stored cv_md (survives redeploys); fall back to disk
     user_cv_markdown = get_user_cv_md(_db_path(), user["id"]) or ""
-    if not user_cv_markdown:
+    cv_md_source = "none"
+    if user_cv_markdown:
+        cv_md_source = "db"
+    else:
         profile_id = user.get("profile_id")
         if profile_id:
             jobagent_dir = os.environ.get("JOBAGENT_DIR", "agent")
             cv_path = Path(jobagent_dir) / "knowledge" / profile_id / "cv.md"
             if cv_path.exists():
                 user_cv_markdown = cv_path.read_text(encoding="utf-8")
+                cv_md_source = "disk"
+
+    logger.info(
+        "CV generation started",
+        job_id=job_id,
+        user_id=user["id"],
+        cv_md_source=cv_md_source,
+        cv_md_len=len(user_cv_markdown),
+    )
 
     # Inject per-user scored data if available (for plan building)
     ujs = get_user_job_score(_db_path(), user["id"], job_id)
@@ -615,11 +627,13 @@ def generate_cv_endpoint(
     try:
         system_prompt, user_prompt = build_cv_prompts(row, user_cv_markdown, plan)
     except FileNotFoundError as e:
+        logger.error("CV generation failed: missing reference file", job_id=job_id, user_id=user["id"], detail=str(e))
         return JSONResponse(
             status_code=422,
             content={"error": "missing_references", "detail": str(e)},
         )
-    except ValueError:
+    except ValueError as e:
+        logger.error("CV generation failed: no JD text", job_id=job_id, user_id=user["id"], detail=str(e))
         return JSONResponse(
             status_code=422,
             content={"error": "no_jd", "detail": "Job description not available for CV generation"},
@@ -628,6 +642,7 @@ def generate_cv_endpoint(
     try:
         cv_markdown = generate_cv(system_prompt, user_prompt, distinct_id=str(user["id"]))
     except Exception as e:
+        logger.error("CV generation failed: LLM error", job_id=job_id, user_id=user["id"], exc_info=True, detail=str(e))
         return JSONResponse(
             status_code=500,
             content={"error": "llm_error", "detail": str(e)},
