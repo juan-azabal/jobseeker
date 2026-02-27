@@ -491,13 +491,6 @@ def set_user_profile_id(db_path: str, user_id: int, profile_id: str | None) -> N
     con.close()
 
 
-def update_user_profile_id(db_path: str, user_id: int, profile_id: str) -> None:
-    con = _connect(db_path)
-    con.execute("UPDATE users SET profile_id = ? WHERE id = ?", (profile_id, user_id))
-    con.commit()
-    con.close()
-
-
 def save_user_cv_md(db_path: str, user_id: int, cv_md: str) -> None:
     """Persist cv_md content in the users table so it survives redeploys."""
     con = _connect(db_path)
