@@ -38,6 +38,8 @@ prefilter:
   - GetApp
   - Software Advice
   - G2
+  - BigCorp
+  - SlowCo
   location:
     accept_remote: true
     accept_hybrid: true
