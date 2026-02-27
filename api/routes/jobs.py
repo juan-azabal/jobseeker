@@ -609,7 +609,13 @@ def generate_cv_endpoint(
     if ujs and ujs.get("scored"):
         row["scored"] = ujs["scored"]
 
-    reference_files = load_reference_files_dict()
+    try:
+        reference_files = load_reference_files_dict()
+    except FileNotFoundError as e:
+        return JSONResponse(
+            status_code=422,
+            content={"error": "missing_references", "detail": str(e)},
+        )
     plan = build_cv_plan(row, reference_files)
 
     try:
