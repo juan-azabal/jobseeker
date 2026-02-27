@@ -36,7 +36,7 @@ from api.geo import (
     is_pure_timezone,
 )
 from api.middleware.auth import get_current_user
-from api.scoring import compute_tier, hybrid_score, load_profile_data, VALID_DOMAINS
+from api.scoring import compute_tier, hybrid_score, load_profile_data, VALID_DOMAINS, _compute_eligibility_penalty
 from api.skill_matcher import match_skills
 from api import analytics
 
@@ -230,6 +230,13 @@ def _score_and_tier_jobs(
         job["score"] = score
         job["tier"] = compute_tier(score)
 
+        # Eligibility warning: expose restriction text when penalty fired
+        parsed_dict = job["_parsed_dict"]
+        if profile and _compute_eligibility_penalty(profile, parsed_dict, job) < 0:
+            job["eligibility_warning"] = (parsed_dict.get("remote_restriction") or "").strip() or None
+        else:
+            job["eligibility_warning"] = None
+
     jobs.sort(key=lambda j: j["score"], reverse=True)
     return jobs
 
@@ -396,6 +403,13 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
     # Expose domain override in response (already computed above for scoring)
     row["domain_override"] = domain_override
     row["geo_restricted"] = is_reloc
+
+    # Eligibility warning: expose restriction text when penalty fired
+    parsed_for_penalty = row.get("parsed") or {}
+    if profile and _compute_eligibility_penalty(profile, parsed_for_penalty, row) < 0:
+        row["eligibility_warning"] = (parsed_for_penalty.get("remote_restriction") or "").strip() or None
+    else:
+        row["eligibility_warning"] = None
 
     # Skill matches: compute semantic match status for each skill
     row["skill_matches"] = _compute_skill_matches(row, user)
