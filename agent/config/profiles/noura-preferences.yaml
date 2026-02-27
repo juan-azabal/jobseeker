@@ -38,6 +38,10 @@ prefilter:
   - GetApp
   - Software Advice
   - G2
+  - Trioteca
+  - Planteka
+  - Colvin
+  - La Cyca Projects & Services
   location:
     accept_remote: true
     accept_hybrid: true
