@@ -264,6 +264,14 @@ Agent output JSON → POST /api/ingest → upsert jobs table (shared) + user_job
   - Section headings added to MockDashboard ("Your daily feed") and MockJobDetail ("Behind the score")
   - Responsive: MockJobDetail hides gap card + reduces to 1 strength on mobile
 
+Phase 19 — Location Eligibility + Scoring Recalibration (complete: 2026-02-28)
+- 19.0.1–19.0.2: Kill v1 RAG scoring path — all jobs react to profile changes (api + agent)
+- 19.1.1–19.2.1: Eligibility penalty (-20 pts when geo-restricted remote excludes user's home country); graduated location scoring (+8 eligible, +2 ineligible, +10 unrestricted); country_weights skip injecting 'remote' when geo-restricted (api + agent)
+- 19.3.1–19.3.2: Tier thresholds recalibrated — A>60, B>40, C≤40 (api + agent)
+- 19.4.1–19.4.2: `eligibility_warning` field in API responses; red "Not eligible" badge in UI (vs amber "Relocation" for geo_restricted)
+- 19.5.1–19.5.3: Full agent parity for penalty + location scoring; cross-system regression tests reveal and fix two parity bugs (timezone check + EU region eligibility)
+- GATE 19: 639 backend tests + 470 agent tests passing; BUGS.md created
+
 ### Current
 Ingestion Overhaul — complete (2026-02-26)
 - Phase 0.1: WTTJ geographic filter — run_wttj_scraper(target_countries) + Algolia geo filter; juan.yaml: target.wttj_countries: [ES, NL, DE, GB, IE]; 6 tests
@@ -465,10 +473,17 @@ Phase 15 — Geo Filtering (complete: 2026-02-27)
 - `_yaml_to_flat_profile()` / `_apply_flat_to_yaml()` (Phase 18): extracted helpers in `api/routes/onboard.py` to eliminate 3x duplicated YAML→flat normalization. `_yaml_to_flat_profile(raw)` normalizes nested YAML (user/target blocks) to flat dict used by merge and scoring. `_apply_flat_to_yaml(raw, flat)` writes flat dict back into ruamel CommentedMap preserving comments. Used by `get_profile()`, `update_profile()`, and `replace_cv()`.
 - `exclude_companies` location (Phase 18 / C5 root cause): `_build_profile_yaml()` writes it at YAML root level, not under `user` block. All read paths use `raw.get("exclude_companies")`. Not `raw["user"].get("exclude_companies")`. This was the root cause of C5 — GET returned empty list, prefs gen ignored user exclusions.
 - CVReplaceSummary component (Phase 18): replaces full ProfileEditor-in-review-mode pattern. Shows read-only diff: new skills (green, "NEW" badge) + existing skills (gray); new domains + existing; updated factual fields list; preserved weights note. "Looks good" → redirect to /profile.
+- Eligibility penalty (Phase 19): `_compute_eligibility_penalty()` returns -20 when job is remote + has restriction + user home not in restriction text. Bypassed for `loc_pref="d"` and pure timezone restrictions (`is_pure_timezone()`). DUAL-COPY: `api/scoring.py` and `agent/main.py`. Location scoring: geo-restricted remote → +8 if eligible, +2 if ineligible (vs +10 unrestricted). country_weights: `remote` sentinel NOT injected when geo-restricted.
+- Tier thresholds (Phase 19): A>60, B>40, C≤40. Previously A≥50, B≥30. Rationale: hybrid scores have wider range (heuristic + up to +40 from grades). Old thresholds made ~40% of jobs tier A; new thresholds restore A/B/C distribution.
+- `eligibility_warning` field (Phase 19): `str | None` — the raw `remote_restriction` text when penalty fires; null otherwise. Returned in list and detail API responses. Frontend: red "Not eligible" badge when set; amber "Relocation" badge for `geo_restricted` without eligibility_warning; nothing otherwise.
+- `is_pure_timezone()` guard (Phase 19): applied to both `_is_geo_restricted_remote` check and `_compute_eligibility_penalty()` in both api/scoring.py and agent/main.py. Timezone-only restrictions (CET, UTC+2, "EMEA hours") are not country barriers — no penalty, full +10 location bonus.
+- Cross-system parity (Phase 19): Two bugs found by regression test `tests/test_eligibility_regression.py`: (1) API `_compute_eligibility_penalty` and `_is_geo_restricted_remote` lacked `is_pure_timezone()` check; (2) agent location block used only `"europe" in restriction` but not full `_HOME_REGIONS` list for eligibility. Both fixed in 19.5.3.
 
 ### Known Bugs
 
 ### Resolved
+- **P22** (2026-02-28) — Agent `_heuristic_score()` location block used only `"europe" in restriction` for eligibility but not `_HOME_REGIONS` — "EU only" gave +2 instead of +8 for EU users. Fixed: now mirrors API's `any(r.lower() in restriction_lower for r in _HOME_REGIONS)` check.
+- **P21** (2026-02-28) — API `_compute_eligibility_penalty()` and `_is_geo_restricted_remote` lacked `is_pure_timezone()` check — "CET timezone hours" triggered -20 penalty + +2 location (score 0) instead of +10. Fixed by adding `is_pure_timezone()` guard in both.
 - **P20** (2026-02-27) — CV Replace was destructive: `POST /replace-cv` endpoint overwrote existing profile with LLM extraction. Fixed: new `PATCH /replace-cv` does server-side additive merge via `merge_profiles()`; weights/skills/domains from existing profile never lost.
 - **P19** (2026-02-27) — role_type, role_function, track not persisting across any write path (A1–A4). Fixed: GET returns them, PATCH reads and writes them, replace-cv preserves them via merge strategy, TypeScript interface includes them.
 - **P18** (2026-02-26) — `print_summary()` printed "RAG score" mode for v2 jobs (rag_score dict is truthy but has no numeric score). Fixed: now distinguishes v2→"hybrid score", v1→"RAG score", none→"heuristic fit".
