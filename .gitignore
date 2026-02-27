@@ -38,6 +38,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Plans (local planning docs, not for version control)
+Planes/
+
 # Logs
 *.log
 
