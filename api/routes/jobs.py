@@ -396,6 +396,14 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
         row["tier"] = compute_tier(row["score"])
         row["scored"] = None
 
+    # Scoring method: communicate to frontend how this score was computed
+    if ujs and ujs.get("scored_v2") == 1:
+        row["scoring_method"] = "rag_v2"
+    elif ujs and ujs.get("score") is not None:
+        row["scoring_method"] = "rag_v1"
+    else:
+        row["scoring_method"] = "heuristic"
+
     # Aggregate applied/dismissed across all duplicates of this (company, title)
     status = get_job_status_by_title(_db_path(), user["id"], row["company"], row["title"])
     row["applied_at"] = status.get("applied_at") if status else None
