@@ -819,10 +819,13 @@ async def get_profile(user: dict = Depends(get_current_user)):
         "current_level": "",
         "track": target_block.get("track", "ic"),
         "target_level": target_block.get("level", ""),
+        "role_type": target_block.get("role_type", ""),
+        "role_function": target_block.get("role_function", ""),
         "seniority_weights": stored_sw,
         "domains": target_block.get("domains", {}),
         "skills": raw.get("skills", []),
-        "exclude_companies": user_block.get("exclude_companies", []),
+        # exclude_companies lives at YAML root level (not under user block)
+        "exclude_companies": raw.get("exclude_companies", []),
         # UI preferences (may not exist in manually-created YAMLs — use sensible defaults)
         "salary_min": target_block.get("salary_min", 60000),
         "location_preference": user_block.get("location_preference", "b"),
