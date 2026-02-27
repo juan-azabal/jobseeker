@@ -1,8 +1,9 @@
 import os
+from pathlib import Path
 
 import httpx
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile, File
 from pydantic import BaseModel
 
 from api.db.queries import (
@@ -483,3 +484,33 @@ async def trigger_pipeline(body: TriggerRequest = TriggerRequest(), admin: dict 
         status_code=502,
         detail=f"GitHub API returned {resp.status_code}: {resp.text[:200]}",
     )
+
+
+_CV_ALLOWED_FILES = {"generate-cv.md", "ats-rules.md", "master-cv-profile.md", "master-cv-experience.md"}
+
+
+@router.post("/upload-cv-references")
+async def upload_cv_references(
+    files: list[UploadFile] = File(...),
+    admin: dict = Depends(get_current_admin),
+):
+    """Upload CV reference files to CV_REFERENCES_DIR on the server volume.
+
+    Accepts up to 4 .md files. Only whitelisted filenames are accepted.
+    Idempotent — re-uploading overwrites existing files.
+    """
+    refs_dir = Path(os.environ.get("CV_REFERENCES_DIR", "api/cv/references"))
+    refs_dir.mkdir(parents=True, exist_ok=True)
+
+    saved = []
+    rejected = []
+    for upload in files:
+        if upload.filename not in _CV_ALLOWED_FILES:
+            rejected.append(upload.filename)
+            continue
+        content = await upload.read()
+        (refs_dir / upload.filename).write_bytes(content)
+        saved.append(upload.filename)
+        logger.info("CV reference file uploaded", filename=upload.filename, size=len(content), admin=admin["email"])
+
+    return {"saved": saved, "rejected": rejected, "refs_dir": str(refs_dir)}
