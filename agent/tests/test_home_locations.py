@@ -116,8 +116,8 @@ class TestJuanHomeLocations:
             },
         }
         score = _heuristic_score(job)
-        # domain 15 + seniority 15 + remote 10 = 40
-        assert score == 40
+        # domain 15 + seniority 15 + remote 10 + country_weights(remote=10) = 50
+        assert score == 50
 
     def test_hybrid_barcelona_scores_8(self):
         job = {
@@ -158,7 +158,7 @@ class TestJuanHomeLocations:
         assert score == 36
 
     def test_baseline_regression_strong_fit(self):
-        """Same job as baseline test — must still score 56 (after seniority fix)."""
+        """Same job as baseline test — scores 66 (domain+seniority+location+country+skills)."""
         from tests.test_scoring_baseline import JOB_STRONG_FIT
 
-        assert _heuristic_score(JOB_STRONG_FIT) == 56
+        assert _heuristic_score(JOB_STRONG_FIT) == 66

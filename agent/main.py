@@ -264,6 +264,75 @@ _SALARY_THRESHOLD = 130000
 _HOME_LOCATIONS = []
 _HOME_REGIONS = []  # auto-derived from home_locations via country-converter
 _HOME_REGION_RE = None  # compiled regex for word-boundary region matching
+_COUNTRY_WEIGHTS: dict = {}  # populated by _load_heuristic_config(); e.g. {"remote": 10, "netherlands": -10}
+
+# DUAL-COPY: keep identical to api/scoring.py _CITY_TO_COUNTRY.
+_CITY_TO_COUNTRY: dict[str, str] = {
+    # Spain
+    "barcelona": "spain",
+    "madrid": "spain",
+    "valencia": "spain",
+    "bilbao": "spain",
+    "seville": "spain",
+    "sevilla": "spain",
+    # France
+    "paris": "france",
+    "lyon": "france",
+    "marseille": "france",
+    "toulouse": "france",
+    # Germany
+    "berlin": "germany",
+    "munich": "germany",
+    "münchen": "germany",
+    "hamburg": "germany",
+    "frankfurt": "germany",
+    "cologne": "germany",
+    "köln": "germany",
+    # Netherlands
+    "amsterdam": "netherlands",
+    "rotterdam": "netherlands",
+    "utrecht": "netherlands",
+    # UK
+    "london": "uk",
+    "manchester": "uk",
+    "edinburgh": "uk",
+    "bristol": "uk",
+    # Portugal
+    "lisbon": "portugal",
+    "porto": "portugal",
+    "lisboa": "portugal",
+    # Italy
+    "milan": "italy",
+    "rome": "italy",
+    "milano": "italy",
+    "roma": "italy",
+    # Sweden
+    "stockholm": "sweden",
+    "gothenburg": "sweden",
+    # Denmark
+    "copenhagen": "denmark",
+    # Belgium
+    "brussels": "belgium",
+    "bruxelles": "belgium",
+    # Ireland
+    "dublin": "ireland",
+    # Switzerland
+    "zurich": "switzerland",
+    "zürich": "switzerland",
+    "geneva": "switzerland",
+    # Austria
+    "vienna": "austria",
+    "wien": "austria",
+    # Poland
+    "warsaw": "poland",
+    "krakow": "poland",
+    # Czech Republic
+    "prague": "czech republic",
+    # Finland
+    "helsinki": "finland",
+    # Norway
+    "oslo": "norway",
+}
 
 
 def _load_heuristic_config(profile: dict):
@@ -272,6 +341,7 @@ def _load_heuristic_config(profile: dict):
 
     global _PROFILE_SKILLS, _DOMAIN_SCORES, _SENIORITY_SCORES
     global _SALARY_THRESHOLD, _HOME_LOCATIONS, _HOME_REGIONS, _HOME_REGION_RE
+    global _COUNTRY_WEIGHTS
     _PROFILE_SKILLS = [s.lower() for s in (profile.get("skills") or [])]
     _DOMAIN_SCORES = {k.lower(): v for k, v in (profile.get("target", {}).get("domains") or {}).items()}
     # 3-tier fallback: seniority_weights (current) > seniority (legacy) > compute from level+track
@@ -285,6 +355,7 @@ def _load_heuristic_config(profile: dict):
     _HOME_LOCATIONS = [loc.lower() for loc in (profile.get("user", {}).get("home_locations") or [])]
     _HOME_REGIONS = derive_home_regions(_HOME_LOCATIONS)
     _HOME_REGION_RE = build_region_pattern(_HOME_REGIONS)
+    _COUNTRY_WEIGHTS = {k.lower(): int(v) for k, v in (target.get("country_weights") or {}).items()}
 
 
 # Domain override: if parser says "other" but keywords match, reclassify.
@@ -687,12 +758,30 @@ def _heuristic_score(job):
     # Country-pinned remote gets no bonus — treated as reloc
     loc_type = p.get("location_type", "unknown")
     job_loc = (job.get("location") or "").lower()
+    remote_restriction = (p.get("remote_restriction") or "").strip()
+    _is_geo_restricted_remote = (
+        loc_type == "remote"
+        and bool(remote_restriction)
+        and remote_restriction.lower() not in ("null", "none")
+    )
     if loc_type == "remote" and not _is_remote_requiring_reloc(job):
         score += 10
     elif loc_type == "hybrid" and any(c in job_loc for c in _HOME_LOCATIONS):
         score += 8
     elif loc_type == "onsite" and any(c in job_loc for c in _HOME_LOCATIONS):
         score += 6
+
+    # Country weights (±10)
+    # 19.2.1: Only inject 'remote' when there is NO geo restriction.
+    # When restricted, the actual country from locations_mentioned is the signal.
+    if _COUNTRY_WEIGHTS:
+        locations_mentioned = [loc.lower() for loc in (p.get("locations_mentioned") or [])]
+        normalized_locs = {_CITY_TO_COUNTRY.get(loc, loc) for loc in locations_mentioned}
+        if loc_type == "remote" and not _is_geo_restricted_remote:
+            normalized_locs.add("remote")
+        if normalized_locs:
+            best = max(_COUNTRY_WEIGHTS.get(loc, 0) for loc in normalized_locs)
+            score += max(-10, min(10, best))
 
     # Skill overlap (0-30)
     all_text = " ".join(

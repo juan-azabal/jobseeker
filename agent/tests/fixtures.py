@@ -6,7 +6,7 @@ that baseline regression tests remain stable regardless of personal profile
 tuning. Update this fixture only when the scoring algorithm changes.
 
 Design constraints (must satisfy all baseline assertions):
-  strong_fit  → 56  = domain(data=15) + seniority(principal=15) + location(remote=10) + skills(4×4=16)
+  strong_fit  → 66  = domain(data=15) + seniority(principal=15) + location(remote=10) + country_weights(remote=10) + skills(4×4=16)
   medium_fit  → 30  = domain(saas=10) + seniority(senior=8)    + location(hybrid,barcelona=8) + skills(1×4=4)
   low_fit     →  0  = domain(healthtech=0) + seniority(mid=0) + location(onsite,NYC=0) - red_flags(5) → clamped
   rubric core domains      → "data, adtech"

@@ -107,8 +107,9 @@ class TestHeuristicScoreBaseline:
         self.profile = _load_juan_profile()
 
     def test_strong_fit_score(self):
-        # domain(data)=15 + seniority(principal)=15 + location(remote)=10 + skills=16
-        assert _heuristic_score(JOB_STRONG_FIT) == 56
+        # domain(data)=15 + seniority(principal)=15 + location(remote)=10
+        # + country_weights(remote=10) + skills=16
+        assert _heuristic_score(JOB_STRONG_FIT) == 66
 
     def test_medium_fit_score(self):
         # domain(saas)=10 + seniority(senior)=8 + location(hybrid,barcelona)=8 + skills=4
@@ -157,3 +158,76 @@ class TestRubricPromptBaseline:
     def test_rubric_contains_geography(self):
         # Parameterized in 7.2 — Juan's profile sets geography: "EU or remote"
         assert "EU or remote" in self.rubric
+
+
+# ---------------------------------------------------------------------------
+# 19.2.2 — country_weights geo-restriction guard
+# ---------------------------------------------------------------------------
+
+
+class TestCountryWeightsGeoRestriction:
+    """19.2.2: 'remote' is NOT injected into normalized_locs when geo-restricted."""
+
+    def _make_job(self, loc_type="remote", remote_restriction=None, locations_mentioned=None):
+        return {
+            "location": "Remote",
+            "parsed": {
+                "location_type": loc_type,
+                "domain": "data",
+                "seniority": "principal",
+                "must_have_skills": [],
+                "nice_to_have_skills": [],
+                "technical_stack": [],
+                "responsibilities_summary": "",
+                "red_flags": [],
+                "remote_restriction": remote_restriction,
+                "locations_mentioned": locations_mentioned or [],
+            },
+        }
+
+    def setup_method(self):
+        from tests.fixtures import BASELINE_PROFILE
+        import copy
+
+        _load_heuristic_config(copy.deepcopy(BASELINE_PROFILE))
+        # Baseline profile: country_weights = {"spain": 10, "remote": 10}
+
+    def test_unrestricted_remote_injects_remote_key(self):
+        """No restriction → 'remote' injected → country_weights['remote']=+10 applied."""
+        job = self._make_job(remote_restriction=None)
+        score = _heuristic_score(job)
+        # domain(15) + seniority(15) + location(10) + country(remote=10) + skills(0) = 50
+        assert score == 50
+
+    def test_geo_restricted_remote_no_remote_injection(self):
+        """NL-only restriction → 'remote' NOT injected; 'netherlands' used instead.
+
+        Baseline profile has no 'netherlands' weight, so country delta = 0.
+        """
+        job = self._make_job(
+            remote_restriction="Netherlands only",
+            locations_mentioned=["netherlands"],
+        )
+        score = _heuristic_score(job)
+        # domain(15) + seniority(15) + location(0, is_reloc→no bonus) + country(0, nl not in cw) + skills(0) = 30
+        # Note: remote weight (+10) must NOT be applied for geo-restricted job
+        assert score < 50, "remote weight must not be injected for geo-restricted remote"
+
+    def test_geo_restricted_remote_negative_country_weight_applied(self):
+        """NL-only restriction + netherlands:-10 in cw → -10 applied (not remote:+10)."""
+        from tests.fixtures import BASELINE_PROFILE
+        import copy
+
+        profile = copy.deepcopy(BASELINE_PROFILE)
+        profile["target"]["country_weights"] = {"netherlands": -10, "remote": 10}
+        _load_heuristic_config(profile)
+
+        job = self._make_job(
+            remote_restriction="Netherlands only",
+            locations_mentioned=["netherlands"],
+        )
+        score_with_negative = _heuristic_score(job)
+        score_with_no_weight = _heuristic_score(self._make_job(remote_restriction="Netherlands only"))
+        assert score_with_negative <= score_with_no_weight, (
+            "netherlands:-10 must reduce score vs no weight; remote:+10 must not override"
+        )
