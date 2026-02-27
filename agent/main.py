@@ -824,9 +824,13 @@ def _heuristic_score(job):
             for _loc in _HOME_LOCATIONS:
                 home_countries_check.add(_CITY_TO_COUNTRY.get(_loc, _loc))
                 home_countries_check.add(_loc)
+            # Mirrors api/scoring.py eligibility check: home country OR any home region
             _user_eligible = (
                 any(c in restriction_lower for c in home_countries_check if c)
-                or ("europe" in restriction_lower and bool(_HOME_REGIONS))
+                or (bool(_HOME_REGIONS) and (
+                    "europe" in restriction_lower
+                    or any(r.lower() in restriction_lower for r in _HOME_REGIONS)
+                ))
             )
             score += 8 if _user_eligible else 2  # 19.1.3
         else:

@@ -838,8 +838,14 @@ def _compute_eligibility_penalty(profile: dict, parsed: dict, job: dict) -> int:
     Returns -20 when user is ineligible, 0 otherwise.
     Only applies to remote jobs (remote_restriction is meaningless for onsite).
     """
+    from api.geo import is_pure_timezone
+
     restriction = (parsed.get("remote_restriction") or "").strip()
     if not restriction or restriction.lower() in ("null", "none"):
+        return 0
+
+    # Timezone-only restrictions (CET, UTC+2) are not country barriers — no penalty
+    if is_pure_timezone(restriction):
         return 0
 
     # Only applies to remote jobs
@@ -946,8 +952,14 @@ def heuristic_score(
     home_regions = profile.get("home_regions", [])
 
     # Determine geo-restriction status once for location + country_weights blocks
+    from api.geo import is_pure_timezone as _is_pure_tz
     remote_restriction = (parsed.get("remote_restriction") or "").strip()
-    _is_geo_restricted_remote = loc_type == "remote" and bool(remote_restriction) and remote_restriction.lower() not in ("null", "none")
+    _is_geo_restricted_remote = (
+        loc_type == "remote"
+        and bool(remote_restriction)
+        and remote_restriction.lower() not in ("null", "none")
+        and not _is_pure_tz(remote_restriction)  # timezone-only is not a country barrier
+    )
     # Check if user is eligible (home country in restriction text)
     _user_eligible = not _is_geo_restricted_remote
     if _is_geo_restricted_remote:
