@@ -96,10 +96,10 @@ def authed_client(tmp_path, monkeypatch):
     monkeypatch.setenv("DB_PATH", db_path)
     monkeypatch.setenv("CV_REFERENCES_DIR", str(tmp_path / "refs"))
 
-    # Create minimal reference files so prompt builder doesn't fail
+    # Create the 2 logic reference files (personal CV comes from DB)
     refs = tmp_path / "refs"
     refs.mkdir()
-    for name in ["generate-cv.md", "ats-rules.md", "master-cv-profile.md", "master-cv-experience.md"]:
+    for name in ["generate-cv.md", "ats-rules.md"]:
         (refs / name).write_text(f"# {name}\nReference content for {name}.")
 
     user = upsert_user(

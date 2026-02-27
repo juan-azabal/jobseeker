@@ -40,18 +40,16 @@ SAMPLE_JOB = {
 
 @pytest.fixture
 def mock_references_dir(tmp_path):
-    """Create a temp dir with the 4 required reference files."""
+    """Create a temp dir with the 2 required logic reference files."""
     refs = tmp_path / "references"
     refs.mkdir()
     (refs / "generate-cv.md").write_text("# Generate CV Instructions\nTailor to the JD.")
     (refs / "ats-rules.md").write_text("# ATS Rules\nNo tables. No unicode bullets.")
-    (refs / "master-cv-profile.md").write_text("# Profile\nJuan Azabal, Senior PM.")
-    (refs / "master-cv-experience.md").write_text("# Experience\nAcme Corp 2020-2023.")
     return refs
 
 
-def test_system_prompt_contains_all_four_sections(monkeypatch, mock_references_dir):
-    """System prompt must include all 4 reference file sections."""
+def test_system_prompt_contains_logic_sections_and_cv(monkeypatch, mock_references_dir):
+    """System prompt must include the 2 logic file sections plus candidate CV."""
     monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
 
     import importlib
@@ -59,14 +57,15 @@ def test_system_prompt_contains_all_four_sections(monkeypatch, mock_references_d
 
     importlib.reload(prompt_module)
 
-    system, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
+    cv_content = "# My CV\nSenior PM with 10 years experience."
+    system, user = prompt_module.build_cv_prompts(SAMPLE_JOB, cv_content)
 
     assert "SECTION: generate-cv.md" in system
     assert "SECTION: ats-rules.md" in system
-    assert "SECTION: master-cv-profile.md" in system
-    assert "SECTION: master-cv-experience.md" in system
+    assert "SECTION: candidate-master-cv.md" in system
     assert "Generate CV Instructions" in system
     assert "ATS Rules" in system
+    assert "Senior PM with 10 years experience." in system
 
 
 def test_system_prompt_contains_output_contract(monkeypatch, mock_references_dir):
@@ -166,14 +165,14 @@ def test_system_prompt_contains_limits_clause_requirement(monkeypatch, mock_refe
 
 
 def test_system_prompt_is_substantial(monkeypatch, mock_references_dir):
-    """System prompt must be > 5000 chars (includes real reference content)."""
+    """System prompt must be > 5000 chars (logic files + user CV + output contract)."""
     monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
 
     # Use a bigger ref dir for this test
     big_refs = mock_references_dir.parent / "big_references"
     big_refs.mkdir()
-    for name in ["generate-cv.md", "ats-rules.md", "master-cv-profile.md", "master-cv-experience.md"]:
-        (big_refs / name).write_text("x" * 1400)  # 4 files × 1400 = 5600 chars
+    for name in ["generate-cv.md", "ats-rules.md"]:
+        (big_refs / name).write_text("x" * 1000)  # 2 files × 1000 + cv = 5000+ with output contract
 
     monkeypatch.setenv("CV_REFERENCES_DIR", str(big_refs))
 
@@ -182,7 +181,9 @@ def test_system_prompt_is_substantial(monkeypatch, mock_references_dir):
 
     importlib.reload(prompt_module)
 
-    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "")
+    # The output contract alone is ~3000 chars; add 2000 from files + cv to exceed 5000
+    big_cv = "y" * 3000
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, big_cv)
     assert len(system) > 5000
 
 
@@ -251,14 +252,11 @@ def test_missing_jd_raises_value_error(monkeypatch, mock_references_dir):
 
 
 def test_missing_reference_file_raises_file_not_found(monkeypatch, tmp_path):
-    """Missing reference file raises FileNotFoundError with the filename."""
+    """Missing logic reference file raises FileNotFoundError with the filename."""
     incomplete_refs = tmp_path / "incomplete"
     incomplete_refs.mkdir()
-    # Only create 3 of the 4 files
+    # Only create generate-cv.md; ats-rules.md is missing
     (incomplete_refs / "generate-cv.md").write_text("content")
-    (incomplete_refs / "ats-rules.md").write_text("content")
-    (incomplete_refs / "master-cv-profile.md").write_text("content")
-    # master-cv-experience.md is missing
 
     monkeypatch.setenv("CV_REFERENCES_DIR", str(incomplete_refs))
 
@@ -267,12 +265,12 @@ def test_missing_reference_file_raises_file_not_found(monkeypatch, tmp_path):
 
     importlib.reload(prompt_module)
 
-    with pytest.raises(FileNotFoundError, match="master-cv-experience.md"):
+    with pytest.raises(FileNotFoundError, match="ats-rules.md"):
         prompt_module.build_cv_prompts(SAMPLE_JOB, "")
 
 
-def test_user_cv_included_when_provided(monkeypatch, mock_references_dir):
-    """User's cv.md content is appended to the user prompt when provided."""
+def test_user_cv_included_in_system_prompt(monkeypatch, mock_references_dir):
+    """User's cv.md content appears in the system prompt as the authoritative source."""
     monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
 
     import importlib
@@ -280,8 +278,9 @@ def test_user_cv_included_when_provided(monkeypatch, mock_references_dir):
 
     importlib.reload(prompt_module)
 
-    _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "My personal cv content here.")
-    assert "My personal cv content here." in user
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "My personal cv content here.")
+    assert "My personal cv content here." in system
+    assert "SECTION: candidate-master-cv.md" in system
 
 
 def test_system_prompt_contains_volume_rules(monkeypatch, mock_references_dir):
@@ -503,8 +502,8 @@ def test_build_cv_prompts_with_plan_user_no_separate_score_breakdown(monkeypatch
     )
 
 
-def test_build_cv_prompts_with_plan_user_cv_still_included(monkeypatch, mock_references_dir):
-    """User's cv.md content is still appended even when a plan is provided."""
+def test_build_cv_prompts_with_plan_cv_in_system_prompt(monkeypatch, mock_references_dir):
+    """User's cv.md content appears in the system prompt even when a plan is provided."""
     monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
 
     import importlib
@@ -512,9 +511,10 @@ def test_build_cv_prompts_with_plan_user_cv_still_included(monkeypatch, mock_ref
 
     importlib.reload(prompt_module)
 
-    _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "My personal CV context.", SAMPLE_PLAN)
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "My personal CV context.", SAMPLE_PLAN)
 
-    assert "My personal CV context." in user
+    assert "My personal CV context." in system
+    assert "SECTION: candidate-master-cv.md" in system
 
 
 def test_build_cv_prompts_backward_compat_no_plan_arg(monkeypatch, mock_references_dir):

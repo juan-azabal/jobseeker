@@ -584,7 +584,7 @@ def generate_cv_endpoint(
 ):
     """Generate an ATS-compliant tailored CV .docx for the given job."""
     from api.cv.plan import build_cv_plan
-    from api.cv.prompt import build_cv_prompts, load_reference_files_dict
+    from api.cv.prompt import build_cv_prompts
     from api.cv.llm import generate_cv
     from api.cv.docx_builder import build_docx
     from api.cv.ats_audit import audit_docx
@@ -609,17 +609,16 @@ def generate_cv_endpoint(
     if ujs and ujs.get("scored"):
         row["scored"] = ujs["scored"]
 
+    # Plan is built from the job data + the user's CV (from DB) — no disk files
+    plan = build_cv_plan(row, user_cv_markdown)
+
     try:
-        reference_files = load_reference_files_dict()
+        system_prompt, user_prompt = build_cv_prompts(row, user_cv_markdown, plan)
     except FileNotFoundError as e:
         return JSONResponse(
             status_code=422,
             content={"error": "missing_references", "detail": str(e)},
         )
-    plan = build_cv_plan(row, reference_files)
-
-    try:
-        system_prompt, user_prompt = build_cv_prompts(row, user_cv_markdown, plan)
     except ValueError:
         return JSONResponse(
             status_code=422,

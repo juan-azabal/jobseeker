@@ -16,12 +16,11 @@ import json
 import os
 from pathlib import Path
 
-# Ordered list of reference files required by the CV generation pipeline
+# Logic files committed to the repo — apply to every user.
+# The candidate's personal CV comes from users.cv_md (DB), not from files.
 _REFERENCE_FILES = [
     "generate-cv.md",
     "ats-rules.md",
-    "master-cv-profile.md",
-    "master-cv-experience.md",
 ]
 
 # Output contract appended to the system prompt — the LLM must follow this format exactly
@@ -247,26 +246,16 @@ def _get_references_dir() -> Path:
 
 
 def load_reference_files_dict() -> dict[str, str]:
-    """Load the plan-relevant reference files as a filename → content dict.
+    """Deprecated — returns empty dict.
 
-    Used by the endpoint to pass reference content to build_cv_plan().
-    Returns an empty dict or partial dict if files are missing — the plan
-    builder handles missing files gracefully.
+    Previously loaded master-cv-profile.md and master-cv-experience.md.
+    Those files contained per-user personal data and have been replaced by
+    users.cv_md from the database.  The candidate's CV is now injected into
+    the system prompt by build_cv_prompts() via the user_cv_markdown param.
 
-    Returns:
-        Dict with keys "master-cv-profile.md" and "master-cv-experience.md"
-        (and their content as strings).  Missing files are silently skipped.
+    Kept to avoid breaking any external callers during migration.
     """
-    refs_dir = _get_references_dir()
-    result: dict[str, str] = {}
-    for filename in ("master-cv-profile.md", "master-cv-experience.md"):
-        path = refs_dir / filename
-        if path.exists():
-            try:
-                result[filename] = path.read_text(encoding="utf-8")
-            except OSError:
-                pass
-    return result
+    return {}
 
 
 def _load_reference_files(refs_dir: Path) -> str:
@@ -340,6 +329,16 @@ def build_cv_prompts(
     refs_dir = _get_references_dir()
     reference_content = _load_reference_files(refs_dir)
 
+    # Inject the user's CV as the authoritative candidate source.
+    # It replaces the old per-user reference files (master-cv-profile.md /
+    # master-cv-experience.md) that used to be committed to the repo.
+    cv_section = ""
+    if user_cv_markdown and user_cv_markdown.strip():
+        cv_section = (
+            "\n\n--- SECTION: candidate-master-cv.md ---\n\n"
+            + user_cv_markdown.strip()
+        )
+
     # Parse JSON blobs from job
     parsed: dict = {}
     scored: dict = {}
@@ -360,12 +359,12 @@ def build_cv_prompts(
 
     # ── Plan-aware path ───────────────────────────────────────────────────
     if cv_plan:
-        system_prompt = reference_content + "\n\n" + _OUTPUT_CONTRACT + "\n\n" + _PLAN_AWARE_RULES
-        user_prompt = _build_plan_aware_user_prompt(job, jd_text, cv_plan, user_cv_markdown)
+        system_prompt = reference_content + cv_section + "\n\n" + _OUTPUT_CONTRACT + "\n\n" + _PLAN_AWARE_RULES
+        user_prompt = _build_plan_aware_user_prompt(job, jd_text, cv_plan)
         return system_prompt, user_prompt
 
     # ── Legacy path (no plan) ─────────────────────────────────────────────
-    system_prompt = reference_content + "\n\n" + _OUTPUT_CONTRACT
+    system_prompt = reference_content + cv_section + "\n\n" + _OUTPUT_CONTRACT
 
     # Extract scoring details
     rag = scored.get("rag_score", scored)
@@ -407,14 +406,6 @@ def build_cv_prompts(
             else:
                 user_parts.append(f"- {g}")
 
-    if user_cv_markdown and user_cv_markdown.strip():
-        user_parts += [
-            "",
-            "## Candidate's CV (for additional context)",
-            "",
-            user_cv_markdown.strip(),
-        ]
-
     user_prompt = "\n".join(user_parts)
     return system_prompt, user_prompt
 
@@ -423,9 +414,10 @@ def _build_plan_aware_user_prompt(
     job: dict,
     jd_text: str,
     cv_plan: dict,
-    user_cv_markdown: str,
 ) -> str:
     """Build the simplified user prompt for plan-aware generation.
+
+    The candidate's CV is in the system prompt (candidate-master-cv.md section).
 
     Structure:
         ## CV Generation Plan
@@ -457,17 +449,6 @@ def _build_plan_aware_user_prompt(
         f"Company:  {job.get('company', 'N/A')}",
         f"Location: {job.get('location', 'N/A')}",
         f"Score:    {job.get('score', 'N/A')} (Tier {job.get('tier', 'N/A')})",
-    ]
-
-    if user_cv_markdown and user_cv_markdown.strip():
-        parts += [
-            "",
-            "## Candidate's CV (for additional context)",
-            "",
-            user_cv_markdown.strip(),
-        ]
-
-    parts += [
         "",
         "---",
         "",

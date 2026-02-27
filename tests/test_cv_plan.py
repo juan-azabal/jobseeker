@@ -128,17 +128,15 @@ MBA - IESE Business School, 2017
 Spanish (native) | English (advanced) | Catalan (basic)
 """
 
-SAMPLE_REF_FILES = {
-    "master-cv-profile.md": SAMPLE_PROFILE,
-    "master-cv-experience.md": SAMPLE_EXPERIENCE,
-}
+# Combined CV markdown passed to build_cv_plan (replaces the old ref_files dict)
+SAMPLE_CV_MARKDOWN = SAMPLE_PROFILE + "\n\n" + SAMPLE_EXPERIENCE
 
 
 # ── Helper ────────────────────────────────────────────────────────────────
 
 
-def _plan(job=WEFIIT_LIKE_JOB, ref_files=None):
-    return build_cv_plan(job, ref_files or SAMPLE_REF_FILES)
+def _plan(job=WEFIIT_LIKE_JOB, cv_markdown=None):
+    return build_cv_plan(job, cv_markdown if cv_markdown is not None else SAMPLE_CV_MARKDOWN)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -171,7 +169,7 @@ def test_jd_context_company_type_in_house():
         ),
         "scored": None,
     }
-    plan = build_cv_plan(in_house_job, SAMPLE_REF_FILES)
+    plan = build_cv_plan(in_house_job, SAMPLE_CV_MARKDOWN)
     assert plan["jd_context"]["company_type"] == "in_house"
 
 
@@ -184,7 +182,7 @@ def test_jd_context_location_hints_french_for_paris():
 
 def test_jd_context_location_hints_german_for_berlin():
     """Berlin-based job → location_language_hints contains 'German'."""
-    plan = build_cv_plan(NO_SCORE_JOB, SAMPLE_REF_FILES)
+    plan = build_cv_plan(NO_SCORE_JOB, SAMPLE_CV_MARKDOWN)
     hints = plan["jd_context"]["location_language_hints"]
     assert "German" in hints, f"Expected 'German' in hints for Berlin job, got {hints}"
 
@@ -206,7 +204,7 @@ def test_jd_context_location_hints_empty_for_english_cities():
         ),
         "scored": None,
     }
-    plan = build_cv_plan(uk_job, SAMPLE_REF_FILES)
+    plan = build_cv_plan(uk_job, SAMPLE_CV_MARKDOWN)
     assert plan["jd_context"]["location_language_hints"] == [], (
         f"Expected empty hints for London, got {plan['jd_context']['location_language_hints']}"
     )
@@ -387,14 +385,8 @@ def test_bullet_allocation_sql_rich_company_gets_higher_budget():
 
 
 def test_bullet_allocation_empty_when_no_experience():
-    """Empty experience file → empty bullet_allocation."""
-    plan = build_cv_plan(
-        WEFIIT_LIKE_JOB,
-        {
-            "master-cv-profile.md": SAMPLE_PROFILE,
-            "master-cv-experience.md": "",
-        },
-    )
+    """Empty CV → empty bullet_allocation."""
+    plan = build_cv_plan(WEFIIT_LIKE_JOB, "")
     assert plan["bullet_allocation"] == {}
 
 
@@ -405,7 +397,7 @@ def test_bullet_allocation_empty_when_no_experience():
 
 def test_no_scored_data_plan_still_builds():
     """Job with no scored data must still return a valid plan (no exceptions)."""
-    plan = build_cv_plan(NO_SCORE_JOB, SAMPLE_REF_FILES)
+    plan = build_cv_plan(NO_SCORE_JOB, SAMPLE_CV_MARKDOWN)
     assert isinstance(plan, dict)
     for key in ("jd_context", "score_summary", "strengths", "gaps", "bullet_allocation", "source_facts"):
         assert key in plan, f"Missing top-level key: {key}"
@@ -413,7 +405,7 @@ def test_no_scored_data_plan_still_builds():
 
 def test_no_scored_data_score_summary_defaults():
     """No scored data → score_summary.total == 0, dimension_guidance == {}."""
-    plan = build_cv_plan(NO_SCORE_JOB, SAMPLE_REF_FILES)
+    plan = build_cv_plan(NO_SCORE_JOB, SAMPLE_CV_MARKDOWN)
     assert plan["score_summary"]["total"] == 0
     assert plan["score_summary"]["dimension_guidance"] == {}
     assert plan["strengths"] == []
@@ -422,7 +414,7 @@ def test_no_scored_data_score_summary_defaults():
 
 def test_no_scored_data_bullet_allocation_still_built():
     """No scored data → bullet_allocation is built from experience, even allocation."""
-    plan = build_cv_plan(NO_SCORE_JOB, SAMPLE_REF_FILES)
+    plan = build_cv_plan(NO_SCORE_JOB, SAMPLE_CV_MARKDOWN)
     # Allocation should still have companies (even with no JD overlap)
     assert len(plan["bullet_allocation"]) > 0
     total = sum(v["budget"] for v in plan["bullet_allocation"].values())
@@ -433,13 +425,13 @@ def test_parsed_as_dict_accepted():
     """Job where 'parsed' is already a dict (not a JSON string) must work."""
     job_with_dict = dict(WEFIIT_LIKE_JOB)
     job_with_dict["parsed"] = json.loads(WEFIIT_LIKE_JOB["parsed"])
-    plan = build_cv_plan(job_with_dict, SAMPLE_REF_FILES)
+    plan = build_cv_plan(job_with_dict, SAMPLE_CV_MARKDOWN)
     assert plan["jd_context"]["company_type"] == "consultancy"
 
 
-def test_missing_reference_files_returns_empty_source_facts():
-    """Missing reference files → source_facts fields are empty but plan builds."""
-    plan = build_cv_plan(WEFIIT_LIKE_JOB, {})
+def test_empty_cv_returns_empty_source_facts():
+    """Empty cv_markdown → source_facts fields are empty but plan builds."""
+    plan = build_cv_plan(WEFIIT_LIKE_JOB, "")
     assert plan["source_facts"]["title"] == ""
     assert plan["source_facts"]["years_experience"] == ""
     assert plan["source_facts"]["languages"] == []

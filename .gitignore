@@ -41,7 +41,10 @@ Thumbs.db
 # Logs
 *.log
 
-# CV reference files — committed (private repo, pure generation logic)
+# CV logic files (generate-cv.md, ats-rules.md) are committed.
+# Per-user master CV files are personal data — stored in users.cv_md (DB).
+api/cv/references/master-cv-profile.md
+api/cv/references/master-cv-experience.md
 .claude/*
 !.claude/rules/
 

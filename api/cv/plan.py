@@ -163,15 +163,14 @@ _IN_HOUSE_SIGNALS = [
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def build_cv_plan(job: dict, reference_files: dict) -> dict:
-    """Build a CV generation plan from scored job data + reference files.
+def build_cv_plan(job: dict, user_cv_markdown: str = "") -> dict:
+    """Build a CV generation plan from scored job data + the user's CV.
 
     Args:
         job: Full job dict from SQLite. `parsed` and `scored` fields may be
              JSON strings or already-decoded dicts.
-        reference_files: Dict keyed by filename containing file content strings.
-                         Expected keys: "master-cv-profile.md",
-                                        "master-cv-experience.md"
+        user_cv_markdown: The user's master CV text from the database
+                          (users.cv_md).  Empty string → conservative defaults.
 
     Returns:
         Plan dict with keys: jd_context, score_summary, strengths, gaps,
@@ -180,8 +179,7 @@ def build_cv_plan(job: dict, reference_files: dict) -> dict:
     This function never raises — missing data produces conservative defaults.
     """
     parsed, scored = _parse_job_blobs(job)
-    profile_text = reference_files.get("master-cv-profile.md", "")
-    experience_text = reference_files.get("master-cv-experience.md", "")
+    cv_text = user_cv_markdown or ""
 
     jd_text = parsed.get("description", "") or ""
     location = (parsed.get("locations_mentioned") or [""])[0]
@@ -192,11 +190,11 @@ def build_cv_plan(job: dict, reference_files: dict) -> dict:
         "strengths": scored.get("strengths", []),
         "gaps": scored.get("gaps", []),
         "bullet_allocation": _build_bullet_allocation(
-            _parse_companies_from_experience(experience_text),
-            experience_text,
+            _parse_companies_from_experience(cv_text),
+            cv_text,
             parsed,
         ),
-        "source_facts": _extract_source_facts(profile_text, experience_text),
+        "source_facts": _extract_source_facts(cv_text),
     }
 
 
@@ -358,12 +356,17 @@ def _build_score_summary(scored: dict) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _extract_source_facts(profile_text: str, experience_text: str) -> dict:
+def _extract_source_facts(cv_text: str) -> dict:
+    """Extract source facts from the user's full CV markdown.
+
+    The same cv_text is searched for all facts — the parsers are tolerant
+    of format variation and return empty values when the section is absent.
+    """
     return {
-        "title": _extract_title(profile_text),
-        "years_experience": _extract_years(experience_text),
-        "languages": _extract_languages(profile_text),
-        "core_skills_themes": _extract_core_skills_themes(profile_text),
+        "title": _extract_title(cv_text),
+        "years_experience": _extract_years(cv_text),
+        "languages": _extract_languages(cv_text),
+        "core_skills_themes": _extract_core_skills_themes(cv_text),
     }
 
 
