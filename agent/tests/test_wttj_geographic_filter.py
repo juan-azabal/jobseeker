@@ -45,8 +45,11 @@ class TestWTTJGeographicFilter:
             assert "offices.country_code:GB" in f, f"GB missing from filter: {f}"
             assert "offices.country_code:IE" in f, f"IE missing from filter: {f}"
 
-    def test_filter_includes_remote_regardless_of_country(self):
-        """Filter must include remote:fulltime and remote:partial so remote jobs from any country pass."""
+    def test_filter_includes_remote_fulltime_not_partial(self):
+        """Filter must include remote:fulltime (global remote OK).
+        remote:partial must NOT be included globally — only target-country partial is OK
+        and that is covered by the offices.country_code clause.
+        """
         from wttj_scraper import run_wttj_scraper
 
         captured = []
@@ -57,7 +60,7 @@ class TestWTTJGeographicFilter:
         for body in captured:
             f = body.get("filters", "")
             assert "remote:fulltime" in f, f"remote:fulltime missing from filter: {f}"
-            assert "remote:partial" in f, f"remote:partial missing from filter: {f}"
+            assert "remote:partial" not in f, f"remote:partial should not be global in filter: {f}"
 
     def test_france_onsite_excluded_when_fr_not_in_target(self):
         """When FR not in target_countries, filter must not include offices.country_code:FR."""
@@ -72,8 +75,8 @@ class TestWTTJGeographicFilter:
             f = body.get("filters", "")
             assert "country_code:FR" not in f, f"FR unexpectedly in filter: {f}"
 
-    def test_default_target_countries_includes_es_and_remote(self):
-        """When called without target_countries, defaults to ES + remote only."""
+    def test_default_target_countries_includes_es_and_fulltime_remote(self):
+        """When called without target_countries, defaults to ES + remote:fulltime only."""
         from wttj_scraper import run_wttj_scraper
 
         captured = []
@@ -85,7 +88,7 @@ class TestWTTJGeographicFilter:
             f = body.get("filters", "")
             assert "offices.country_code:ES" in f
             assert "remote:fulltime" in f
-            assert "remote:partial" in f
+            assert "remote:partial" not in f
 
     def test_pm_filter_preserved_alongside_geo_filter(self):
         """Existing PM profession filter must still be present in every query."""

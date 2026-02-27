@@ -213,17 +213,26 @@ def _search_wttj_google(queries) -> list[RawJob]:
 
 
 def _build_geo_filter(target_countries: list[str]) -> str:
-    """Build Algolia geo filter: target country offices OR any remote job.
+    """Build Algolia geo filter: target country offices OR fulltime remote.
+
+    Logic:
+    - Onsite (remote:no): only target countries → in-office attendance required
+    - Partial remote (remote:partial): only target countries → regular office visits required
+    - Full remote (remote:fulltime): any country → viable from anywhere
+
+    remote:partial from non-target countries is excluded because WTTJ's "partial" tag
+    means the company REQUIRES regular in-office presence. "Quarterly gatherings" companies
+    use remote:fulltime, not remote:partial.
 
     Args:
         target_countries: ISO 2-letter country codes (e.g. ["ES", "NL", "DE"]).
 
     Returns:
         Algolia filter string fragment, e.g.:
-        "(offices.country_code:ES OR offices.country_code:NL OR remote:fulltime OR remote:partial)"
+        "(offices.country_code:ES OR offices.country_code:NL OR remote:fulltime)"
     """
     parts = [f"offices.country_code:{code}" for code in target_countries]
-    parts += ["remote:fulltime", "remote:partial"]
+    parts.append("remote:fulltime")
     return "(" + " OR ".join(parts) + ")"
 
 

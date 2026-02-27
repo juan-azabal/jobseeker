@@ -1152,19 +1152,33 @@ def main():
         print("(--notify: email digest will be sent)")
     print("=" * 70)
 
+    # Derive target_countries for geo filtering — single source of truth for all filters
+    home_locations_for_geo = profile.get("user", {}).get("home_locations", [])
+    from geo import derive_target_countries as _derive_target_countries  # noqa: PLC0415
+    target_countries: list[str] = _derive_target_countries(home_locations_for_geo)
+    if not target_countries:
+        # Fallback: read wttj_countries from profile as proxy for target countries
+        target_countries = profile.get("target", {}).get("wttj_countries") or []
+
     # Step 1a: Scrape job boards → list[RawJob]
     all_raw: list[RawJob] = run_scraper(config_path=searches_path)
 
     # Step 1b: Poll ATS watchlist → list[RawJob]
+    geo_rejected_at_scrape = 0
     try:
-        ats_jobs = run_watchlist_scraper(config_path=watchlist_path)
+        ats_jobs, ats_geo_rejected = run_watchlist_scraper(
+            config_path=watchlist_path,
+            target_countries=target_countries or None,
+        )
         all_raw.extend(ats_jobs)
+        geo_rejected_at_scrape += ats_geo_rejected
     except Exception as e:
         print(f"\nWatchlist error (continuing without): {e}")
 
     # Step 1c: Welcome to the Jungle → list[RawJob]
     try:
-        wttj_countries = profile.get("target", {}).get("wttj_countries") or ["ES"]
+        # WTTJ uses target_countries directly (same ISO2 codes)
+        wttj_countries = target_countries or profile.get("target", {}).get("wttj_countries") or ["ES"]
         wttj_jobs = run_wttj_scraper(target_countries=wttj_countries)
         all_raw.extend(wttj_jobs)
     except Exception as e:
@@ -1172,6 +1186,33 @@ def main():
 
     # Step 1.5: Merge duplicates across sources (field-group priority)
     raw_jobs: list[RawJob] = merge_jobs(all_raw)
+
+    # Enrichment stats: measure Glassdoor ↔ LinkedIn overlap after merge
+    _src_counts: dict[str, int] = {}
+    for j in raw_jobs:
+        for s in (j.sources or []):
+            _src_counts[s] = _src_counts.get(s, 0) + 1
+    _multi_src = sum(1 for j in raw_jobs if len(j.sources or []) > 1)
+    _ld_gd = sum(
+        1 for j in raw_jobs
+        if j.sources and "linkedin" in j.sources and "glassdoor" in j.sources
+    )
+    _ld_gd_enriched = sum(
+        1 for j in raw_jobs
+        if j.sources and "linkedin" in j.sources and "glassdoor" in j.sources and j.location
+    )
+    if _src_counts:
+        src_summary = ", ".join(f"{s}={n}" for s, n in sorted(_src_counts.items()))
+        print(f"\n📊 Sources: {src_summary}")
+        if _multi_src:
+            print(f"   Multi-source merges: {_multi_src} | LinkedIn∩Glassdoor: {_ld_gd} ({_ld_gd_enriched} with location enriched)")
+        logger.info(
+            "merge_enrichment_stats",
+            source_counts=_src_counts,
+            multi_source=_multi_src,
+            linkedin_glassdoor_overlap=_ld_gd,
+            linkedin_glassdoor_enriched=_ld_gd_enriched,
+        )
 
     # Convert to dicts for downstream (prefilter/parser/scorer still use plain dicts)
     jobs = _to_dicts(raw_jobs)
@@ -1207,12 +1248,70 @@ def main():
 
     # Step 2: Pre-filter (always runs on all jobs — applies latest applied.yaml/preferences.yaml)
     home_locations = profile.get("user", {}).get("home_locations", [])
+    _profile_role_function = (profile.get("target") or {}).get("role_function")
     passed, rejected, prefilter_stats = prefilter_jobs(
         jobs,
         config_path=preferences_path,
         applied_path=applied_path,
         seen_path=seen_ids_path,
         home_locations=home_locations,
+        profile_role_function=_profile_role_function,
+        target_countries=target_countries or None,
+    )
+
+    # Geo filter summary (15.7)
+    geo_rejected_at_prefilter = prefilter_stats.get("non_target_geo", 0)
+    geo_passed = prefilter_stats.get("passed", 0)
+    total_scraped = len(jobs)
+    if geo_rejected_at_scrape or geo_rejected_at_prefilter:
+        print(
+            f"\n🌍 Geo filter: {geo_rejected_at_scrape} rejected at scrape, "
+            f"{geo_rejected_at_prefilter} rejected at prefilter → {geo_passed} passed"
+        )
+        geo_rejected_jobs = [
+            j for j in rejected if "non-target geography" in (j.get("reject_reason") or "")
+        ]
+        if geo_rejected_jobs:
+            print("   Sample geo rejections:")
+            for j in geo_rejected_jobs[:5]:
+                print(f"   ❌ {j['title']} @ {j['company']} → {j.get('reject_reason', '')}")
+    logger.info(
+        "geo_filter_stats",
+        total_scraped=total_scraped,
+        geo_rejected_at_scrape=geo_rejected_at_scrape,
+        geo_rejected_at_prefilter=geo_rejected_at_prefilter,
+        geo_passed=geo_passed,
+    )
+
+    # PostHog per-job geo filter tracking (15.8)
+    geo_rejected_jobs = [
+        j for j in rejected if "non-target geography" in (j.get("reject_reason") or "")
+    ]
+    for j in geo_rejected_jobs:
+        _capture(
+            profile_id,
+            "geo_filter_applied",
+            {
+                "job_id": j.get("id"),
+                "company": j.get("company"),
+                "location": j.get("location"),
+                "detected_country": (j.get("reject_reason") or "").split("geography:")[-1].strip().split(" ")[0],
+                "filter_layer": j.get("_geo_layer"),
+                "source": j.get("source"),
+            },
+        )
+    _capture(
+        profile_id,
+        "geo_filter_run_stats",
+        {
+            "total_scraped": total_scraped,
+            "geo_rejected_at_scrape": geo_rejected_at_scrape,
+            "geo_rejected_at_prefilter": geo_rejected_at_prefilter,
+            "geo_passed": geo_passed,
+            "layer_location": sum(1 for j in geo_rejected_jobs if j.get("_geo_layer") == "prefilter_location"),
+            "layer_description": sum(1 for j in geo_rejected_jobs if j.get("_geo_layer") == "prefilter_description"),
+            "layer_signal": sum(1 for j in geo_rejected_jobs if j.get("_geo_layer") == "prefilter_signal"),
+        },
     )
 
     if not passed:

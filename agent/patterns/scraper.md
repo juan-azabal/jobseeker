@@ -78,7 +78,7 @@ Normalization removes gender suffixes, legal entity suffixes, punctuation varian
 | Function | File | Source | Returns |
 |---|---|---|---|
 | `run_scraper(config_path)` | `scraper.py` | JobSpy (Indeed, Google, LinkedIn, Glassdoor) | `list[RawJob]` |
-| `run_watchlist_scraper(config_path)` | `ats_scraper.py` | Greenhouse, Lever, Ashby public APIs | `list[RawJob]` |
+| `run_watchlist_scraper(config_path, target_countries)` | `ats_scraper.py` | Greenhouse, Lever, Ashby public APIs | `tuple[list[RawJob], int]` (jobs, geo_rejected_count) |
 | `run_wttj_scraper(target_countries)` | `wttj_scraper.py` | Welcome to the Jungle (Algolia, app ID CSEKHVMS53) | `list[RawJob]` |
 | `merge_jobs(jobs)` | `merger.py` | all scrapers combined | `list[RawJob]` |
 
@@ -86,7 +86,8 @@ Normalization removes gender suffixes, legal entity suffixes, punctuation varian
 
 ```python
 all_raw: list[RawJob] = run_scraper(...)           # Step 1a
-all_raw.extend(run_watchlist_scraper(...))          # Step 1b
+ats_jobs, ats_geo_rej = run_watchlist_scraper(...) # Step 1b — returns (jobs, geo_rejected_count)
+all_raw.extend(ats_jobs)
 all_raw.extend(run_wttj_scraper(...))               # Step 1c
 raw_jobs: list[RawJob] = merge_jobs(all_raw)        # Step 1.5: dedup + field-group merge
 jobs: list[dict] = _to_dicts(raw_jobs)             # shim: list[RawJob] → list[dict]

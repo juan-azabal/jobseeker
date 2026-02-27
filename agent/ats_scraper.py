@@ -8,6 +8,28 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from scraper import make_job_id
 from models import RawJob
+from geo import resolve_location_country
+
+
+def _is_geo_allowed(job: RawJob, target_countries: list[str]) -> bool:
+    """Return True if job is reachable given target_countries.
+
+    Logic:
+    - remote in location string (case-insensitive) → allowed (remote job)
+    - remote_type == "fulltime" → allowed
+    - resolve_location_country returns None → allowed (conservative)
+    - resolved country in target_countries → allowed
+    - resolved country NOT in target_countries → rejected
+    """
+    loc = (job.location or "").lower()
+    if "remote" in loc or job.remote_type == "fulltime":
+        return True
+
+    country = resolve_location_country(job.location)
+    if country is None:
+        return True  # conservative: unresolved → pass through
+
+    return country in target_countries
 
 
 def load_watchlist(path="config/watchlist.yaml"):
@@ -170,8 +192,17 @@ def _fetch_ashby(token, company_name, title_patterns) -> list[RawJob]:
     return jobs
 
 
-def run_watchlist_scraper(config_path="config/watchlist.yaml") -> list[RawJob]:
-    """Poll all ATS in watchlist concurrently. Returns list[RawJob]."""
+def run_watchlist_scraper(
+    config_path="config/watchlist.yaml",
+    target_countries: list[str] | None = None,
+) -> tuple[list[RawJob], int]:
+    """Poll all ATS in watchlist concurrently. Returns (list[RawJob], geo_rejected_count).
+
+    Args:
+        config_path: Path to watchlist.yaml.
+        target_countries: ISO2 codes to accept for onsite/hybrid jobs (e.g. ["ES", "NL"]).
+            Remote jobs always pass. If None, no geo filtering is applied (accepts all).
+    """
     config = load_watchlist(config_path)
     title_patterns = [p.lower() for p in config.get("title_patterns", ["product manager"])]
 
@@ -186,6 +217,7 @@ def run_watchlist_scraper(config_path="config/watchlist.yaml") -> list[RawJob]:
     print(f"\nPolling {len(tasks)} ATS boards...")
 
     all_jobs: dict[str, RawJob] = {}
+    total_geo_rejected = 0
     fetchers = {
         "greenhouse": _fetch_greenhouse,
         "lever": _fetch_lever,
@@ -202,21 +234,29 @@ def run_watchlist_scraper(config_path="config/watchlist.yaml") -> list[RawJob]:
             name = futures[future]
             try:
                 jobs = future.result()
+                geo_rejected = 0
                 for j in jobs:
                     if j.id not in all_jobs:
+                        if target_countries and not _is_geo_allowed(j, target_countries):
+                            geo_rejected += 1
+                            total_geo_rejected += 1
+                            continue
                         all_jobs[j.id] = j
                 if jobs:
-                    print(f"   {name}: {len(jobs)} PM roles found")
+                    msg = f"   {name}: {len(jobs)} PM roles found"
+                    if geo_rejected:
+                        msg += f" ({geo_rejected} geo-rejected)"
+                    print(msg)
             except Exception as e:
                 print(f"   {name}: error - {e}")
 
     jobs_list = list(all_jobs.values())
     print(f"Watchlist total: {len(jobs_list)} PM roles across {len(tasks)} companies")
-    return jobs_list
+    return jobs_list, total_geo_rejected
 
 
 if __name__ == "__main__":
-    jobs = run_watchlist_scraper()
+    jobs, _ = run_watchlist_scraper()
     for j in jobs:
         print(f"\n{j.title} @ {j.company} ({j.location})")
         print(f"  {j.job_url}")
