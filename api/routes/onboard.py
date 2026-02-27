@@ -37,7 +37,12 @@ def docx_to_markdown(path: str) -> str:
 
 
 def _extract_profile_from_cv(cv_text: str) -> dict:
-    from posthog.ai.openai import OpenAI  # noqa: PLC0415
+    import os  # noqa: PLC0415
+
+    if os.getenv("POSTHOG_API_KEY"):
+        from posthog.ai.openai import OpenAI  # noqa: PLC0415
+    else:
+        from openai import OpenAI  # noqa: PLC0415
 
     return _onboard_extract_profile(cv_text, OpenAI())
 
