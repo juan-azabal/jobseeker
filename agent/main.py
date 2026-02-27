@@ -1054,14 +1054,14 @@ def ranked_jobs(jobs):
             j["_display_score"] = j["_fit_score"]
 
     # Reloc jobs only appear in Tier A — not worth showing if score doesn't justify moving
-    tier_a = sorted([j for j in parsed_jobs if j["_display_score"] >= 50], key=_sort_key)
-    tier_b = sorted([j for j in parsed_jobs if 30 <= j["_display_score"] < 50 and not _is_reloc(j)], key=_sort_key)
-    tier_c = sorted([j for j in parsed_jobs if j["_display_score"] < 30 and not _is_reloc(j)], key=_sort_key)
+    tier_a = sorted([j for j in parsed_jobs if j["_display_score"] > 60], key=_sort_key)
+    tier_b = sorted([j for j in parsed_jobs if 40 < j["_display_score"] <= 60 and not _is_reloc(j)], key=_sort_key)
+    tier_c = sorted([j for j in parsed_jobs if j["_display_score"] <= 40 and not _is_reloc(j)], key=_sort_key)
     return tier_a, tier_b, tier_c
 
 
 def print_summary(jobs):
-    """Print tiered digest: A (≥50) → B (30-49) → C (<30)."""
+    """Print tiered digest: A (>60) → B (41-60) → C (≤40)."""
     has_v2 = any("technical_depth" in (j.get("rag_score") or {}) for j in jobs if j.get("parsed"))
     mode = "hybrid score" if has_v2 else "heuristic fit"
 
@@ -1088,9 +1088,9 @@ def print_summary(jobs):
         return counter
 
     counter = 1
-    counter = _print_tier("TIER A — APPLY  score ≥ 50", tier_a, counter)
-    counter = _print_tier("TIER B — EXPLORE  score 30-49", tier_b, counter)
-    counter = _print_tier("TIER C — NOISE  score < 30  [skim or skip]", tier_c, counter)
+    counter = _print_tier("TIER A — APPLY  score > 60", tier_a, counter)
+    counter = _print_tier("TIER B — EXPLORE  score 41-60", tier_b, counter)
+    counter = _print_tier("TIER C — NOISE  score ≤ 40  [skim or skip]", tier_c, counter)
 
     # Stats
     domains = {}
@@ -1098,7 +1098,7 @@ def print_summary(jobs):
         d = j["parsed"].get("domain", "unknown")
         domains[d] = domains.get(d, 0) + 1
 
-    hidden_reloc = sum(1 for j in parsed_jobs if _is_reloc(j) and j["_display_score"] < 50)
+    hidden_reloc = sum(1 for j in parsed_jobs if _is_reloc(j) and j["_display_score"] <= 60)
     with_salary_count = sum(1 for j in parsed_jobs if j["_salary_eur"] > 0)
     scored_count = sum(1 for j in parsed_jobs if j.get("rag_score"))
     print(f"\n{'=' * 70}")
@@ -1112,7 +1112,7 @@ def print_summary(jobs):
 def _auto_skip_reloc(jobs, applied_path="config/applied.yaml"):
     """Auto-add low-score reloc jobs to not_interested.ids.
 
-    A reloc job that doesn't reach Tier A (score < 50) is not worth relocating
+    A reloc job that doesn't reach Tier A (score ≤ 60) is not worth relocating
     for — skip it permanently so it never costs parse/score tokens again.
     """
     import yaml
@@ -1131,9 +1131,9 @@ def _auto_skip_reloc(jobs, applied_path="config/applied.yaml"):
                 # v1 or unscored: heuristic only (v1 stored scores not used directly)
                 j["_display_score"] = j["_fit_score"]
 
-    # Find reloc jobs with score < 50 that aren't already tracked
+    # Find reloc jobs with score ≤ 60 that aren't already tracked
     candidates = [
-        j for j in jobs if j.get("parsed") and _is_reloc(j) and j.get("_display_score", 0) < 50 and j.get("id")
+        j for j in jobs if j.get("parsed") and _is_reloc(j) and j.get("_display_score", 0) <= 60 and j.get("id")
     ]
     if not candidates:
         return

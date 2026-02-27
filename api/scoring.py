@@ -544,9 +544,10 @@ _LANG_SIGNALS: dict[str, list[str]] = {
 
 
 def compute_tier(score: int) -> str:
-    if score >= 50:
+    """A (green) = 61+, B (yellow) = 41–60, C (skip) = 0–40."""
+    if score > 60:
         return "A"
-    if score >= 30:
+    if score > 40:
         return "B"
     return "C"
 
