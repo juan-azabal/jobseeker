@@ -1268,6 +1268,37 @@ def main():
         geo_passed=geo_passed,
     )
 
+    # PostHog per-job geo filter tracking (15.8)
+    geo_rejected_jobs = [
+        j for j in rejected if "non-target geography" in (j.get("reject_reason") or "")
+    ]
+    for j in geo_rejected_jobs:
+        _capture(
+            profile_id,
+            "geo_filter_applied",
+            {
+                "job_id": j.get("id"),
+                "company": j.get("company"),
+                "location": j.get("location"),
+                "detected_country": (j.get("reject_reason") or "").split("geography:")[-1].strip().split(" ")[0],
+                "filter_layer": j.get("_geo_layer"),
+                "source": j.get("source"),
+            },
+        )
+    _capture(
+        profile_id,
+        "geo_filter_run_stats",
+        {
+            "total_scraped": total_scraped,
+            "geo_rejected_at_scrape": geo_rejected_at_scrape,
+            "geo_rejected_at_prefilter": geo_rejected_at_prefilter,
+            "geo_passed": geo_passed,
+            "layer_location": sum(1 for j in geo_rejected_jobs if j.get("_geo_layer") == "prefilter_location"),
+            "layer_description": sum(1 for j in geo_rejected_jobs if j.get("_geo_layer") == "prefilter_description"),
+            "layer_signal": sum(1 for j in geo_rejected_jobs if j.get("_geo_layer") == "prefilter_signal"),
+        },
+    )
+
     if not passed:
         print("\nAll jobs filtered out. Loosen your preferences.")
         _d = int(time.time() - start_time)

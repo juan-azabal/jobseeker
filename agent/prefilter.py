@@ -111,8 +111,14 @@ _US_DESC_SIGNALS = [
 def _is_non_target_geo(
     job: dict,
     target_countries: list[str],
-) -> tuple[bool, str | None]:
-    """Return (should_reject, detected_country) for a job.
+) -> tuple[bool, str | None, str | None]:
+    """Return (should_reject, detected_country, filter_layer) for a job.
+
+    filter_layer values (for PostHog tracking):
+      "prefilter_location"    — Layer 1: structured location field
+      "prefilter_description" — Layer 2: city mention in description
+      "prefilter_signal"      — Layer 3: US visa/auth language in description
+      None                    — job passed (not rejected)
 
     Detection chain:
     Layer 1 — Structured location (highest confidence):
@@ -136,16 +142,16 @@ def _is_non_target_geo(
     remote_type = (job.get("remote_type") or "").lower()
     is_remote_fulltime = remote_type == "fulltime"
     if is_remote_fulltime:
-        return False, None
+        return False, None, None
 
     # Layer 1: structured location field
     location = (job.get("location") or "").strip()
     if location:
         country = resolve_location_country(location)
         if country and country not in target_countries:
-            return True, country
+            return True, country, "prefilter_location"
         if country and country in target_countries:
-            return False, None
+            return False, None, None
         # country is None → fall through to description layers
 
     # Layer 2: city/country mentions in description near location-signaling context words
@@ -180,23 +186,23 @@ def _is_non_target_geo(
                         continue
                     seen_countries.add(cc)
                     if cc not in target_countries:
-                        return True, cc
+                        return True, cc, "prefilter_description"
 
     # Layer 3: US-specific signals in description
     for signal in _US_DESC_SIGNALS:
         if signal in desc_lower:
             if "US" not in target_countries:
-                return True, "US"
-            return False, None  # US signal but US is target → pass
+                return True, "US", "prefilter_signal"
+            return False, None, None  # US signal but US is target → pass
 
     # "unable to sponsor" only when combined with US context
     if "unable to sponsor" in desc_lower and (
         "united states" in desc_lower or "u.s." in desc_lower or "visa sponsorship" in desc_lower
     ):
         if "US" not in target_countries:
-            return True, "US"
+            return True, "US", "prefilter_signal"
 
-    return False, None
+    return False, None, None
 
 
 def _is_relevant_title(title_lower, title_keywords, title_exclude):
@@ -323,10 +329,11 @@ def prefilter_jobs(
 
         # 4. Unified geo filter (replaces _is_us_only + _is_non_target_onsite)
         if not reason and target_countries:
-            should_reject, detected_country = _is_non_target_geo(job, target_countries)
+            should_reject, detected_country, geo_layer = _is_non_target_geo(job, target_countries)
             if should_reject:
                 reason = f"non-target geography: {detected_country} (location={job.get('location', '')})"
                 stat_key = "non_target_geo"
+                job["_geo_layer"] = geo_layer  # layer for PostHog tracking
 
         # 5. Filter job aggregators
         if not reason:

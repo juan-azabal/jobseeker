@@ -32,7 +32,7 @@ def _geo_job(**kwargs) -> dict:
 
 class TestIsNonTargetGeo:
     def test_us_city_rejected_for_es(self):
-        rejected, country = _is_non_target_geo(
+        rejected, country, _ = _is_non_target_geo(
             _geo_job(location="San Francisco, CA"), ["ES"]
         )
         assert rejected is True
@@ -40,26 +40,26 @@ class TestIsNonTargetGeo:
 
     def test_us_state_abbreviation_rejected_for_es(self):
         # "Remote, NY" — NY token resolves to US
-        rejected, country = _is_non_target_geo(_geo_job(location="Remote, NY"), ["ES"])
+        rejected, country, _ = _is_non_target_geo(_geo_job(location="Remote, NY"), ["ES"])
         assert rejected is True
         assert country == "US"
 
     def test_es_city_passes_for_es(self):
-        rejected, _ = _is_non_target_geo(_geo_job(location="Barcelona, Spain"), ["ES"])
+        rejected, _, _ = _is_non_target_geo(_geo_job(location="Barcelona, Spain"), ["ES"])
         assert rejected is False
 
     def test_unresolvable_location_passes_conservative(self):
         # "Remote, Europe" — no country resolved → conservative pass
-        rejected, _ = _is_non_target_geo(_geo_job(location="Remote, Europe"), ["ES"])
+        rejected, _, _ = _is_non_target_geo(_geo_job(location="Remote, Europe"), ["ES"])
         assert rejected is False
 
     def test_remote_only_passes(self):
         # "Remote" → None (sentinel) → pass
-        rejected, _ = _is_non_target_geo(_geo_job(location="Remote"), ["ES"])
+        rejected, _, _ = _is_non_target_geo(_geo_job(location="Remote"), ["ES"])
         assert rejected is False
 
     def test_us_work_auth_in_description_rejected_for_es(self):
-        rejected, country = _is_non_target_geo(
+        rejected, country, _ = _is_non_target_geo(
             _geo_job(
                 location=None,
                 description="Must be authorized to work in the United States",
@@ -70,7 +70,7 @@ class TestIsNonTargetGeo:
         assert country == "US"
 
     def test_unable_to_sponsor_with_us_context_rejected_for_es(self):
-        rejected, country = _is_non_target_geo(
+        rejected, country, _ = _is_non_target_geo(
             _geo_job(
                 location=None,
                 description="We are unable to sponsor visa sponsorship at this time",
@@ -82,7 +82,7 @@ class TestIsNonTargetGeo:
 
     def test_unable_to_sponsor_without_us_context_passes(self):
         # "unable to sponsor" alone without US signals → conservative pass
-        rejected, _ = _is_non_target_geo(
+        rejected, _, _ = _is_non_target_geo(
             _geo_job(
                 location=None,
                 description="We are unable to sponsor at this time",
@@ -93,15 +93,15 @@ class TestIsNonTargetGeo:
 
     def test_unresolvable_nationwide_passes_conservative(self):
         # "Nationwide" cannot be resolved to a country → conservative pass
-        rejected, _ = _is_non_target_geo(_geo_job(location="Nationwide"), ["ES"])
+        rejected, _, _ = _is_non_target_geo(_geo_job(location="Nationwide"), ["ES"])
         assert rejected is False
 
     def test_empty_location_passes(self):
-        rejected, _ = _is_non_target_geo(_geo_job(location=""), ["ES"])
+        rejected, _, _ = _is_non_target_geo(_geo_job(location=""), ["ES"])
         assert rejected is False
 
     def test_e_verify_in_description_rejected_for_es(self):
-        rejected, country = _is_non_target_geo(
+        rejected, country, _ = _is_non_target_geo(
             _geo_job(
                 location=None,
                 description="All candidates must pass E-Verify upon hire",

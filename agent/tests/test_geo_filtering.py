@@ -333,52 +333,53 @@ class TestUnifiedGeoFilter:
     def test_layer1_sf_ca_rejected_for_es(self):
         """SF CA → resolved US, rejected for ES target."""
         job = _geo_job(location="San Francisco, CA")
-        rejected, country = _geo_filter(job, ["ES"])
+        rejected, country, layer = _geo_filter(job, ["ES"])
         assert rejected is True
         assert country == "US"
+        assert layer == "prefilter_location"
 
     def test_layer1_barcelona_passes_for_es(self):
         """Barcelona → resolved ES, passes for ES target."""
         job = _geo_job(location="Barcelona")
-        rejected, _ = _geo_filter(job, ["ES"])
+        rejected, _, _ = _geo_filter(job, ["ES"])
         assert rejected is False
 
     def test_layer1_berlin_rejected_for_es(self):
         """Berlin, Germany → DE, rejected for ES target."""
         job = _geo_job(location="Berlin, Germany")
-        rejected, country = _geo_filter(job, ["ES"])
+        rejected, country, _ = _geo_filter(job, ["ES"])
         assert rejected is True
         assert country == "DE"
 
     def test_layer1_remote_fulltime_always_passes(self):
         """remote_type=fulltime → never rejected regardless of location."""
         job = _geo_job(location="San Francisco, CA", remote_type="fulltime")
-        rejected, _ = _geo_filter(job, ["ES"])
+        rejected, _, _ = _geo_filter(job, ["ES"])
         assert rejected is False
 
     def test_layer1_null_location_falls_through(self):
         """Null location → no Layer 1 rejection (falls through to Layer 2/3)."""
         job = _geo_job(location=None, description="")
-        rejected, _ = _geo_filter(job, ["ES"])
+        rejected, _, _ = _geo_filter(job, ["ES"])
         assert rejected is False
 
     def test_layer1_mumbai_passes_for_in(self):
         """Mumbai → IN, passes for IN target."""
         job = _geo_job(location="Mumbai")
-        rejected, _ = _geo_filter(job, ["IN"])
+        rejected, _, _ = _geo_filter(job, ["IN"])
         assert rejected is False
 
     def test_layer1_london_rejected_for_in(self):
         """London → GB, rejected for IN target."""
         job = _geo_job(location="London, United Kingdom")
-        rejected, country = _geo_filter(job, ["IN"])
+        rejected, country, _ = _geo_filter(job, ["IN"])
         assert rejected is True
         assert country == "GB"
 
     def test_layer1_sf_passes_for_us(self):
         """SF CA → US, passes for US target."""
         job = _geo_job(location="San Francisco, CA")
-        rejected, _ = _geo_filter(job, ["US"])
+        rejected, _, _ = _geo_filter(job, ["US"])
         assert rejected is False
 
     # --- Layer 2: description city mentions ---
@@ -389,9 +390,10 @@ class TestUnifiedGeoFilter:
             location=None,
             description="We are growing rapidly. Our Berlin office is the heart of our team.",
         )
-        rejected, country = _geo_filter(job, ["ES"])
+        rejected, country, layer = _geo_filter(job, ["ES"])
         assert rejected is True
         assert country == "DE"
+        assert layer == "prefilter_description"
 
     def test_layer2_no_context_words_passes(self):
         """Null location, city mention without context words → passes (conservative)."""
@@ -399,7 +401,7 @@ class TestUnifiedGeoFilter:
             location=None,
             description="We serve customers in Berlin and Paris with great service.",
         )
-        rejected, _ = _geo_filter(job, ["ES"])
+        rejected, _, _ = _geo_filter(job, ["ES"])
         assert rejected is False  # no "based in", "office in" etc.
 
     # --- Layer 3: US-specific signals ---
@@ -410,9 +412,10 @@ class TestUnifiedGeoFilter:
             location=None,
             description="This is a remote within the US position. Great benefits.",
         )
-        rejected, country = _geo_filter(job, ["ES"])
+        rejected, country, layer = _geo_filter(job, ["ES"])
         assert rejected is True
         assert country == "US"
+        assert layer == "prefilter_signal"
 
     def test_layer3_everi_fy_rejected_for_es(self):
         """e-verify signal → rejected for ES target."""
@@ -420,7 +423,7 @@ class TestUnifiedGeoFilter:
             location=None,
             description="We participate in E-Verify to confirm work authorization.",
         )
-        rejected, country = _geo_filter(job, ["ES"])
+        rejected, country, _ = _geo_filter(job, ["ES"])
         assert rejected is True
         assert country == "US"
 
@@ -430,7 +433,7 @@ class TestUnifiedGeoFilter:
             location=None,
             description="We are looking for a talented product manager to join our team.",
         )
-        rejected, _ = _geo_filter(job, ["ES"])
+        rejected, _, _ = _geo_filter(job, ["ES"])
         assert rejected is False
 
     def test_layer3_us_signals_pass_for_us_target(self):
@@ -439,5 +442,5 @@ class TestUnifiedGeoFilter:
             location=None,
             description="You must be authorized to work in the U.S. Great role!",
         )
-        rejected, _ = _geo_filter(job, ["US"])
+        rejected, _, _ = _geo_filter(job, ["US"])
         assert rejected is False
