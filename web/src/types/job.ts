@@ -8,6 +8,7 @@ export interface JobSummary {
   score: number;
   tier: 'A' | 'B' | 'C';
   first_seen: string;
+  last_seen?: string;
   url: string;
   applied_at: string | null;
   geo_restricted: boolean;  // true = remote restriction excludes user's home region
@@ -55,6 +56,7 @@ export interface ParsedJob {
   technical_stack?: string[];
   experience_requirements?: string[];
   domain?: string;
+  role_function?: string;
   responsibilities_summary?: string;
   team_size_hints?: string | null;
   salary_mentioned?: string | null;
@@ -79,11 +81,22 @@ export interface JobDetail extends JobSummary {
   parsed: ParsedJob | null;
   scored: ScoredResult | null;
   skill_matches: SkillMatches | null;
-  last_seen: string;
   ingested_at: string;
   applied_at: string | null;
   dismissed_at: string | null;
   domain_override?: string | null;
+  scoring_method?: 'rag_v1' | 'rag_v2' | 'heuristic';
+  role_function?: string;
+  // Enriched fields (conditionally returned when non-null)
+  salary_min?: number;
+  salary_max?: number;
+  salary_currency?: string;
+  salary_interval?: string;
+  salary_source?: string;
+  company_size?: string;
+  country?: string;
+  city?: string;
+  sources?: string[];
 }
 
 export interface JobsResponse {
