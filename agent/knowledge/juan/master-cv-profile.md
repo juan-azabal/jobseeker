@@ -50,6 +50,20 @@ Senior Product Manager with a software engineering background, focused on data p
 
 - Enabled Google and Bing conversion uploaders and traffic-quality controls to improve attribution signal, bidding efficiency and CAC/LTV reads.
 
+- Designed, built and shipped a multi-user AI scoring platform from zero to production using AI-assisted development (Claude Code). Full stack: FastAPI API, React 19 frontend, RAG scoring pipeline with multi-model orchestration (GPT-4o-mini for parsing, GPT-4o for grading), semantic skill matching via OpenAI embeddings and cosine similarity, Google OAuth, CI/CD on GitHub Actions and Railway deploy. Four active users, sub-2 EUR per user per month through deliberate model selection per pipeline phase.
+
+## Projects
+
+### Jobseeker - AI-Powered Job Matching and CV Platform | 2024 - Present
+
+Built end-to-end as sole product owner and developer, using Claude Code as execution multiplier. The platform ingests job postings from multiple sources, scores them against user profiles and generates tailored CVs per application.
+
+- Designed a 6-phase scoring pipeline: ingest (multi-source scraper with domain classification) to heuristic pre-filter to RAG grading (LLM-as-judge with structured rubrics) to deterministic re-scoring with user-editable preference weights. Heuristic and RAG scores complement each other: heuristic handles dimensions with clear business rules (domain, seniority, location), RAG handles subjective fit (technical depth, profile evidence).
+- Implemented semantic skill matching using 256-dimensional OpenAI embeddings with numpy matrix operations for cosine similarity, replacing exact keyword matching. Users see which of their skills match a posting and which are gaps, with conceptual proximity rather than string equality.
+- Architected for multi-user from day one: profile YAML as single source of truth per user, cross-user job deduplication via shared database, zero coupling between user-facing API and background processing agent.
+- Achieved sub-2 EUR monthly cost per user through strategic model selection: GPT-4o-mini for high-volume low-complexity tasks (parsing, classification), GPT-4o for low-volume high-judgment tasks (fit scoring). CV generation accounts for 95% of LLM spend.
+- Stack: FastAPI, SQLite (raw migrations), React 19, TypeScript, Tailwind v4, ChromaDB, OpenAI API, Google OAuth, Railway, GitHub Actions.
+
 ## Core Skills
 
 **Data Platforms & Tracking**
@@ -83,6 +97,10 @@ Senior Product Manager with a software engineering background, focused on data p
 **AI, ML & Language Model Products**
 - Products built on language model outputs: prescriptive analytics on IBM Watson NLP (content classification at scale by category, tone, entities, sentiment).
 - Recommendation systems: feature engineering from NLP signals, NDCG/CTR evaluation, guardrails, retraining cadence.
+- RAG pipelines: retrieval-augmented generation with structured rubrics, LLM-as-judge scoring, prompt engineering as code.
+- Multi-model orchestration: model selection by task complexity and cost, pipeline decomposition into deterministic and LLM-graded phases.
+- Embedding-based semantic matching: vector similarity for skill detection, domain classification and content proximity.
+- AI-assisted development: spec-to-production using Claude Code, test-first methodology, phased implementation plans.
 - ML-assisted CRO and optimization initiatives.
 - DMP, identity resolution, audience segmentation.
 - Experience enabling ML teams with governed, reliable data pipelines.
