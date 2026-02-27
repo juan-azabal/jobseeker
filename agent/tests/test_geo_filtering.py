@@ -12,6 +12,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from geo import resolve_location_country, derive_target_countries
 from prefilter import prefilter_jobs
 from wttj_scraper import _build_geo_filter
+from ats_scraper import _is_geo_allowed
+from models import RawJob as _RawJob
 
 # Load geo test fixtures (fixtures/ has no __init__.py, import directly)
 import importlib.util as _ilu
@@ -245,3 +247,57 @@ class TestWTTJGeoFilter:
         """FR office + no remote → NOT included (onsite in non-target)."""
         f = _build_geo_filter(["ES"])
         assert not self._in_filter(f, "FR", "no")
+
+
+# ---------------------------------------------------------------------------
+# 15.4 — ATS scraper geo filter (_is_geo_allowed)
+# ---------------------------------------------------------------------------
+
+
+def _make_ats_job(location, remote_type="no") -> _RawJob:
+    return _RawJob(
+        id="test", title="Product Manager", company="Test Co",
+        source="greenhouse", location=location, remote_type=remote_type,
+    )
+
+
+class TestATSGeoFilter:
+    def test_ny_rejected_for_es_target(self):
+        """New York, NY (US) → rejected when target is ES."""
+        job = _make_ats_job("New York, NY")
+        assert not _is_geo_allowed(job, ["ES"])
+
+    def test_barcelona_accepted_for_es_target(self):
+        """Barcelona, Spain → accepted when target is ES."""
+        job = _make_ats_job("Barcelona, Spain")
+        assert _is_geo_allowed(job, ["ES"])
+
+    def test_remote_location_accepted_regardless_of_target(self):
+        """Location string 'Remote' → always accepted."""
+        job = _make_ats_job("Remote")
+        assert _is_geo_allowed(job, ["ES"])
+
+    def test_empty_location_accepted_conservative(self):
+        """Empty location → accepted (conservative: unresolved)."""
+        job = _make_ats_job("")
+        assert _is_geo_allowed(job, ["ES"])
+
+    def test_ny_accepted_for_us_target(self):
+        """New York, NY → accepted when target is US."""
+        job = _make_ats_job("New York, NY")
+        assert _is_geo_allowed(job, ["US"])
+
+    def test_barcelona_rejected_for_us_target(self):
+        """Barcelona, Spain → rejected when target is US."""
+        job = _make_ats_job("Barcelona, Spain")
+        assert not _is_geo_allowed(job, ["US"])
+
+    def test_fulltime_remote_type_accepted_regardless(self):
+        """remote_type=fulltime → always accepted even with US location."""
+        job = _make_ats_job("San Francisco, CA", remote_type="fulltime")
+        assert _is_geo_allowed(job, ["ES"])
+
+    def test_remote_in_location_string_accepted(self):
+        """Location containing 'remote' → always accepted."""
+        job = _make_ats_job("Remote, US")
+        assert _is_geo_allowed(job, ["ES"])
