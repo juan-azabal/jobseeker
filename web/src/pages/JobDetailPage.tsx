@@ -179,10 +179,12 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
   const [cvSuccess, setCvSuccess] = useState(false);
   const [cvError, setCvError] = useState<string | null>(null);
   const [addedSkills, setAddedSkills] = useState<Set<string>>(new Set());
+  const [fitFilter, setFitFilter] = useState<'all' | 'gaps' | 'strengths'>('all');
 
   useEffect(() => {
     setLoading(true);
     setError(null);
+    setFitFilter('all');
     fetch(`/api/jobs/${jobId}`)
       .then((r) => {
         if (r.status === 404) throw new Error('not_found');
@@ -539,16 +541,33 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
               )}
               {((scored.deal_breakers?.length ?? 0) > 0 || (scored.gaps?.length ?? 0) > 0 || (scored.strengths?.length ?? 0) > 0) && (
                 <section>
-                  <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-zinc-500">
-                    Your fit
-                  </h2>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                      Your fit
+                    </h2>
+                    <div className="flex gap-0.5">
+                      {(['all', 'gaps', 'strengths'] as const).map(f => (
+                        <button
+                          key={f}
+                          onClick={() => setFitFilter(f)}
+                          className={`rounded px-2.5 py-1 text-xs font-medium capitalize transition-colors ${
+                            fitFilter === f
+                              ? 'bg-zinc-800 text-zinc-200'
+                              : 'text-zinc-600 hover:text-zinc-400'
+                          }`}
+                        >
+                          {f}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <ul className="space-y-2">
-                    {scored.deal_breakers?.map((d, i) => (
+                    {fitFilter !== 'strengths' && scored.deal_breakers?.map((d, i) => (
                       <li key={`db-${i}`} className="rounded-lg border border-red-500/20 border-l-4 border-l-red-500/60 bg-red-500/5 px-4 py-3">
                         <p className="text-sm text-red-300">{d}</p>
                       </li>
                     ))}
-                    {scored.gaps?.filter(g => g.severity === 'high').map((g, i) => (
+                    {fitFilter !== 'strengths' && scored.gaps?.filter(g => g.severity === 'high').map((g, i) => (
                       <li key={`gh-${i}`} className="rounded-lg border border-zinc-800 border-l-4 border-l-amber-400/50 bg-zinc-900/60 p-4">
                         <div className="flex items-start gap-2">
                           <p className="flex-1 text-sm text-zinc-200">{g.gap}</p>
@@ -559,13 +578,13 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
                         )}
                       </li>
                     ))}
-                    {scored.strengths?.map((s, i) => (
+                    {fitFilter !== 'gaps' && scored.strengths?.map((s, i) => (
                       <li key={`str-${i}`} className="rounded-lg border border-zinc-800 border-l-4 border-l-emerald-500/50 bg-zinc-900/60 p-4">
                         <p className="text-sm font-medium text-white">{s.claim}</p>
                         <p className="mt-1 text-xs leading-relaxed text-zinc-500">{s.evidence}</p>
                       </li>
                     ))}
-                    {scored.gaps?.filter(g => g.severity !== 'high').map((g, i) => (
+                    {fitFilter !== 'strengths' && scored.gaps?.filter(g => g.severity !== 'high').map((g, i) => (
                       <li key={`gml-${i}`} className="rounded-lg border border-zinc-800 border-l-4 border-l-amber-400/50 bg-zinc-900/60 p-4">
                         <div className="flex items-start gap-2">
                           <p className="flex-1 text-sm text-zinc-200">{g.gap}</p>
@@ -655,8 +674,8 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
             </section>
           )}
 
-          {/* ── Prep zone: Interview Prep (RAG only) ───────────────── */}
-          {isRAG && ((scored.talking_points?.length ?? 0) > 0 || (scored.stories_to_prepare?.length ?? 0) > 0) && (
+          {/* ── Prep zone: Interview Prep (RAG, tier A/B only) ─────── */}
+          {isRAG && (job.tier === 'A' || job.tier === 'B') && ((scored.talking_points?.length ?? 0) > 0 || (scored.stories_to_prepare?.length ?? 0) > 0) && (
             <>
               {scored.talking_points && scored.talking_points.length > 0 && (
                 <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
