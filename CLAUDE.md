@@ -349,6 +349,7 @@ Phase 17 — Decomposed Hybrid Scoring (complete: 17.1–17.7)
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
+- Repo cleanup (2026-02-27): Plan files moved to Planes/ (gitignored). Merged worktrees pruned (amazing-austin, competent-neumann, suspicious-jones, trusting-montalcini). Dead code removed: UserMenu.tsx component, update_user_profile_id() function in queries.py. Ruff clean. File copy consistency audited (see docs/copy-sync-report.md) — all dual copies in sync.
 - WTTJ geographic filter (Phase 0.1): offices.country_code is a filterable Algolia attribute (verified live). Filter: PM_filter AND (country_code:X OR ... OR remote:fulltime OR remote:partial). target_countries explicit list in profile YAML (not derived from country_weights to avoid name→ISO complexity). Default: [ES] + remote.
 - make_job_id migration (Phase 0.2): ID hash changes mean new IDs for existing jobs. Chosen option A: accept one-time re-run cost. Clear seen_ids/<profile>.txt after deploy. migrate_job_ids.py handles SQLite in-place UPDATE; collision resolution keeps record with more non-null parsed fields.
 - nan sanitization (Phase 0.3): _sanitize_str() in scraper.py handles float NaN, None, and string literal 'nan'. Applied to all string fields in run_scraper(). ats_scraper.py and wttj_scraper.py already avoided this via explicit str() conversion, but wttj already had proper handling.
