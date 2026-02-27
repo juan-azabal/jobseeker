@@ -14,6 +14,7 @@ capture_exception(exc, user_id=None)
 import atexit
 import os
 
+import posthog as _posthog_module
 import structlog
 from posthog import Posthog
 
@@ -45,6 +46,11 @@ def init_posthog() -> None:
         flush_interval=10,
         enable_exception_autocapture=False,
     )
+    # Also set module-level attributes so posthog.ai wrappers (OpenAI, Anthropic)
+    # can find the client via posthog.setup() — they check posthog.api_key, not
+    # the private _client instance created above.
+    _posthog_module.api_key = api_key
+    _posthog_module.host = host
     atexit.register(_client.shutdown)
     logger.info("PostHog initialized", host=host)
 
