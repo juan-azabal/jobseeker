@@ -74,11 +74,12 @@ def test_get_job_detail_has_parsed(authed_client):
 
 
 def test_get_job_detail_has_scored(authed_client):
+    # v1 UJS (scored_v2=0) no longer returns the stored scored JSON — it is
+    # re-scored via heuristic and scored=None. Only v2 jobs return scored blob.
     resp = authed_client.get("/api/jobs/a1")
     data = resp.json()
     assert "scored" in data
-    assert data["scored"]["score"] == 72
-    assert "score_breakdown" in data["scored"]
+    assert data["scored"] is None
 
 
 def test_get_job_detail_404(authed_client):
