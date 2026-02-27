@@ -955,16 +955,14 @@ def ranked_jobs(jobs):
         j["_salary_eur"] = _extract_max_salary_eur(j)
         j["_fit_score"] = _heuristic_score(j)
         rag = j.get("rag_score")
-        if rag is None:
-            j["_display_score"] = j["_fit_score"]
-        elif "score" in rag:
-            # v1: use stored numeric RAG score
-            j["_display_score"] = rag["score"]
-        else:
+        if rag is not None and "technical_depth" in rag:
             # v2: hybrid = heuristic + grade points, clamped [0, 100]
             tech_pts = _grade_to_points(rag.get("technical_depth"))
             prof_pts = _grade_to_points(rag.get("profile_evidence"))
             j["_display_score"] = min(100, max(0, j["_fit_score"] + tech_pts + prof_pts))
+        else:
+            # v1 or unscored: heuristic only (v1 stored scores not used directly)
+            j["_display_score"] = j["_fit_score"]
 
     # Reloc jobs only appear in Tier A — not worth showing if score doesn't justify moving
     tier_a = sorted([j for j in parsed_jobs if j["_display_score"] >= 50], key=_sort_key)
@@ -976,8 +974,7 @@ def ranked_jobs(jobs):
 def print_summary(jobs):
     """Print tiered digest: A (≥50) → B (30-49) → C (<30)."""
     has_v2 = any("technical_depth" in (j.get("rag_score") or {}) for j in jobs if j.get("parsed"))
-    has_v1 = any("score" in (j.get("rag_score") or {}) for j in jobs if j.get("parsed"))
-    mode = "hybrid score" if has_v2 else ("RAG score" if has_v1 else "heuristic fit")
+    mode = "hybrid score" if has_v2 else "heuristic fit"
 
     tier_a, tier_b, tier_c = ranked_jobs(jobs)
     parsed_jobs = tier_a + tier_b + tier_c
@@ -1037,14 +1034,13 @@ def _auto_skip_reloc(jobs, applied_path="config/applied.yaml"):
             j["_salary_eur"] = _extract_max_salary_eur(j)
             j["_fit_score"] = _heuristic_score(j)
             rag = j.get("rag_score")
-            if rag is None:
-                j["_display_score"] = j["_fit_score"]
-            elif "score" in rag:
-                j["_display_score"] = rag["score"]
-            else:
+            if rag is not None and "technical_depth" in rag:
                 tech_pts = _grade_to_points(rag.get("technical_depth"))
                 prof_pts = _grade_to_points(rag.get("profile_evidence"))
                 j["_display_score"] = min(100, max(0, j["_fit_score"] + tech_pts + prof_pts))
+            else:
+                # v1 or unscored: heuristic only (v1 stored scores not used directly)
+                j["_display_score"] = j["_fit_score"]
 
     # Find reloc jobs with score < 50 that aren't already tracked
     candidates = [
@@ -1155,6 +1151,7 @@ def main():
     # Derive target_countries for geo filtering — single source of truth for all filters
     home_locations_for_geo = profile.get("user", {}).get("home_locations", [])
     from geo import derive_target_countries as _derive_target_countries  # noqa: PLC0415
+
     target_countries: list[str] = _derive_target_countries(home_locations_for_geo)
     if not target_countries:
         # Fallback: read wttj_countries from profile as proxy for target countries
@@ -1190,22 +1187,20 @@ def main():
     # Enrichment stats: measure Glassdoor ↔ LinkedIn overlap after merge
     _src_counts: dict[str, int] = {}
     for j in raw_jobs:
-        for s in (j.sources or []):
+        for s in j.sources or []:
             _src_counts[s] = _src_counts.get(s, 0) + 1
     _multi_src = sum(1 for j in raw_jobs if len(j.sources or []) > 1)
-    _ld_gd = sum(
-        1 for j in raw_jobs
-        if j.sources and "linkedin" in j.sources and "glassdoor" in j.sources
-    )
+    _ld_gd = sum(1 for j in raw_jobs if j.sources and "linkedin" in j.sources and "glassdoor" in j.sources)
     _ld_gd_enriched = sum(
-        1 for j in raw_jobs
-        if j.sources and "linkedin" in j.sources and "glassdoor" in j.sources and j.location
+        1 for j in raw_jobs if j.sources and "linkedin" in j.sources and "glassdoor" in j.sources and j.location
     )
     if _src_counts:
         src_summary = ", ".join(f"{s}={n}" for s, n in sorted(_src_counts.items()))
         print(f"\n📊 Sources: {src_summary}")
         if _multi_src:
-            print(f"   Multi-source merges: {_multi_src} | LinkedIn∩Glassdoor: {_ld_gd} ({_ld_gd_enriched} with location enriched)")
+            print(
+                f"   Multi-source merges: {_multi_src} | LinkedIn∩Glassdoor: {_ld_gd} ({_ld_gd_enriched} with location enriched)"
+            )
         logger.info(
             "merge_enrichment_stats",
             source_counts=_src_counts,
@@ -1268,9 +1263,7 @@ def main():
             f"\n🌍 Geo filter: {geo_rejected_at_scrape} rejected at scrape, "
             f"{geo_rejected_at_prefilter} rejected at prefilter → {geo_passed} passed"
         )
-        geo_rejected_jobs = [
-            j for j in rejected if "non-target geography" in (j.get("reject_reason") or "")
-        ]
+        geo_rejected_jobs = [j for j in rejected if "non-target geography" in (j.get("reject_reason") or "")]
         if geo_rejected_jobs:
             print("   Sample geo rejections:")
             for j in geo_rejected_jobs[:5]:
@@ -1284,9 +1277,7 @@ def main():
     )
 
     # PostHog per-job geo filter tracking (15.8)
-    geo_rejected_jobs = [
-        j for j in rejected if "non-target geography" in (j.get("reject_reason") or "")
-    ]
+    geo_rejected_jobs = [j for j in rejected if "non-target geography" in (j.get("reject_reason") or "")]
     for j in geo_rejected_jobs:
         _capture(
             profile_id,

@@ -53,13 +53,15 @@ class TestRankedJobsV2:
         assert all_jobs[0]["_display_score"] == 35
         assert all_jobs[0]["_display_score"] == all_jobs[0]["_fit_score"]
 
-    def test_v1_rag_uses_stored_score(self):
-        """v1 rag_score → _display_score = rag['score'] (not heuristic)."""
+    def test_v1_rag_falls_back_to_heuristic(self):
+        """v1 rag_score (has 'score' key) → _display_score = _fit_score (not stored 78)."""
         job = _make_job(rag_score={"score": 78, "tier": "A"})
         with patch.multiple("main", **_PATCH_MAIN):
             tier_a, tier_b, tier_c = main.ranked_jobs([job])
         all_jobs = tier_a + tier_b + tier_c
-        assert all_jobs[0]["_display_score"] == 78
+        # v1 stored score is no longer used; falls back to heuristic
+        assert all_jobs[0]["_display_score"] != 78
+        assert all_jobs[0]["_display_score"] == all_jobs[0]["_fit_score"]
 
     def test_v2_rag_computes_hybrid_score(self):
         """v2 rag_score → _display_score = _fit_score + grade_to_points(tech) + grade_to_points(prof)."""
