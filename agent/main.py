@@ -1156,9 +1156,11 @@ def main():
     all_raw: list[RawJob] = run_scraper(config_path=searches_path)
 
     # Step 1b: Poll ATS watchlist → list[RawJob]
+    geo_rejected_at_scrape = 0
     try:
-        ats_jobs = run_watchlist_scraper(config_path=watchlist_path)
+        ats_jobs, ats_geo_rejected = run_watchlist_scraper(config_path=watchlist_path)
         all_raw.extend(ats_jobs)
+        geo_rejected_at_scrape += ats_geo_rejected
     except Exception as e:
         print(f"\nWatchlist error (continuing without): {e}")
 
@@ -1240,6 +1242,30 @@ def main():
         applied_path=applied_path,
         seen_path=seen_ids_path,
         home_locations=home_locations,
+    )
+
+    # Geo filter summary (15.7)
+    geo_rejected_at_prefilter = prefilter_stats.get("non_target_geo", 0)
+    geo_passed = prefilter_stats.get("passed", 0)
+    total_scraped = len(jobs)
+    if geo_rejected_at_scrape or geo_rejected_at_prefilter:
+        print(
+            f"\n🌍 Geo filter: {geo_rejected_at_scrape} rejected at scrape, "
+            f"{geo_rejected_at_prefilter} rejected at prefilter → {geo_passed} passed"
+        )
+        geo_rejected_jobs = [
+            j for j in rejected if "non-target geography" in (j.get("reject_reason") or "")
+        ]
+        if geo_rejected_jobs:
+            print("   Sample geo rejections:")
+            for j in geo_rejected_jobs[:5]:
+                print(f"   ❌ {j['title']} @ {j['company']} → {j.get('reject_reason', '')}")
+    logger.info(
+        "geo_filter_stats",
+        total_scraped=total_scraped,
+        geo_rejected_at_scrape=geo_rejected_at_scrape,
+        geo_rejected_at_prefilter=geo_rejected_at_prefilter,
+        geo_passed=geo_passed,
     )
 
     if not passed:

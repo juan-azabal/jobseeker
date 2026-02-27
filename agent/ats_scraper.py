@@ -195,8 +195,8 @@ def _fetch_ashby(token, company_name, title_patterns) -> list[RawJob]:
 def run_watchlist_scraper(
     config_path="config/watchlist.yaml",
     target_countries: list[str] | None = None,
-) -> list[RawJob]:
-    """Poll all ATS in watchlist concurrently. Returns list[RawJob].
+) -> tuple[list[RawJob], int]:
+    """Poll all ATS in watchlist concurrently. Returns (list[RawJob], geo_rejected_count).
 
     Args:
         config_path: Path to watchlist.yaml.
@@ -217,6 +217,7 @@ def run_watchlist_scraper(
     print(f"\nPolling {len(tasks)} ATS boards...")
 
     all_jobs: dict[str, RawJob] = {}
+    total_geo_rejected = 0
     fetchers = {
         "greenhouse": _fetch_greenhouse,
         "lever": _fetch_lever,
@@ -238,6 +239,7 @@ def run_watchlist_scraper(
                     if j.id not in all_jobs:
                         if target_countries and not _is_geo_allowed(j, target_countries):
                             geo_rejected += 1
+                            total_geo_rejected += 1
                             continue
                         all_jobs[j.id] = j
                 if jobs:
@@ -250,11 +252,11 @@ def run_watchlist_scraper(
 
     jobs_list = list(all_jobs.values())
     print(f"Watchlist total: {len(jobs_list)} PM roles across {len(tasks)} companies")
-    return jobs_list
+    return jobs_list, total_geo_rejected
 
 
 if __name__ == "__main__":
-    jobs = run_watchlist_scraper()
+    jobs, _ = run_watchlist_scraper()
     for j in jobs:
         print(f"\n{j.title} @ {j.company} ({j.location})")
         print(f"  {j.job_url}")
