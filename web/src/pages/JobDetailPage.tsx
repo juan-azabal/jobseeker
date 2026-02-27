@@ -434,7 +434,11 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
               </span>
             )}
             {p?.remote_restriction && (
-              job.geo_restricted ? (
+              job.eligibility_warning ? (
+                <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-xs text-red-400 border border-red-500/20">
+                  {p.remote_restriction}
+                </span>
+              ) : job.geo_restricted ? (
                 <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs text-amber-400 border border-amber-500/20">
                   {p.remote_restriction}
                 </span>
