@@ -1018,17 +1018,25 @@ async def add_skill(body: AddSkillRequest, user: dict = Depends(get_current_user
         with open(yaml_path, "w") as f:
             f.write(stored_yaml)
 
-    with open(yaml_path) as f:
-        raw = yaml.safe_load(f)
+    from ruamel.yaml import YAML  # noqa: PLC0415
+    from ruamel.yaml.comments import CommentedSeq  # noqa: PLC0415
+    import io  # noqa: PLC0415
 
-    skills = raw.get("skills") or []
+    ry = YAML()
+    ry.preserve_quotes = True
+    with open(yaml_path) as f:
+        raw = ry.load(f)
+
+    skills = list(raw.get("skills") or [])
     # Deduplicate (case-insensitive)
     existing_lower = {s.lower() for s in skills}
     if skill not in existing_lower:
         skills.append(skill)
-        raw["skills"] = skills
+        raw["skills"] = CommentedSeq(skills)
 
-        updated_yaml = yaml.dump(raw, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        buf = io.StringIO()
+        ry.dump(raw, buf)
+        updated_yaml = buf.getvalue()
         with open(yaml_path, "w") as f:
             f.write(updated_yaml)
 
