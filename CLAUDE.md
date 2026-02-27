@@ -343,12 +343,29 @@ Phase 17 — Decomposed Hybrid Scoring (complete: 17.1–17.7)
   - 18.6.2: E2E regression tests — `tests/test_profile_e2e.py`; 12 tests covering all write paths and C5 regression
   - GATE 18.6 (closed): 598 backend tests passing
 
+Phase 15 — Geo Filtering (complete: 2026-02-27)
+- 15.1: resolve_location_country() + derive_target_countries() in geo.py (both copies); geonamescache + country-converter + US state abbrev detection; 15 tests
+- 15.2: Regression baseline with synthetic fixtures (15 GEO_TEST_JOBS in fixtures/geo_test_jobs.py); 9 tests documenting before/after behavior
+- 15.3: WTTJ partial-remote tightening — _build_geo_filter() excludes partial-remote from non-target countries; Algolia filter: target_country OR fulltime OR partial-in-target; 5 tests
+- 15.4: ATS scraper geo filtering — _is_geo_allowed() + run_watchlist_scraper(target_countries) returns tuple[list[RawJob], int]; 8 tests
+- 15.5: Unified _is_non_target_geo() in prefilter.py — replaces _is_us_only + _is_non_target_onsite; 3-layer detection (L1=location, L2=city in description, L3=US signals); prefilter_jobs() accepts target_countries; 443 tests
+- 15.6: Glassdoor added to LinkedIn searches in juan-searches.yaml; merger enrichment stats logged after merge_jobs()
+- 15.7: Geo stats in pipeline summary — geo_rejected_at_scrape + geo_rejected_at_prefilter + geo_passed; structured geo_filter_stats log event
+- 15.8: PostHog per-job geo filter tracking — _is_non_target_geo() returns 3-tuple (rejected, country, filter_layer); geo_filter_applied per-job event + geo_filter_run_stats aggregate event in main.py
+- 15.9: End-to-end wiring — main.py derives target_countries via derive_target_countries(home_locations); passes to ATS scraper, WTTJ scraper, prefilter_jobs(); 8 integration tests (TestEndToEndGeoFiltering); 458 agent tests passing (1 pre-existing scorer failure)
+- GATE 15.9 (closed): all gate conditions verified; _is_us_only + _is_non_target_onsite removed; all filters profile-aware; PostHog events per-job + aggregate
+
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
 - Phase R — Refactor & Test Coverage
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
+- Geo filtering architecture (Phase 15): three-layer detection chain. L1=resolve_location_country() on structured location field (highest confidence). L2=geonamescache city mention in description near context words ("based in", "office in" etc). L3=US visa/auth language ("e-verify", "remote within the us", "must be authorized to work in the u.s"). Conservative: unresolved location + no signals → pass. Remote fulltime always passes regardless of location. "nan" added to sentinel pass-through list (geonamescache resolves it to "CN" via city name match).
+- Geo filter layer tracking (Phase 15): _is_non_target_geo() returns 3-tuple (rejected, country, filter_layer). filter_layer: "prefilter_location" | "prefilter_description" | "prefilter_signal" | None. Stored as job["_geo_layer"] for PostHog tracking. PostHog events: geo_filter_applied (per-job) + geo_filter_run_stats (aggregate per pipeline run).
+- target_countries derivation (Phase 15): main.py calls derive_target_countries(home_locations) before Step 1b. Passed to ATS scraper, WTTJ scraper (replaces wttj_countries profile field), and prefilter_jobs(). Fallback: uses wttj_countries from profile if home_locations don't resolve to any country.
+- ATS scraper return type (Phase 15): run_watchlist_scraper() returns tuple[list[RawJob], int] — second element is total_geo_rejected count for pipeline stats. patterns/scraper.md updated.
+- WTTJ geo filter (Phase 15): _build_geo_filter() builds Algolia filter including only target countries + fulltime remote + partial-in-target. Partial remote from non-target countries excluded at scrape time. Aligned with derive_target_countries() output.
 - WTTJ geographic filter (Phase 0.1): offices.country_code is a filterable Algolia attribute (verified live). Filter: PM_filter AND (country_code:X OR ... OR remote:fulltime OR remote:partial). target_countries explicit list in profile YAML (not derived from country_weights to avoid name→ISO complexity). Default: [ES] + remote.
 - make_job_id migration (Phase 0.2): ID hash changes mean new IDs for existing jobs. Chosen option A: accept one-time re-run cost. Clear seen_ids/<profile>.txt after deploy. migrate_job_ids.py handles SQLite in-place UPDATE; collision resolution keeps record with more non-null parsed fields.
 - nan sanitization (Phase 0.3): _sanitize_str() in scraper.py handles float NaN, None, and string literal 'nan'. Applied to all string fields in run_scraper(). ats_scraper.py and wttj_scraper.py already avoided this via explicit str() conversion, but wttj already had proper handling.
