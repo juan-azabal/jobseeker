@@ -2,7 +2,7 @@
 set -e
 
 # Ensure volume directories exist
-mkdir -p /data/profiles /data/knowledge /data/seen_ids /data/cv-references
+mkdir -p /data/profiles /data/knowledge /data/seen_ids
 
 # First deploy: seed from Docker image (cp -n = no clobber)
 if [ ! -f /data/.seeded ]; then
@@ -16,11 +16,5 @@ fi
 rm -rf /app/agent/config/profiles && ln -sf /data/profiles /app/agent/config/profiles
 rm -rf /app/agent/knowledge       && ln -sf /data/knowledge /app/agent/knowledge
 rm -rf /app/agent/config/seen_ids && ln -sf /data/seen_ids /app/agent/config/seen_ids
-
-# CV reference files (gitignored — must be uploaded to volume manually once)
-if [ "$(ls -A /data/cv-references 2>/dev/null)" ]; then
-  rm -rf /app/api/cv/references
-  ln -sf /data/cv-references /app/api/cv/references
-fi
 
 exec uvicorn api.main:app --host 0.0.0.0 --port "${PORT:-8000}"
