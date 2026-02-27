@@ -11,6 +11,8 @@ interface Profile {
   current_level: string;
   track: string;
   target_level: string;
+  role_type?: string;
+  role_function?: string;
   domains: Record<string, number>;
   seniority_weights?: Record<string, number>;
   country_weights?: Record<string, number>;

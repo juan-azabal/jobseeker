@@ -62,6 +62,7 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
   const [newCompanyType, setNewCompanyType] = useState('');
   const [roleType, setRoleType] = useState(profile.role_type ?? '');
   const [roleFunction, setRoleFunction] = useState(profile.role_function ?? '');
+  const [track, setTrack] = useState(profile.track ?? 'ic');
 
   const handleSave = async () => {
     setError(null);
@@ -97,6 +98,7 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
           location_preference: locationPref,
           ...(roleType ? { role_type: roleType } : {}),
           ...(roleFunction ? { role_function: roleFunction } : {}),
+          track,
         }),
       });
     }
@@ -217,6 +219,21 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
             ))}
           </select>
         </div>
+      </div>
+
+      {/* Track */}
+      <div>
+        <label className="block text-zinc-300 text-sm font-medium mb-1" htmlFor="track-select">Career track</label>
+        <select
+          id="track-select"
+          aria-label="Career track"
+          className="w-full bg-zinc-800 text-white rounded px-3 py-2 text-sm"
+          value={track}
+          onChange={(e) => setTrack(e.target.value)}
+        >
+          <option value="ic">Individual Contributor (IC)</option>
+          <option value="management">Management</option>
+        </select>
       </div>
 
       {/* Seniority weights */}
