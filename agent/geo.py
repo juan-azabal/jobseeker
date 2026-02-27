@@ -58,8 +58,8 @@ def resolve_location_country(location: str | None) -> str | None:
     loc = location.strip()
     loc_lower = loc.lower()
 
-    # Pass-through: generic remote terms → no country
-    if loc_lower in ("remote", "worldwide", "global", "anywhere", "distributed"):
+    # Pass-through: generic remote terms and sentinel non-locations → no country
+    if loc_lower in ("remote", "worldwide", "global", "anywhere", "distributed", "nan"):
         return None
 
     # Layer 1: country-converter on full string

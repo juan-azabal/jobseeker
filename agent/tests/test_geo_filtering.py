@@ -129,11 +129,12 @@ class TestGeoRegressionBaseline:
     expected to fail after 15.5 — so we only assert the "must still pass" subset.
     """
 
-    def _run(self, jobs, prefs_file, empty_applied, empty_seen):
+    def _run(self, jobs, prefs_file, empty_applied, empty_seen, target_countries=None):
         job_dicts = [dict(j) for j in jobs]
         passed, rejected, stats = prefilter_jobs(
             job_dicts, prefs_file, empty_applied, empty_seen,
             home_locations=["barcelona", "spain"],
+            target_countries=target_countries or ["ES"],
         )
         passed_ids = {j["id"] for j in passed}
         rejected_ids = {j["id"] for j in rejected}
@@ -181,14 +182,11 @@ class TestGeoRegressionBaseline:
         _, rejected_ids, _ = self._run(jobs, geo_prefs_file, empty_applied, empty_seen)
         assert "fr-onsite" in rejected_ids
 
-    def test_us_remote_fulltime_currently_rejected(self, geo_prefs_file, empty_applied, empty_seen):
-        """US remote fulltime with location='United States' → currently rejected by _is_us_only.
-        This is a known false negative fixed in 15.5 (unified geo filter has remote exception).
-        """
+    def test_us_remote_fulltime_passes(self, geo_prefs_file, empty_applied, empty_seen):
+        """US remote fulltime → passes (remote_type=fulltime exemption in unified geo filter)."""
         jobs = [j for j in GEO_TEST_JOBS if j.id == "us-remote-ft"]
-        _, rejected_ids, _ = self._run(jobs, geo_prefs_file, empty_applied, empty_seen)
-        # Documents current behavior: rejected due to "united states" in location string.
-        assert "us-remote-ft" in rejected_ids
+        passed_ids, _, _ = self._run(jobs, geo_prefs_file, empty_applied, empty_seen)
+        assert "us-remote-ft" in passed_ids
 
     def test_baseline_stats_printed(self, geo_prefs_file, empty_applied, empty_seen, capsys):
         """Full baseline run prints stats."""
@@ -196,6 +194,7 @@ class TestGeoRegressionBaseline:
         passed, rejected, stats = prefilter_jobs(
             job_dicts, geo_prefs_file, empty_applied, empty_seen,
             home_locations=["barcelona", "spain"],
+            target_countries=["ES"],
         )
         out = capsys.readouterr().out
         assert "Pre-filter" in out
@@ -301,3 +300,144 @@ class TestATSGeoFilter:
         """Location containing 'remote' → always accepted."""
         job = _make_ats_job("Remote, US")
         assert _is_geo_allowed(job, ["ES"])
+
+
+# ---------------------------------------------------------------------------
+# 15.5 — Unified _is_non_target_geo tests
+# ---------------------------------------------------------------------------
+
+
+from prefilter import _is_non_target_geo as _geo_filter
+
+
+def _geo_job(**kwargs) -> dict:
+    base = {
+        "id": "test",
+        "title": "Product Manager",
+        "company": "Corp",
+        "source": "linkedin",
+        "location": None,
+        "description": "",
+        "remote_type": "no",
+        "is_remote": False,
+    }
+    base.update(kwargs)
+    return base
+
+
+class TestUnifiedGeoFilter:
+    """Tests for _is_non_target_geo covering all three layers."""
+
+    # --- Layer 1: structured location ---
+
+    def test_layer1_sf_ca_rejected_for_es(self):
+        """SF CA → resolved US, rejected for ES target."""
+        job = _geo_job(location="San Francisco, CA")
+        rejected, country = _geo_filter(job, ["ES"])
+        assert rejected is True
+        assert country == "US"
+
+    def test_layer1_barcelona_passes_for_es(self):
+        """Barcelona → resolved ES, passes for ES target."""
+        job = _geo_job(location="Barcelona")
+        rejected, _ = _geo_filter(job, ["ES"])
+        assert rejected is False
+
+    def test_layer1_berlin_rejected_for_es(self):
+        """Berlin, Germany → DE, rejected for ES target."""
+        job = _geo_job(location="Berlin, Germany")
+        rejected, country = _geo_filter(job, ["ES"])
+        assert rejected is True
+        assert country == "DE"
+
+    def test_layer1_remote_fulltime_always_passes(self):
+        """remote_type=fulltime → never rejected regardless of location."""
+        job = _geo_job(location="San Francisco, CA", remote_type="fulltime")
+        rejected, _ = _geo_filter(job, ["ES"])
+        assert rejected is False
+
+    def test_layer1_null_location_falls_through(self):
+        """Null location → no Layer 1 rejection (falls through to Layer 2/3)."""
+        job = _geo_job(location=None, description="")
+        rejected, _ = _geo_filter(job, ["ES"])
+        assert rejected is False
+
+    def test_layer1_mumbai_passes_for_in(self):
+        """Mumbai → IN, passes for IN target."""
+        job = _geo_job(location="Mumbai")
+        rejected, _ = _geo_filter(job, ["IN"])
+        assert rejected is False
+
+    def test_layer1_london_rejected_for_in(self):
+        """London → GB, rejected for IN target."""
+        job = _geo_job(location="London, United Kingdom")
+        rejected, country = _geo_filter(job, ["IN"])
+        assert rejected is True
+        assert country == "GB"
+
+    def test_layer1_sf_passes_for_us(self):
+        """SF CA → US, passes for US target."""
+        job = _geo_job(location="San Francisco, CA")
+        rejected, _ = _geo_filter(job, ["US"])
+        assert rejected is False
+
+    # --- Layer 2: description city mentions ---
+
+    def test_layer2_berlin_office_mention_rejected_for_es(self):
+        """Null location, 'our Berlin office' in description → DE, rejected for ES."""
+        job = _geo_job(
+            location=None,
+            description="We are growing rapidly. Our Berlin office is the heart of our team.",
+        )
+        rejected, country = _geo_filter(job, ["ES"])
+        assert rejected is True
+        assert country == "DE"
+
+    def test_layer2_no_context_words_passes(self):
+        """Null location, city mention without context words → passes (conservative)."""
+        job = _geo_job(
+            location=None,
+            description="We serve customers in Berlin and Paris with great service.",
+        )
+        rejected, _ = _geo_filter(job, ["ES"])
+        assert rejected is False  # no "based in", "office in" etc.
+
+    # --- Layer 3: US-specific signals ---
+
+    def test_layer3_remote_within_us_rejected_for_es(self):
+        """'remote within the us' in description → rejected for ES target."""
+        job = _geo_job(
+            location=None,
+            description="This is a remote within the US position. Great benefits.",
+        )
+        rejected, country = _geo_filter(job, ["ES"])
+        assert rejected is True
+        assert country == "US"
+
+    def test_layer3_everi_fy_rejected_for_es(self):
+        """e-verify signal → rejected for ES target."""
+        job = _geo_job(
+            location=None,
+            description="We participate in E-Verify to confirm work authorization.",
+        )
+        rejected, country = _geo_filter(job, ["ES"])
+        assert rejected is True
+        assert country == "US"
+
+    def test_layer3_null_location_no_signals_passes(self):
+        """Null location, no geo signals → passes (conservative)."""
+        job = _geo_job(
+            location=None,
+            description="We are looking for a talented product manager to join our team.",
+        )
+        rejected, _ = _geo_filter(job, ["ES"])
+        assert rejected is False
+
+    def test_layer3_us_signals_pass_for_us_target(self):
+        """US signals detected but US is in target → passes."""
+        job = _geo_job(
+            location=None,
+            description="You must be authorized to work in the U.S. Great role!",
+        )
+        rejected, _ = _geo_filter(job, ["US"])
+        assert rejected is False

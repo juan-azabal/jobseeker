@@ -4,8 +4,11 @@ No API calls, just string matching against preferences.
 """
 
 import os
+import re
 from datetime import date, datetime
 import yaml
+
+from geo import resolve_location_country
 
 APPLIED_COMPANY_STALE_DAYS = 90  # warn after ~3 months
 
@@ -85,229 +88,115 @@ def load_applied(path: str):
     }
 
 
-# Map of lowercase country name/adjective fragments → canonical country name.
-# Used by the reject_if_requires_relocation_outside filter.
-# Conservative: only well-known unambiguous names included to avoid false positives.
-_COUNTRY_FRAGMENTS: dict[str, str] = {
-    "france": "France",
-    "french": "France",
-    "germany": "Germany",
-    "german": "Germany",
-    "deutschland": "Germany",
-    "netherlands": "Netherlands",
-    "dutch": "Netherlands",
-    "holland": "Netherlands",
-    "italy": "Italy",
-    "italian": "Italy",
-    "portugal": "Portugal",
-    "spain": "Spain",
-    "spanish": "Spain",
-    "poland": "Poland",
-    "polish": "Poland",
-    "sweden": "Sweden",
-    "swedish": "Sweden",
-    "norway": "Norway",
-    "norwegian": "Norway",
-    "denmark": "Denmark",
-    "danish": "Denmark",
-    "finland": "Finland",
-    "finnish": "Finland",
-    "belgium": "Belgium",
-    "belgian": "Belgium",
-    "switzerland": "Switzerland",
-    "swiss": "Switzerland",
-    "austria": "Austria",
-    "austrian": "Austria",
-    "czechia": "Czechia",
-    "czech republic": "Czechia",
-    "romania": "Romania",
-    "ukraine": "Ukraine",
-    "hungary": "Hungary",
-    "ireland": "Ireland",
-    "irish": "Ireland",
-    "united kingdom": "United Kingdom",
-    "england": "United Kingdom",
-    "turkey": "Turkey",
-    "türkiye": "Turkey",
-    "israel": "Israel",
-    "india": "India",
-    "indian": "India",
-    "singapore": "Singapore",
-    "australia": "Australia",
-    "australian": "Australia",
-    "canada": "Canada",
-    "canadian": "Canada",
-    "brazil": "Brazil",
-    "brazilian": "Brazil",
-}
+# Location-signaling context words for Layer 2 description scan (city mentions)
+_LOC_CONTEXT_WORDS = re.compile(
+    r"\b(based in|located in|office in|offices in|headquarters in|hq in|our .{0,20} office)\b",
+    re.IGNORECASE,
+)
+
+# US-specific signals in descriptions for Layer 3
+_US_DESC_SIGNALS = [
+    "authorized to work in the u.s",
+    "authorized to work for any employer in the u.s",
+    "must be authorized to work in the united states",
+    "u.s. work authorization",
+    "us work authorization",
+    "e-verify",
+    "remote within the us",
+    "us-based",
+    "us total target compensation",
+]
 
 
-def _detect_country_in_location(location: str) -> str | None:
-    """Return the detected country name from a location string, or None if unrecognised."""
-    loc_lower = location.lower()
-    for fragment, country in _COUNTRY_FRAGMENTS.items():
-        if fragment in loc_lower:
-            return country
-    return None
-
-
-def _is_non_target_onsite(
+def _is_non_target_geo(
     job: dict,
-    reject_outside: str,
-    accept_onsite_cities: list[str],
-    home_locations: list[str],
-) -> bool:
-    """Return True if job requires relocation to a non-target country.
+    target_countries: list[str],
+) -> tuple[bool, str | None]:
+    """Return (should_reject, detected_country) for a job.
 
-    Conditions for rejection:
-    - job is NOT remote (is_remote=False)
-    - location contains a recognisable country name
-    - that country differs from the target (reject_outside)
-    - location does NOT contain any accept_onsite_cities or home_locations
+    Detection chain:
+    Layer 1 — Structured location (highest confidence):
+        resolve_location_country(job.location) → if resolved and NOT in target_countries
+        and job is not remote-fulltime → reject.
+    Layer 2 — Description city/country mentions (medium confidence, null location):
+        Scan description for city names from geonamescache near location-signaling
+        context words OR in the first 500 chars.
+    Layer 3 — Region-specific signals (supplementary, lowest confidence):
+        Check description for US-specific visa/auth language.
+        Reject only when detected country NOT in target_countries.
 
-    Conservative: empty or unrecognised location → False (pass through).
+    Remote-fulltime exception: jobs with remote_type="fulltime" always pass
+    regardless of location.
 
-    NOTE: This filter has limited value while 75% of jobs have empty locations.
-    Its effectiveness increases after Phase 1 adds structured country/city fields.
+    Conservative: unresolved location AND no signals → pass (return False).
     """
-    is_remote = job.get("is_remote", False)
-    if is_remote:
-        return False  # remote jobs always pass
+    import geonamescache as _gnc  # lazy import — module already loaded
+    _gc = _gnc.GeonamesCache()
 
+    remote_type = (job.get("remote_type") or "").lower()
+    is_remote_fulltime = remote_type == "fulltime"
+    if is_remote_fulltime:
+        return False, None
+
+    # Layer 1: structured location field
     location = (job.get("location") or "").strip()
-    if not location:
-        return False  # unknown location → conservative pass
+    if location:
+        country = resolve_location_country(location)
+        if country and country not in target_countries:
+            return True, country
+        if country and country in target_countries:
+            return False, None
+        # country is None → fall through to description layers
 
-    detected = _detect_country_in_location(location)
-    if detected is None:
-        return False  # unrecognised country → conservative pass
+    # Layer 2: city/country mentions in description near location-signaling context words
+    description = (job.get("description") or "")
+    desc_lower = description.lower()
 
-    target_lower = reject_outside.lower()
-    if detected.lower() == target_lower:
-        return False  # same as target country → pass
+    # Only scan if location is null/empty (already handled above if location exists)
+    if not location and description:
+        # Extract lines containing location context words (e.g. "based in Berlin")
+        context_lines: list[str] = []
+        for line in description.split("\n"):
+            if _LOC_CONTEXT_WORDS.search(line):
+                context_lines.append(line)
 
-    # Check if the location contains a recognised city/region in the accept list
-    loc_lower = location.lower()
-    for city in accept_onsite_cities:
-        if city.lower() in loc_lower:
-            return False  # accepted onsite city → pass
-    for loc in home_locations:
-        if loc.lower() in loc_lower:
-            return False  # home location → pass
+        # Only proceed if there are actual location-signaling context lines
+        if context_lines:
+            seen_countries: set[str] = set()
+            for line in context_lines:
+                # Find capitalized words ≥5 chars in this context line.
+                # Min 5 chars (1 capital + 4 lowercase) avoids common English words like
+                # "Our", "The", "For" matching city alternate names.
+                words = re.findall(r"\b[A-Z][a-z]{4,}\b", line)
+                for word in words:
+                    cities = _gc.search_cities(word, case_sensitive=False)
+                    if not cities:
+                        continue
+                    top = max(cities, key=lambda c: c.get("population", 0))
+                    if top.get("population", 0) < 200_000:
+                        continue  # too small or ambiguous
+                    cc = top.get("countrycode", "")
+                    if not cc or cc in seen_countries:
+                        continue
+                    seen_countries.add(cc)
+                    if cc not in target_countries:
+                        return True, cc
 
-    return True  # non-target onsite → reject
+    # Layer 3: US-specific signals in description
+    for signal in _US_DESC_SIGNALS:
+        if signal in desc_lower:
+            if "US" not in target_countries:
+                return True, "US"
+            return False, None  # US signal but US is target → pass
 
-
-def _is_us_only(job):
-    """Detect non-EU roles (US, Canada, APAC) that won't offer visa sponsorship to EU candidates."""
-    location = (job.get("location") or "").lower()
-    description = (job.get("description") or "").lower()
-
-    us_signals_location = [
-        ", al",
-        ", ak",
-        ", az",
-        ", ar",
-        ", ca",
-        ", co",
-        ", ct",
-        ", de",
-        ", fl",
-        ", ga",
-        ", hi",
-        ", id",
-        ", il",
-        ", in",
-        ", ia",
-        ", ks",
-        ", ky",
-        ", la",
-        ", me",
-        ", md",
-        ", ma",
-        ", mi",
-        ", mn",
-        ", ms",
-        ", mo",
-        ", mt",
-        ", ne",
-        ", nv",
-        ", nh",
-        ", nj",
-        ", nm",
-        ", ny",
-        ", nc",
-        ", nd",
-        ", oh",
-        ", ok",
-        ", or",
-        ", pa",
-        ", ri",
-        ", sc",
-        ", sd",
-        ", tn",
-        ", tx",
-        ", ut",
-        ", vt",
-        ", va",
-        ", wa",
-        ", wv",
-        ", wi",
-        ", wy",
-        "united states",
-        "estados unidos",
-        "usa",
-        "nationwide",
-        "new york",
-        "san francisco",
-        "los angeles",
-        "chicago",
-        "seattle",
-        "austin",
-        "denver",
-        "boston",
-        "miami",
-        "atlanta",
-        "dallas",
-        "salt lake city",
-        "minneapolis",
-        "portland",
-        "phoenix",
-    ]
-
-    for signal in us_signals_location:
-        if signal in location:
-            return True
-
-    us_visa_signals = [
-        # Explicit US work authorisation requirements
-        "authorized to work in the u.s",
-        "authorized to work for any employer in the u.s",
-        "must be authorized to work in the united states",
-        "u.s. work authorization",
-        "us work authorization",
-        "e-verify",
-        # "unable to sponsor" kept but scoped below — common in US postings
-        # "must be legally authorized" removed: too broad, appears in EU job descriptions too
-        # "401(k)" / "401k" removed: US multinationals include benefits in templates even for
-        #   EU roles; filtering on this causes heavy false positives for remote jobs
-        # "humana" removed: matches "derechos humanos" / "capital humano" in Spanish descriptions
-        # "remote, nationwide" / "remote nationwide" removed without US context: UK/EU companies
-        #   legitimately use this phrasing for country-wide remote roles
-    ]
-
-    # "unable to sponsor" is very US-specific but occasionally used by EU companies too;
-    # only treat as US-only signal when combined with explicit US work-auth language nearby.
-    if "unable to sponsor" in description and (
-        "united states" in description or "u.s." in description or "visa sponsorship" in description
+    # "unable to sponsor" only when combined with US context
+    if "unable to sponsor" in desc_lower and (
+        "united states" in desc_lower or "u.s." in desc_lower or "visa sponsorship" in desc_lower
     ):
-        return True
+        if "US" not in target_countries:
+            return True, "US"
 
-    for signal in us_visa_signals:
-        if signal in description:
-            return True
-
-    return False
+    return False, None
 
 
 def _is_relevant_title(title_lower, title_keywords, title_exclude):
@@ -331,7 +220,27 @@ def load_seen_ids(path="config/seen_ids.txt"):
         return {line.strip() for line in f if line.strip()}
 
 
-def prefilter_jobs(jobs, config_path, applied_path, seen_path, home_locations=None, profile_role_function=None):
+def prefilter_jobs(
+    jobs,
+    config_path,
+    applied_path,
+    seen_path,
+    home_locations=None,
+    profile_role_function=None,
+    target_countries: list[str] | None = None,
+):
+    """Filter jobs using keyword, geo, and role-function rules.
+
+    Args:
+        jobs: List of job dicts.
+        config_path: Path to preferences YAML.
+        applied_path: Path to applied.yaml.
+        seen_path: Path to seen_ids.txt.
+        home_locations: User's home locations (used when target_countries not provided).
+        profile_role_function: Profile role function (e.g. "product") for soft gate.
+        target_countries: ISO2 codes for geo filtering (e.g. ["ES", "NL"]).
+            If None, geo filtering uses the preferences file's reject_if_requires_relocation_outside.
+    """
     prefs = load_preferences(config_path)
     pf = prefs["prefilter"]
     applied = load_applied(applied_path)
@@ -341,11 +250,8 @@ def prefilter_jobs(jobs, config_path, applied_path, seen_path, home_locations=No
     title_keywords = [kw.lower() for kw in pf.get("title_must_contain_one_of", [])]
     title_exclude = [kw.lower() for kw in pf.get("title_exclude", [])]
     exclude_companies = [c.lower() for c in pf.get("exclude_companies", [])]
-    accept_locations = [loc.lower() for loc in pf.get("location", {}).get("accept_onsite_cities", [])]
-    reject_outside = pf.get("location", {}).get("reject_if_requires_relocation_outside")
 
-    # home_locations: user's base locations — used to rescue jobs that appear US-only
-    # but actually include the user's home city/country.
+    # home_locations: user's base locations (kept for legacy rescue logic)
     _home_locs = [loc.lower() for loc in (home_locations or [])]
 
     passed = []
@@ -363,8 +269,7 @@ def prefilter_jobs(jobs, config_path, applied_path, seen_path, home_locations=No
         "deal_breaker": 0,
         "no_pm_keyword": 0,
         "title_excluded": 0,
-        "us_only": 0,
-        "non_target_geography": 0,
+        "non_target_geo": 0,
         "aggregator": 0,
         "role_function_mismatch": 0,
     }
@@ -416,25 +321,12 @@ def prefilter_jobs(jobs, config_path, applied_path, seen_path, home_locations=No
                 reason = title_reason
                 stat_key = "no_pm_keyword" if title_reason == "no PM keyword in title" else "title_excluded"
 
-        # 4. Filter US-only roles
-        if not reason:
-            if _is_us_only(job):
-                location_lower = (job.get("location") or "").lower()
-                if any(loc in location_lower for loc in accept_locations) or any(
-                    loc in location_lower for loc in _home_locs
-                ):
-                    pass
-                else:
-                    reason = "US-only role (no EU location)"
-                    stat_key = "us_only"
-
-        # 4b. Non-target onsite geography (e.g. France when target is Spain)
-        # NOTE: limited value while 75% of locations are empty. Becomes effective
-        # after Phase 1 adds structured country field.
-        if not reason and reject_outside:
-            if _is_non_target_onsite(job, reject_outside, accept_locations, _home_locs):
-                reason = f"requires relocation outside {reject_outside}: {job.get('location', '')}"
-                stat_key = "non_target_geography"
+        # 4. Unified geo filter (replaces _is_us_only + _is_non_target_onsite)
+        if not reason and target_countries:
+            should_reject, detected_country = _is_non_target_geo(job, target_countries)
+            if should_reject:
+                reason = f"non-target geography: {detected_country} (location={job.get('location', '')})"
+                stat_key = "non_target_geo"
 
         # 5. Filter job aggregators
         if not reason:

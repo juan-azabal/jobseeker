@@ -1,4 +1,4 @@
-"""Tests for prefilter.py: US-only detection, title relevance, applied loading, full prefilter flow."""
+"""Tests for prefilter.py: geo filtering, title relevance, applied loading, full prefilter flow."""
 
 import os
 import sys
@@ -8,80 +8,108 @@ import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from prefilter import _is_relevant_title, _is_us_only, load_applied, load_seen_ids, prefilter_jobs
+from prefilter import _is_non_target_geo, _is_relevant_title, load_applied, load_seen_ids, prefilter_jobs
 
 
 # ---------------------------------------------------------------------------
-# _is_us_only
+# _is_non_target_geo
 # ---------------------------------------------------------------------------
 
 
-class TestIsUsOnly:
-    def test_us_city_in_location(self):
-        assert _is_us_only({"location": "San Francisco, CA", "description": ""}) is True
+def _geo_job(**kwargs) -> dict:
+    base = {
+        "id": "test",
+        "title": "Product Manager",
+        "company": "Corp",
+        "source": "linkedin",
+        "location": None,
+        "description": "",
+        "remote_type": "no",
+    }
+    base.update(kwargs)
+    return base
 
-    def test_us_state_abbreviation(self):
-        assert _is_us_only({"location": "Remote, NY", "description": ""}) is True
 
-    def test_european_city_not_us(self):
-        assert _is_us_only({"location": "Barcelona, Spain", "description": ""}) is False
-
-    def test_remote_europe_not_us(self):
-        assert _is_us_only({"location": "Remote, Europe", "description": ""}) is False
-
-    def test_remote_only_not_us(self):
-        assert _is_us_only({"location": "Remote", "description": ""}) is False
-
-    def test_us_work_auth_in_description(self):
-        assert (
-            _is_us_only(
-                {
-                    "location": "Remote",
-                    "description": "Must be authorized to work in the United States",
-                }
-            )
-            is True
+class TestIsNonTargetGeo:
+    def test_us_city_rejected_for_es(self):
+        rejected, country = _is_non_target_geo(
+            _geo_job(location="San Francisco, CA"), ["ES"]
         )
+        assert rejected is True
+        assert country == "US"
 
-    def test_unable_to_sponsor_with_us_context(self):
-        assert (
-            _is_us_only(
-                {
-                    "location": "Remote",
-                    "description": "We are unable to sponsor visa sponsorship at this time",
-                }
-            )
-            is True
+    def test_us_state_abbreviation_rejected_for_es(self):
+        # "Remote, NY" — NY token resolves to US
+        rejected, country = _is_non_target_geo(_geo_job(location="Remote, NY"), ["ES"])
+        assert rejected is True
+        assert country == "US"
+
+    def test_es_city_passes_for_es(self):
+        rejected, _ = _is_non_target_geo(_geo_job(location="Barcelona, Spain"), ["ES"])
+        assert rejected is False
+
+    def test_unresolvable_location_passes_conservative(self):
+        # "Remote, Europe" — no country resolved → conservative pass
+        rejected, _ = _is_non_target_geo(_geo_job(location="Remote, Europe"), ["ES"])
+        assert rejected is False
+
+    def test_remote_only_passes(self):
+        # "Remote" → None (sentinel) → pass
+        rejected, _ = _is_non_target_geo(_geo_job(location="Remote"), ["ES"])
+        assert rejected is False
+
+    def test_us_work_auth_in_description_rejected_for_es(self):
+        rejected, country = _is_non_target_geo(
+            _geo_job(
+                location=None,
+                description="Must be authorized to work in the United States",
+            ),
+            ["ES"],
         )
+        assert rejected is True
+        assert country == "US"
 
-    def test_unable_to_sponsor_without_us_context(self):
-        # "unable to sponsor" alone without US signals → not US-only
-        assert (
-            _is_us_only(
-                {
-                    "location": "Remote, Europe",
-                    "description": "We are unable to sponsor at this time",
-                }
-            )
-            is False
+    def test_unable_to_sponsor_with_us_context_rejected_for_es(self):
+        rejected, country = _is_non_target_geo(
+            _geo_job(
+                location=None,
+                description="We are unable to sponsor visa sponsorship at this time",
+            ),
+            ["ES"],
         )
+        assert rejected is True
+        assert country == "US"
 
-    def test_nationwide(self):
-        assert _is_us_only({"location": "Nationwide", "description": ""}) is True
-
-    def test_empty_location_not_us(self):
-        assert _is_us_only({"location": "", "description": ""}) is False
-
-    def test_e_verify_in_description(self):
-        assert (
-            _is_us_only(
-                {
-                    "location": "Remote",
-                    "description": "All candidates must pass E-Verify upon hire",
-                }
-            )
-            is True
+    def test_unable_to_sponsor_without_us_context_passes(self):
+        # "unable to sponsor" alone without US signals → conservative pass
+        rejected, _ = _is_non_target_geo(
+            _geo_job(
+                location=None,
+                description="We are unable to sponsor at this time",
+            ),
+            ["ES"],
         )
+        assert rejected is False
+
+    def test_unresolvable_nationwide_passes_conservative(self):
+        # "Nationwide" cannot be resolved to a country → conservative pass
+        rejected, _ = _is_non_target_geo(_geo_job(location="Nationwide"), ["ES"])
+        assert rejected is False
+
+    def test_empty_location_passes(self):
+        rejected, _ = _is_non_target_geo(_geo_job(location=""), ["ES"])
+        assert rejected is False
+
+    def test_e_verify_in_description_rejected_for_es(self):
+        rejected, country = _is_non_target_geo(
+            _geo_job(
+                location=None,
+                description="All candidates must pass E-Verify upon hire",
+            ),
+            ["ES"],
+        )
+        assert rejected is True
+        assert country == "US"
 
 
 # ---------------------------------------------------------------------------
@@ -251,11 +279,13 @@ class TestPrefilterJobs:
         assert len(passed) == 0
         assert stats["deal_breaker"] == 1
 
-    def test_rejects_us_only(self, prefs_file, empty_applied, empty_seen):
+    def test_rejects_non_target_geo(self, prefs_file, empty_applied, empty_seen):
         jobs = [self._make_job(location="San Francisco, CA")]
-        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, empty_seen)
+        passed, rejected, stats = prefilter_jobs(
+            jobs, prefs_file, empty_applied, empty_seen, target_countries=["ES"]
+        )
         assert len(passed) == 0
-        assert stats["us_only"] == 1
+        assert stats["non_target_geo"] == 1
 
     def test_seen_ids_filtered(self, prefs_file, empty_applied, tmp_path):
         seen_file = tmp_path / "seen.txt"
@@ -265,15 +295,15 @@ class TestPrefilterJobs:
         assert len(passed) == 0
         assert stats["already_seen"] == 1
 
-    def test_home_location_rescues_us_flagged(self, prefs_file, empty_applied, empty_seen):
-        # Job in New York (US-flagged), but if user lives there it should pass
+    def test_us_target_accepts_ny_job(self, prefs_file, empty_applied, empty_seen):
+        # When target_countries includes US, a New York job passes geo filter
         jobs = [self._make_job(location="New York, NY")]
         passed, rejected, stats = prefilter_jobs(
             jobs,
             prefs_file,
             empty_applied,
             empty_seen,
-            home_locations=["new york"],
+            target_countries=["US"],
         )
         assert len(passed) == 1
 

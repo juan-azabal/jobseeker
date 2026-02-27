@@ -15,6 +15,8 @@ import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from geo import derive_target_countries
+
 
 # ---------------------------------------------------------------------------
 # A. Nan location sanitization (scraper.py)
@@ -198,12 +200,17 @@ def _run_prefilter(jobs, reject_outside="Spain", accept_onsite_cities=None):
         seen_path = _make_seen_file(tmp)
         from prefilter import prefilter_jobs
 
+        home_locations = ["Spain", "Barcelona"]
+        # Derive target_countries from home_locations when geo config is active
+        target_countries = derive_target_countries(home_locations) if reject_outside else None
+
         return prefilter_jobs(
             jobs,
             config_path=prefs_path,
             applied_path=applied_path,
             seen_path=seen_path,
-            home_locations=["Spain", "Barcelona"],
+            home_locations=home_locations,
+            target_countries=target_countries,
         )
 
 
@@ -215,6 +222,7 @@ def _pm_job(title="Senior Product Manager", company="Acme", location="", is_remo
         "location": location,
         "description": "Great role for a PM.",
         "is_remote": is_remote,
+        "remote_type": "fulltime" if is_remote else "no",
         "job_url": "https://example.com",
         "site": "linkedin",
     }
