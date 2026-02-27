@@ -1,17 +1,29 @@
-"""Geographic region utilities powered by country-converter, pytz, babel.
+"""Geographic region utilities powered by country-converter, pytz, babel, geonamescache.
 
 Auto-derives region terms (EU, EMEA, Europe, …) from a user's home_locations
 so that relocation detection works for any country without manual config.
 Also provides timezone abbreviation detection and location→language mapping.
+And city-to-country resolution via geonamescache for accurate geo filtering.
 """
 
 import re
 from datetime import datetime
 
 import country_converter as coco
+import geonamescache
 import pytz
 
 _cc = coco.CountryConverter()
+_gc = geonamescache.GeonamesCache()
+
+# US state abbreviations (2-letter) as they appear at end of location strings
+_US_STATE_ABBREVS = frozenset([
+    "al", "ak", "az", "ar", "ca", "co", "ct", "de", "fl", "ga", "hi", "id",
+    "il", "in", "ia", "ks", "ky", "la", "me", "md", "ma", "mi", "mn", "ms",
+    "mo", "mt", "ne", "nv", "nh", "nj", "nm", "ny", "nc", "nd", "oh", "ok",
+    "or", "pa", "ri", "sc", "sd", "tn", "tx", "ut", "vt", "va", "wa", "wv",
+    "wi", "wy", "dc",
+])
 
 # Terms that mean "open to everyone" regardless of where you live
 UNIVERSAL_TERMS = ["worldwide", "global", "anywhere"]
@@ -20,6 +32,89 @@ UNIVERSAL_TERMS = ["worldwide", "global", "anywhere"]
 _EMEA_CONTINENTS = {"Europe", "Africa"}
 _EMEA_UN_REGIONS = {"Western Asia"}  # Middle East portion of EMEA
 _APAC_CONTINENTS = {"Asia", "Oceania"}
+
+
+def resolve_location_country(location: str | None) -> str | None:
+    """Resolve a location string to an ISO2 country code, or None if unresolvable.
+
+    Resolution chain (first match wins):
+    1. country-converter on the full string (catches "Spain", "United States", etc.)
+    2. geonamescache.search_cities() on each comma-separated token — picks the city
+       with the highest population to disambiguate ("Portland" → US not UK,
+       "Barcelona" → ES not VE).
+    3. US state abbreviation detection: ", CA" ", NY" etc. at end of string → "US"
+    4. Returns None if unresolved (conservative — job passes through)
+
+    Args:
+        location: Raw location string from job posting (e.g. "San Francisco, CA",
+            "Barcelona, Spain", "Remote", "").
+
+    Returns:
+        ISO2 country code (e.g. "US", "ES", "DE") or None.
+    """
+    if not location or not location.strip():
+        return None
+
+    loc = location.strip()
+    loc_lower = loc.lower()
+
+    # Pass-through: generic remote terms → no country
+    if loc_lower in ("remote", "worldwide", "global", "anywhere", "distributed"):
+        return None
+
+    # Layer 1: country-converter on full string
+    iso2 = _cc.convert(loc, to="ISO2")
+    if iso2 and iso2 != "not found":
+        return str(iso2)
+
+    # Layer 2: geonamescache city search on each comma-separated token
+    tokens = [t.strip() for t in loc.split(",") if t.strip()]
+    best_match: tuple[int, str] | None = None  # (population, country_code)
+    for token in tokens:
+        # US state abbreviation check before geonamescache (short codes cause false matches)
+        if token.lower() in _US_STATE_ABBREVS:
+            return "US"
+
+        # Also try country-converter on each token (catches "France" in "Paris, France")
+        iso2 = _cc.convert(token, to="ISO2")
+        if iso2 and iso2 != "not found":
+            return str(iso2)
+
+        # geonamescache city search — pick highest-population match
+        cities = _gc.search_cities(token, case_sensitive=False)
+        if cities:
+            top = max(cities, key=lambda c: c.get("population", 0))
+            pop = top.get("population", 0)
+            cc = top.get("countrycode", "")
+            if cc and (best_match is None or pop > best_match[0]):
+                best_match = (pop, cc)
+
+    if best_match:
+        return best_match[1]
+
+    return None
+
+
+def derive_target_countries(home_locations: list[str]) -> list[str]:
+    """Resolve user's home_locations to unique ISO2 country codes.
+
+    Uses the same resolution chain as resolve_location_country(). Duplicates
+    are removed; order is preserved (first occurrence wins for each country).
+
+    Args:
+        home_locations: e.g. ["barcelona", "spain"] or ["new york", "us"]
+
+    Returns:
+        Deduplicated list of ISO2 codes, e.g. ["ES"] or ["US"].
+    """
+    seen: set[str] = set()
+    result: list[str] = []
+    for loc in home_locations:
+        code = resolve_location_country(loc)
+        if code and code not in seen:
+            seen.add(code)
+            result.append(code)
+    return result
 
 
 def derive_home_regions(home_locations: list[str]) -> list[str]:
