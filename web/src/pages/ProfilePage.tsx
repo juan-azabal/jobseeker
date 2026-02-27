@@ -44,11 +44,12 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [cvMarkdown, setCvMarkdown] = useState('');
   const [pendingMarkdown, setPendingMarkdown] = useState<string | null>(null);
-  const [newProfile, setNewProfile] = useState<Profile | null>(null);
+
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [mergedResult, setMergedResult] = useState<MergedResult | null>(null);
+  const [profileVersion, setProfileVersion] = useState(0);
 
   const loadProfile = () => {
     fetch('/api/onboard/profile')
@@ -59,6 +60,7 @@ export default function ProfilePage() {
       .then((data) => {
         setProfile(data.profile);
         setCvMarkdown(data.cv_markdown);
+        setProfileVersion((v) => v + 1);
         setStep('view');
       })
       .catch(() => navigate('/onboard'));
@@ -130,7 +132,7 @@ export default function ProfilePage() {
     loadProfile();
     setStep('view');
     setPendingMarkdown(null);
-    setNewProfile(null);
+
     setMergedResult(null);
   };
 
@@ -199,7 +201,7 @@ export default function ProfilePage() {
 
       {profile ? (
         <>
-          <ProfileEditor profile={profile} cvMarkdown={cvMarkdown} onSaved={handleSaved} />
+          <ProfileEditor key={profileVersion} profile={profile} cvMarkdown={cvMarkdown} onSaved={handleSaved} />
           <div className="mt-8 border-t border-zinc-800 pt-6">
             <button
               onClick={() => setStep('upload')}
