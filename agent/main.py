@@ -1173,6 +1173,33 @@ def main():
     # Step 1.5: Merge duplicates across sources (field-group priority)
     raw_jobs: list[RawJob] = merge_jobs(all_raw)
 
+    # Enrichment stats: measure Glassdoor ↔ LinkedIn overlap after merge
+    _src_counts: dict[str, int] = {}
+    for j in raw_jobs:
+        for s in (j.sources or []):
+            _src_counts[s] = _src_counts.get(s, 0) + 1
+    _multi_src = sum(1 for j in raw_jobs if len(j.sources or []) > 1)
+    _ld_gd = sum(
+        1 for j in raw_jobs
+        if j.sources and "linkedin" in j.sources and "glassdoor" in j.sources
+    )
+    _ld_gd_enriched = sum(
+        1 for j in raw_jobs
+        if j.sources and "linkedin" in j.sources and "glassdoor" in j.sources and j.location
+    )
+    if _src_counts:
+        src_summary = ", ".join(f"{s}={n}" for s, n in sorted(_src_counts.items()))
+        print(f"\n📊 Sources: {src_summary}")
+        if _multi_src:
+            print(f"   Multi-source merges: {_multi_src} | LinkedIn∩Glassdoor: {_ld_gd} ({_ld_gd_enriched} with location enriched)")
+        logger.info(
+            "merge_enrichment_stats",
+            source_counts=_src_counts,
+            multi_source=_multi_src,
+            linkedin_glassdoor_overlap=_ld_gd,
+            linkedin_glassdoor_enriched=_ld_gd_enriched,
+        )
+
     # Convert to dicts for downstream (prefilter/parser/scorer still use plain dicts)
     jobs = _to_dicts(raw_jobs)
 
