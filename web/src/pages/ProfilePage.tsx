@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import FileUpload from '../components/FileUpload';
 import ProfileEditor from '../components/ProfileEditor';
+import CVReplaceSummary from '../components/CVReplaceSummary';
 
 interface Profile {
   name: string;
@@ -11,6 +12,8 @@ interface Profile {
   current_level: string;
   track: string;
   target_level: string;
+  role_type?: string;
+  role_function?: string;
   domains: Record<string, number>;
   seniority_weights?: Record<string, number>;
   country_weights?: Record<string, number>;
@@ -21,7 +24,19 @@ interface Profile {
   location_preference?: string;
 }
 
-type Step = 'loading' | 'view' | 'upload' | 'generating' | 'review';
+interface MergedResult {
+  merged_profile: Profile;
+  diff: {
+    skills_added: string[];
+    skills_kept: string[];
+    domains_added: Record<string, number>;
+    domains_kept: Record<string, number>;
+    fields_updated: string[];
+    fields_preserved: string[];
+  };
+}
+
+type Step = 'loading' | 'view' | 'upload' | 'generating' | 'review' | 'merged';
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -33,6 +48,7 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [mergedResult, setMergedResult] = useState<MergedResult | null>(null);
 
   const loadProfile = () => {
     fetch('/api/onboard/profile')
@@ -76,20 +92,36 @@ export default function ProfilePage() {
     if (!pendingMarkdown) return;
     setStep('generating');
     setError(null);
-    const resp = await fetch('/api/onboard/generate-profile', {
+
+    // Step 1: Extract profile data from new CV
+    const extractResp = await fetch('/api/onboard/generate-profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cv_markdown: pendingMarkdown }),
     });
-    if (!resp.ok) {
-      const data = await resp.json().catch(() => ({}));
+    if (!extractResp.ok) {
+      const data = await extractResp.json().catch(() => ({}));
       setError(data.detail || 'Profile generation failed. Please try again.');
       setStep('upload');
       return;
     }
-    const profileData = await resp.json();
-    setNewProfile(profileData);
-    setStep('review');
+    const extracted = await extractResp.json();
+
+    // Step 2: Server-side additive merge
+    const mergeResp = await fetch('/api/onboard/replace-cv', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cv_markdown: pendingMarkdown, extracted_profile: extracted }),
+    });
+    if (!mergeResp.ok) {
+      const data = await mergeResp.json().catch(() => ({}));
+      setError(data.detail || 'Profile merge failed. Please try again.');
+      setStep('upload');
+      return;
+    }
+    const result: MergedResult = await mergeResp.json();
+    setMergedResult(result);
+    setStep('merged');
   };
 
   const handleSaved = () => {
@@ -99,24 +131,16 @@ export default function ProfilePage() {
     setStep('view');
     setPendingMarkdown(null);
     setNewProfile(null);
+    setMergedResult(null);
   };
 
   if (step === 'loading') return <div className="min-h-screen bg-zinc-950" />;
 
-  // ── Review new profile after CV replacement ──────────────────────────────
-  if (step === 'review' && newProfile && pendingMarkdown) {
+  // ── Show CV merge diff after CV replacement ───────────────────────────────
+  if (step === 'merged' && mergedResult) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-8">
-        <button
-          onClick={() => { setStep('upload'); setNewProfile(null); }}
-          className="mb-6 flex items-center gap-1.5 text-xs font-medium text-zinc-600 transition-colors hover:text-zinc-200"
-        >
-          <span>←</span>
-          <span>Back</span>
-        </button>
-        <h1 className="text-xl font-bold text-white">Review new profile</h1>
-        <p className="mt-1 mb-8 text-sm text-zinc-500">Confirm the extracted data before saving.</p>
-        <ProfileEditor profile={newProfile} cvMarkdown={pendingMarkdown} onSaved={handleSaved} isNew />
+        <CVReplaceSummary diff={mergedResult.diff} onDone={handleSaved} />
       </div>
     );
   }

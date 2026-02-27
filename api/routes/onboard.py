@@ -779,6 +779,77 @@ async def _sync_and_trigger_pipeline(
             )
 
 
+def _yaml_to_flat_profile(raw: dict) -> dict:
+    """Normalize nested YAML (jobagent format) → flat dict ProfileEditor expects."""
+    user_block = raw.get("user") or {}
+    target_block = raw.get("target") or {}
+    stored_sw = target_block.get("seniority_weights") or {}
+    if not stored_sw:
+        stored_sw = _derive_seniority_weights({"target_level": target_block.get("level", "senior")})
+    return {
+        "name": user_block.get("name", ""),
+        "email": user_block.get("email", None),
+        "languages": user_block.get("languages", []),
+        "home_locations": user_block.get("home_locations", []),
+        "current_level": "",
+        "track": target_block.get("track", "ic"),
+        "target_level": target_block.get("level", ""),
+        "role_type": target_block.get("role_type", ""),
+        "role_function": target_block.get("role_function", ""),
+        "seniority_weights": stored_sw,
+        "domains": dict(target_block.get("domains") or {}),
+        "skills": list(raw.get("skills") or []),
+        # exclude_companies lives at YAML root level (not under user block)
+        "exclude_companies": list(raw.get("exclude_companies") or []),
+        "salary_min": target_block.get("salary_min", 60000),
+        "location_preference": user_block.get("location_preference", "b"),
+        "country_weights": dict(target_block.get("country_weights") or {}),
+        "company_type_weights": dict(target_block.get("company_type_weights") or {}),
+    }
+
+
+def _apply_flat_to_yaml(raw: Any, flat: dict) -> None:
+    """Apply flat profile dict values to a ruamel CommentedMap in-place.
+
+    Writes all UI-managed fields; preserves untouched YAML keys (story banks, etc.).
+    """
+    from ruamel.yaml.comments import CommentedMap, CommentedSeq  # noqa: PLC0415
+
+    raw.setdefault("user", CommentedMap())
+    raw.setdefault("target", CommentedMap())
+
+    raw["user"]["name"] = flat.get("name", "")
+    if flat.get("home_locations") is not None:
+        raw["user"]["home_locations"] = list(flat["home_locations"])
+    if flat.get("location_preference"):
+        raw["user"]["location_preference"] = flat["location_preference"]
+
+    if flat.get("salary_min") is not None:
+        raw["target"]["salary_min"] = flat["salary_min"]
+    if flat.get("target_level"):
+        raw["target"]["level"] = flat["target_level"]
+
+    for field in ("role_type", "role_function", "track"):
+        val = (flat.get(field) or "").strip()
+        if val:
+            raw["target"][field] = val
+        elif field in raw["target"]:
+            del raw["target"][field]
+
+    raw["target"]["domains"] = CommentedMap(flat.get("domains") or {})
+    if flat.get("seniority_weights"):
+        raw["target"]["seniority_weights"] = CommentedMap(flat["seniority_weights"])
+    raw["target"]["country_weights"] = CommentedMap(flat.get("country_weights") or {})
+    raw["target"]["company_type_weights"] = CommentedMap(flat.get("company_type_weights") or {})
+
+    raw["skills"] = CommentedSeq(flat.get("skills") or [])
+
+    # exclude_companies at YAML root (not under user block)
+    exclude = list(flat.get("exclude_companies") or [])
+    if exclude:
+        raw["exclude_companies"] = exclude
+
+
 @router.get("/profile")
 async def get_profile(user: dict = Depends(get_current_user)):
     profile_id = user.get("profile_id")
@@ -802,33 +873,7 @@ async def get_profile(user: dict = Depends(get_current_user)):
     with open(yaml_path) as f:
         raw = yaml.safe_load(f)
 
-    # Normalize nested YAML (jobagent format) → flat format ProfileEditor expects
-    user_block = raw.get("user", {})
-    target_block = raw.get("target", {})
-    # seniority_weights: prefer explicitly stored value; derive from level+track for
-    # older profiles that pre-date this feature.
-    stored_sw = target_block.get("seniority_weights") or {}
-    if not stored_sw:
-        stored_sw = _derive_seniority_weights({"target_level": target_block.get("level", "senior")})
-
-    profile_data = {
-        "name": user_block.get("name", ""),
-        "email": user_block.get("email", None),
-        "languages": user_block.get("languages", []),
-        "home_locations": user_block.get("home_locations", []),
-        "current_level": "",
-        "track": target_block.get("track", "ic"),
-        "target_level": target_block.get("level", ""),
-        "seniority_weights": stored_sw,
-        "domains": target_block.get("domains", {}),
-        "skills": raw.get("skills", []),
-        "exclude_companies": user_block.get("exclude_companies", []),
-        # UI preferences (may not exist in manually-created YAMLs — use sensible defaults)
-        "salary_min": target_block.get("salary_min", 60000),
-        "location_preference": user_block.get("location_preference", "b"),
-        "country_weights": target_block.get("country_weights", {}),
-        "company_type_weights": target_block.get("company_type_weights", {}),
-    }
+    profile_data = _yaml_to_flat_profile(raw)
 
     # Prefer DB-stored cv_md (survives redeploys); fall back to disk
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
@@ -853,6 +898,9 @@ class UpdateProfileRequest(BaseModel):
     skills: list[str]
     salary_min: int = 60000
     location_preference: str = "b"
+    role_type: str = ""
+    role_function: str = ""
+    track: str = "ic"
 
 
 @router.patch("/profile")
@@ -877,7 +925,6 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
             f.write(stored_yaml)
 
     from ruamel.yaml import YAML  # noqa: PLC0415
-    from ruamel.yaml.comments import CommentedMap, CommentedSeq  # noqa: PLC0415
     import io  # noqa: PLC0415
 
     ry = YAML()
@@ -885,29 +932,23 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
     with open(yaml_path) as f:
         raw = ry.load(f)
 
-    # Patch only safe, UI-managed fields
-    raw.setdefault("user", CommentedMap())
-    raw.setdefault("target", CommentedMap())
-
-    raw["user"]["name"] = body.name
-    raw["user"]["home_locations"] = body.home_locations
-    raw["user"]["location_preference"] = body.location_preference
-    raw["target"]["salary_min"] = body.salary_min
-
-    # Replace domains preserving any inline comments already on the node
-    domains_node = CommentedMap(body.domains)
-    raw["target"]["domains"] = domains_node
-
-    # Store user-defined seniority weights
-    if body.seniority_weights:
-        raw["target"]["seniority_weights"] = CommentedMap(body.seniority_weights)
-
-    # Store country and company type weights (always write — empty dict clears them)
-    raw["target"]["country_weights"] = CommentedMap(body.country_weights)
-    raw["target"]["company_type_weights"] = CommentedMap(body.company_type_weights)
-
-    # Replace skills as a plain list
-    raw["skills"] = CommentedSeq(body.skills)
+    # Build flat dict from request body and apply to YAML
+    flat = {
+        "name": body.name,
+        "home_locations": body.home_locations,
+        "location_preference": body.location_preference,
+        "salary_min": body.salary_min,
+        "domains": body.domains,
+        "seniority_weights": body.seniority_weights,
+        "country_weights": dict(body.country_weights),
+        "company_type_weights": dict(body.company_type_weights),
+        "skills": body.skills,
+        "role_type": body.role_type,
+        "role_function": body.role_function,
+        "track": body.track,
+        "exclude_companies": list(raw.get("exclude_companies") or []),
+    }
+    _apply_flat_to_yaml(raw, flat)
 
     buf = io.StringIO()
     ry.dump(raw, buf)
@@ -919,19 +960,21 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
     save_user_profile_yaml(db_path_patch, user["id"], updated_yaml)
 
     # Regenerate per-user searches + preferences from the updated profile.
-    # seniority_weights from the request take priority; track still comes from YAML.
+    # Use request body fields; fall back to YAML for fields not in the request.
     target_block = raw.get("target") or {}
-    user_block = raw.get("user") or {}
     profile_for_gen = {
         "seniority_weights": body.seniority_weights or target_block.get("seniority_weights") or {},
         "target_level": target_block.get("level", "senior"),
-        "track": target_block.get("track", "ic"),
+        "track": body.track or target_block.get("track", "ic"),
+        "role_type": body.role_type or target_block.get("role_type", ""),
+        "role_function": body.role_function or target_block.get("role_function", ""),
         "domains": body.domains,
         "home_locations": body.home_locations,
         "skills": body.skills,
         "country_weights": dict(body.country_weights),
         "salary_min": body.salary_min,
-        "exclude_companies": list(user_block.get("exclude_companies") or []),
+        # exclude_companies lives at YAML root level (not under user block) — fix C5
+        "exclude_companies": list(raw.get("exclude_companies") or []),
     }
     try:
         searches_yaml = _generate_searches_yaml(profile_for_gen)
@@ -1002,17 +1045,25 @@ async def add_skill(body: AddSkillRequest, user: dict = Depends(get_current_user
         with open(yaml_path, "w") as f:
             f.write(stored_yaml)
 
-    with open(yaml_path) as f:
-        raw = yaml.safe_load(f)
+    from ruamel.yaml import YAML  # noqa: PLC0415
+    from ruamel.yaml.comments import CommentedSeq  # noqa: PLC0415
+    import io  # noqa: PLC0415
 
-    skills = raw.get("skills") or []
+    ry = YAML()
+    ry.preserve_quotes = True
+    with open(yaml_path) as f:
+        raw = ry.load(f)
+
+    skills = list(raw.get("skills") or [])
     # Deduplicate (case-insensitive)
     existing_lower = {s.lower() for s in skills}
     if skill not in existing_lower:
         skills.append(skill)
-        raw["skills"] = skills
+        raw["skills"] = CommentedSeq(skills)
 
-        updated_yaml = yaml.dump(raw, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        buf = io.StringIO()
+        ry.dump(raw, buf)
+        updated_yaml = buf.getvalue()
         with open(yaml_path, "w") as f:
             f.write(updated_yaml)
 
@@ -1030,6 +1081,95 @@ async def add_skill(body: AddSkillRequest, user: dict = Depends(get_current_user
 
     analytics.capture(user["id"], "skill_added", {"skill_name": skill, "source": "job_detail"})
     return {"skills": skills}
+
+
+class ReplaceCVRequest(BaseModel):
+    cv_markdown: str
+    extracted_profile: dict
+
+
+@router.patch("/replace-cv")
+async def replace_cv(body: ReplaceCVRequest, user: dict = Depends(get_current_user)):
+    """Server-side additive merge of a new CV extraction into the existing profile.
+
+    Returns merged_profile and a diff summary showing what changed.
+    The profile is saved to DB before returning — no separate save step needed.
+    """
+    from ruamel.yaml import YAML  # noqa: PLC0415
+    import io  # noqa: PLC0415
+    from api.profile_merge import merge_profiles, compute_diff  # noqa: PLC0415
+
+    profile_id = user.get("profile_id")
+    if not profile_id:
+        raise HTTPException(status_code=404, detail="No profile found")
+
+    jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "agent"))
+    yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}.yaml")
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+
+    # Restore YAML from DB if the filesystem was wiped
+    if not os.path.exists(yaml_path):
+        stored_yaml = get_user_profile_yaml(db_path, user["id"])
+        if not stored_yaml:
+            raise HTTPException(status_code=404, detail="Profile file not found")
+        os.makedirs(os.path.dirname(yaml_path), exist_ok=True)
+        with open(yaml_path, "w") as f:
+            f.write(stored_yaml)
+
+    ry = YAML()
+    ry.preserve_quotes = True
+    with open(yaml_path) as f:
+        raw = ry.load(f)
+
+    # Normalize existing YAML to flat dict, merge with new extraction, write back
+    existing_flat = _yaml_to_flat_profile(raw)
+    merged = merge_profiles(existing_flat, body.extracted_profile)
+    diff = compute_diff(existing_flat, merged)
+
+    # Preserve salary_min and location_preference from existing (not in merge strategy)
+    merged["salary_min"] = existing_flat.get("salary_min", 60000)
+    merged["location_preference"] = existing_flat.get("location_preference", "b")
+
+    _apply_flat_to_yaml(raw, merged)
+
+    buf = io.StringIO()
+    ry.dump(raw, buf)
+    updated_yaml = buf.getvalue()
+    with open(yaml_path, "w") as f:
+        f.write(updated_yaml)
+
+    # Persist to DB
+    if body.cv_markdown:
+        save_user_cv_md(db_path, user["id"], body.cv_markdown)
+        knowledge_dir = os.path.join(jobagent_dir, "knowledge", profile_id)
+        os.makedirs(knowledge_dir, exist_ok=True)
+        with open(os.path.join(knowledge_dir, "cv.md"), "w") as f:
+            f.write(body.cv_markdown)
+    save_user_profile_yaml(db_path, user["id"], updated_yaml)
+
+    # Push to GitHub (fire-and-forget)
+    try:
+        await _push_file_to_github(
+            f"agent/config/profiles/{profile_id}.yaml",
+            updated_yaml,
+            f"chore: replace-cv merge for {profile_id} [skip ci]",
+        )
+        if body.cv_markdown:
+            await _push_file_to_github(
+                f"agent/knowledge/{profile_id}/cv.md",
+                body.cv_markdown,
+                f"chore: replace-cv markdown for {profile_id} [skip ci]",
+            )
+    except Exception:
+        logger.exception("GitHub sync failed after replace-cv for %s (non-fatal)", profile_id)
+
+    analytics.capture(user["id"], "profile_cv_replaced", {
+        "skills_added_count": len(diff["skills_added"]),
+        "domains_added_count": len(diff["domains_added"]),
+        "fields_updated": diff["fields_updated"],
+    })
+
+    return {"merged_profile": merged, "diff": diff}
 
 
 @router.post("/upload-cv", dependencies=[Depends(get_current_user)])

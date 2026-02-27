@@ -79,6 +79,11 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `agent/tests/test_notifier_v2.py` — v2 rag_score compat in _build_context (P15 fix)
   - `agent/tests/test_ranked_jobs_v2.py` — hybrid score in ranked_jobs + print_summary mode label (P16/P18 fix)
   - `agent/tests/test_gap_tracker_v2.py` — grade points stored in gap history for v2 jobs (P17 fix)
+  - `tests/test_profile_merge.py` — 20 unit tests for merge_profiles() pure function (Phase 18)
+  - `tests/test_profile_track.py` — 4 integration tests: track change regenerates searches with correct titles (Phase 18)
+  - `tests/test_profile_e2e.py` — 12 E2E regression tests: all write paths, CV replace additive, C5 regression (Phase 18)
+  - `web/src/components/CVReplaceSummary.tsx` — read-only diff view after CV replace (Phase 18)
+  - `api/profile_merge.py` — merge_profiles() + compute_diff() pure functions (Phase 18)
 - DB: `data/jobseeker.db` (gitignored)
 - Static build: `web/dist/` (gitignored)
 - Scripts: `scripts/seed_dev.py` — dev database seeder, `scripts/backfill_embeddings.py` — one-time skill embedding backfill
@@ -323,6 +328,20 @@ Phase 17 — Decomposed Hybrid Scoring (complete: 17.1–17.7)
   - 17.7.1 TestEAGamingRegression: gaming=-20 profile + gaming job → score < 55; gaming=+10 → score > 70; hate < like
   - 17.7.2 TestPMMismatchRegression: product+marketing job scores 15 pts less than product+product job; penalty absent when no profile RF
   - 17.7.3 TestCrossUserDifferentiation: Juan (data=15, kafka/flink) scores ≥10 pts higher than Noura (saas=15) on a data PM role
+- Phase 18 — Profile Data Integrity (2026-02-27)
+  - 18.1: `merge_profiles()` pure function + `compute_diff()` in `api/profile_merge.py`; 20 unit tests
+  - 18.2.1: GET /profile fix — role_type, role_function, track returned; exclude_companies read from YAML root (bug C5)
+  - 18.2.2: PATCH /profile fix — role_type, role_function, track written to YAML; exclude_companies in prefs gen from root
+  - 18.2.3: add_skill ruamel fix — preserves YAML comments (was destroying them with yaml.dump, bug C6)
+  - 18.2.4: Frontend — track dropdown in ProfileEditor (IC/Management); role_type/role_function in TypeScript Profile interface
+  - 18.3.1: PATCH /api/onboard/replace-cv endpoint — server-side additive merge with diff return; replaces destructive client-side overwrite
+  - 18.3.2: Extracted `_yaml_to_flat_profile()` + `_apply_flat_to_yaml()` helpers — eliminate 3x duplicated field mapping (root cause of A1)
+  - 18.4.1: Frontend ProfilePage wired to new replace-cv endpoint (generate-profile → replace-cv → show diff)
+  - 18.4.2: CVReplaceSummary component — read-only diff view with new/existing skills + domains, updated fields
+  - 18.5.1: Track integration tests — `tests/test_profile_track.py`; 4 tests verifying track change regenerates searches with correct titles
+  - 18.6.1: PostHog event `profile_cv_replaced` (skills_added_count, domains_added_count, fields_updated)
+  - 18.6.2: E2E regression tests — `tests/test_profile_e2e.py`; 12 tests covering all write paths and C5 regression
+  - GATE 18.6 (closed): 598 backend tests passing
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
@@ -423,10 +442,17 @@ Phase 17 — Decomposed Hybrid Scoring (complete: 17.1–17.7)
 - v2 `_display_score` logic: three branches in all three scoring sites — `rag is None` → heuristic; `"score" in rag` (v1) → stored numeric; else (v2) → `min(100, max(0, _fit_score + grade_to_points(tech) + grade_to_points(prof)))`.
 - Gap tracker v2 score (P17 fix): `gap_tracker.py` uses inline `_gp` dict (not imported from main to avoid circular import). v2 score = sum of grade points only (no heuristic component — profile not available at Step 5b). Ranges: A+A=40, B+C=17, unknown+unknown=20.
 - `print_summary()` mode label (P18 fix): `has_v2 = any("technical_depth" in (j.get("rag_score") or {}))`. v2 takes priority: "hybrid score" > "RAG score" > "heuristic fit".
+- `merge_profiles()` pure function (Phase 18): takes `existing: dict` + `extracted: dict`, returns merged dict. No I/O, no YAML, no DB. Skills: union, case-insensitive dedup, existing order preserved. Domains: existing weights win for shared keys. Weights (seniority/country/company_type): existing preserved if non-empty. Factual (name, email, languages, home_locations): new wins. role_type, role_function: new wins if non-null/non-empty. track: new wins if non-null. exclude_companies: union, dedup.
+- Server-side merge for CV Replace (Phase 18): `PATCH /api/onboard/replace-cv` loads existing profile, calls `merge_profiles()`, saves merged YAML + cv.md before returning. Frontend shows read-only diff from `compute_diff()` return value. Eliminates race conditions and ensures profile is always saved before user sees the diff.
+- `_yaml_to_flat_profile()` / `_apply_flat_to_yaml()` (Phase 18): extracted helpers in `api/routes/onboard.py` to eliminate 3x duplicated YAML→flat normalization. `_yaml_to_flat_profile(raw)` normalizes nested YAML (user/target blocks) to flat dict used by merge and scoring. `_apply_flat_to_yaml(raw, flat)` writes flat dict back into ruamel CommentedMap preserving comments. Used by `get_profile()`, `update_profile()`, and `replace_cv()`.
+- `exclude_companies` location (Phase 18 / C5 root cause): `_build_profile_yaml()` writes it at YAML root level, not under `user` block. All read paths use `raw.get("exclude_companies")`. Not `raw["user"].get("exclude_companies")`. This was the root cause of C5 — GET returned empty list, prefs gen ignored user exclusions.
+- CVReplaceSummary component (Phase 18): replaces full ProfileEditor-in-review-mode pattern. Shows read-only diff: new skills (green, "NEW" badge) + existing skills (gray); new domains + existing; updated factual fields list; preserved weights note. "Looks good" → redirect to /profile.
 
 ### Known Bugs
 
 ### Resolved
+- **P20** (2026-02-27) — CV Replace was destructive: `POST /replace-cv` endpoint overwrote existing profile with LLM extraction. Fixed: new `PATCH /replace-cv` does server-side additive merge via `merge_profiles()`; weights/skills/domains from existing profile never lost.
+- **P19** (2026-02-27) — role_type, role_function, track not persisting across any write path (A1–A4). Fixed: GET returns them, PATCH reads and writes them, replace-cv preserves them via merge strategy, TypeScript interface includes them.
 - **P18** (2026-02-26) — `print_summary()` printed "RAG score" mode for v2 jobs (rag_score dict is truthy but has no numeric score). Fixed: now distinguishes v2→"hybrid score", v1→"RAG score", none→"heuristic fit".
 - **P17** (2026-02-26) — `gap_tracker.append_gap_history()` stored `score=0` for all v2 jobs. Fixed: v2 now stores sum of grade points (A+A=40, B+C=17, neutral=20). JSONL history retains LLM scoring context.
 - **P16** (2026-02-26) — `ranked_jobs()`, `_auto_skip_reloc()`, and `notifier._build_context()` used heuristic-only for v2 jobs. Fixed: added `_grade_to_points()` to `main.py`; v2 jobs now compute `hybrid_score = _fit_score + grade_to_points(tech) + grade_to_points(prof)` clamped [0,100]. 22 new tests across 3 test files.
