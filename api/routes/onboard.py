@@ -1163,6 +1163,12 @@ async def replace_cv(body: ReplaceCVRequest, user: dict = Depends(get_current_us
     except Exception:
         logger.exception("GitHub sync failed after replace-cv for %s (non-fatal)", profile_id)
 
+    analytics.capture(user["id"], "profile_cv_replaced", {
+        "skills_added_count": len(diff["skills_added"]),
+        "domains_added_count": len(diff["domains_added"]),
+        "fields_updated": diff["fields_updated"],
+    })
+
     return {"merged_profile": merged, "diff": diff}
 
 
