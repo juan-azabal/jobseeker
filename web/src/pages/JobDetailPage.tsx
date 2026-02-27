@@ -80,6 +80,37 @@ function formatSalary(job: JobDetail): { text: string; estimated: boolean } | nu
   return null;
 }
 
+function filterRequirements(requirements: string[], roleFunction?: string): string[] {
+  if (!requirements.length) return [];
+  const dominated: RegExp[] = [
+    /^\d+\+?\s*years?\s*(of\s+)?(overall\s+)?professional\s+experience/i,
+    /bachelor'?s?\s+degree/i,
+    /master'?s?\s+degree/i,
+  ];
+  if (roleFunction) {
+    const roleTerms: Record<string, RegExp> = {
+      product: /product\s+management/i,
+      engineering: /software\s+(engineering|development)/i,
+      data: /data\s+(science|engineering|analytics)/i,
+      design: /(ux|ui|product)\s+design/i,
+    };
+    const roleRe = roleTerms[roleFunction];
+    if (roleRe) dominated.push(new RegExp(`\\d+\\+?\\s*years?.*${roleRe.source}`, 'i'));
+  }
+  return requirements.filter(r => !dominated.some(re => re.test(r)));
+}
+
+function filterSkills(skills: string[], roleFunction?: string): string[] {
+  const roleRedundant: Record<string, string[]> = {
+    product: ['product management', 'product strategy', 'roadmap', 'stakeholder management'],
+    engineering: ['software engineering', 'software development', 'coding'],
+    data: ['data analysis', 'data analytics'],
+    design: ['ux design', 'ui design', 'product design'],
+  };
+  const blacklist = new Set((roleRedundant[roleFunction ?? ''] ?? []).map(s => s.toLowerCase()));
+  return skills.filter(s => !blacklist.has(s.toLowerCase()));
+}
+
 function Chip({ label, variant = 'default' }: { label: string; variant?: 'default' | 'skill' | 'warn' | 'violet' }) {
   const cls = {
     default: 'bg-zinc-800 text-zinc-400',
@@ -335,6 +366,14 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
       : `${p.years_experience_min}+ yrs`
     : null;
 
+  // Derived: filtered requirements and skills
+  const filteredRequirements = filterRequirements(p?.experience_requirements ?? [], p?.role_function);
+  const filteredMustHave = filterSkills(p?.must_have_skills ?? [], p?.role_function);
+  const allSkillsLower = new Set(
+    [...(p?.must_have_skills ?? []), ...(p?.nice_to_have_skills ?? [])].map(s => s.toLowerCase())
+  );
+  const techStackOnly = (p?.technical_stack ?? []).filter(s => !allSkillsLower.has(s.toLowerCase()));
+
   return (
     <div className="min-h-screen bg-zinc-950 px-4 py-6">
       <div className="mx-auto max-w-2xl">
@@ -460,21 +499,36 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
 
         <div className="space-y-4">
 
-
-          {/* ── About this role ────────────────────────────────────── */}
-          {p?.responsibilities_summary && (
+          {/* ── Section 1: The Role ─────────────────────────────────── */}
+          {(p?.responsibilities_summary || filteredRequirements.length > 0 || (p?.key_phrases && p.key_phrases.length > 0)) && (
             <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-zinc-500">
-                About this role
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                The Role
               </h2>
-              <p className="text-sm leading-relaxed text-zinc-300">{p.responsibilities_summary}</p>
+              {p?.responsibilities_summary && (
+                <p className="text-sm leading-relaxed text-zinc-300">{p.responsibilities_summary}</p>
+              )}
+              {p?.key_phrases && p.key_phrases.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {p.key_phrases.map((kp, i) => <Chip key={i} label={kp} />)}
+                </div>
+              )}
+              {filteredRequirements.length > 0 && (
+                <ul className="mt-3 space-y-1.5">
+                  {filteredRequirements.map((r, i) => (
+                    <li key={i} className="flex gap-2 text-sm text-zinc-400">
+                      <span className="mt-0.5 shrink-0 text-zinc-700">·</span>
+                      <span>{r}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </section>
           )}
 
-          {/* ── RAG Analysis ──────────────────────────────────────── */}
-          {isRAG && (
+          {/* ── Section 2: Your Fit ─────────────────────────────────── */}
+          {isRAG ? (
             <>
-              {/* Score breakdown */}
               {scored.score_breakdown && (
                 <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
                   <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-zinc-500">
@@ -483,32 +537,36 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
                   <ScoreBreakdown breakdown={scored.score_breakdown} />
                 </section>
               )}
-
-              {/* Deal breakers */}
-              {scored.deal_breakers && scored.deal_breakers.length > 0 && (
+              {((scored.deal_breakers?.length ?? 0) > 0 || (scored.gaps?.length ?? 0) > 0 || (scored.strengths?.length ?? 0) > 0) && (
                 <section>
                   <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-zinc-500">
-                    Deal breakers
+                    Your fit
                   </h2>
                   <ul className="space-y-2">
-                    {scored.deal_breakers.map((d, i) => (
-                      <li key={i} className="rounded-lg border border-red-500/20 border-l-4 border-l-red-500/60 bg-red-500/5 px-4 py-3">
+                    {scored.deal_breakers?.map((d, i) => (
+                      <li key={`db-${i}`} className="rounded-lg border border-red-500/20 border-l-4 border-l-red-500/60 bg-red-500/5 px-4 py-3">
                         <p className="text-sm text-red-300">{d}</p>
                       </li>
                     ))}
-                  </ul>
-                </section>
-              )}
-
-              {/* Gaps */}
-              {scored.gaps && scored.gaps.length > 0 && (
-                <section>
-                  <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-zinc-500">
-                    Gaps
-                  </h2>
-                  <ul className="space-y-2">
-                    {scored.gaps.map((g, i) => (
-                      <li key={i} className="rounded-lg border border-zinc-800 border-l-4 border-l-amber-400/50 bg-zinc-900/60 p-4">
+                    {scored.gaps?.filter(g => g.severity === 'high').map((g, i) => (
+                      <li key={`gh-${i}`} className="rounded-lg border border-zinc-800 border-l-4 border-l-amber-400/50 bg-zinc-900/60 p-4">
+                        <div className="flex items-start gap-2">
+                          <p className="flex-1 text-sm text-zinc-200">{g.gap}</p>
+                          <span className="shrink-0 text-xs font-medium capitalize text-red-400">high</span>
+                        </div>
+                        {g.mitigation && (
+                          <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">{g.mitigation}</p>
+                        )}
+                      </li>
+                    ))}
+                    {scored.strengths?.map((s, i) => (
+                      <li key={`str-${i}`} className="rounded-lg border border-zinc-800 border-l-4 border-l-emerald-500/50 bg-zinc-900/60 p-4">
+                        <p className="text-sm font-medium text-white">{s.claim}</p>
+                        <p className="mt-1 text-xs leading-relaxed text-zinc-500">{s.evidence}</p>
+                      </li>
+                    ))}
+                    {scored.gaps?.filter(g => g.severity !== 'high').map((g, i) => (
+                      <li key={`gml-${i}`} className="rounded-lg border border-zinc-800 border-l-4 border-l-amber-400/50 bg-zinc-900/60 p-4">
                         <div className="flex items-start gap-2">
                           <p className="flex-1 text-sm text-zinc-200">{g.gap}</p>
                           <span className={`shrink-0 text-xs font-medium capitalize ${SEVERITY_COLOR[g.severity] ?? 'text-zinc-500'}`}>
@@ -523,83 +581,53 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
                   </ul>
                 </section>
               )}
-
-              {/* Strengths */}
-              {scored.strengths && scored.strengths.length > 0 && (
-                <section>
-                  <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-zinc-500">
-                    Strengths
-                  </h2>
-                  <ul className="space-y-2">
-                    {scored.strengths.map((s, i) => (
-                      <li key={i} className="rounded-lg border border-zinc-800 border-l-4 border-l-emerald-500/50 bg-zinc-900/60 p-4">
-                        <p className="text-sm font-medium text-white">{s.claim}</p>
-                        <p className="mt-1 text-xs leading-relaxed text-zinc-500">{s.evidence}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-
-              {/* Talking points */}
-              {scored.talking_points && scored.talking_points.length > 0 && (
-                <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-                  <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
-                    How to pitch yourself
-                  </h2>
-                  <ul className="space-y-2">
-                    {scored.talking_points.map((t, i) => (
-                      <li key={i} className="flex gap-2 text-sm text-zinc-300">
-                        <span className="mt-0.5 shrink-0 text-zinc-600">→</span>
-                        <span className="leading-relaxed">{t}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-
-              {/* Stories to prepare */}
-              {scored.stories_to_prepare && scored.stories_to_prepare.length > 0 && (
-                <section>
-                  <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-zinc-500">
-                    Stories to prepare
-                  </h2>
-                  <div className="flex flex-wrap gap-1.5">
-                    {scored.stories_to_prepare.map((s, i) => (
-                      <Chip key={i} label={s} />
-                    ))}
-                  </div>
-                </section>
-              )}
             </>
+          ) : (
+            <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                Your fit
+              </h2>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-zinc-400">Quick Estimate</span>
+                <span className="text-zinc-700">·</span>
+                <span className={`text-lg font-bold tabular-nums ${TIER_SCORE_COLOR[job.tier]}`}>{job.score}/100</span>
+              </div>
+              {job.skill_matches && (
+                <p className="mt-2 text-xs text-zinc-500">
+                  {job.skill_matches.must_have.filter(m => m.status !== 'none').length}/{job.skill_matches.must_have.length} required skills matched
+                </p>
+              )}
+            </section>
           )}
 
-          {/* ── Skills (all jobs) ──────────────────────────────────── */}
-          {(p?.must_have_skills?.length || p?.nice_to_have_skills?.length) && (
+          {/* ── Section 3: Skills (all jobs) ───────────────────────── */}
+          {(filteredMustHave.length > 0 || (p?.nice_to_have_skills?.length ?? 0) > 0 || techStackOnly.length > 0) && (
             <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
               <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
                 Skills
               </h2>
-              {p?.must_have_skills && p.must_have_skills.length > 0 && (
-                <div className="mb-3">
+              {filteredMustHave.length > 0 && (
+                <div className={p?.nice_to_have_skills?.length || techStackOnly.length ? 'mb-3' : ''}>
                   <p className="mb-1.5 text-xs text-zinc-600">Required</p>
                   <div className="flex flex-wrap gap-1.5">
                     {job.skill_matches
-                      ? job.skill_matches.must_have.map((m, i) => (
-                          <SkillChip
-                            key={i}
-                            match={m}
-                            added={addedSkills.has(m.skill.toLowerCase())}
-                            onClick={m.status !== 'matched' ? () => handleAddSkill(m.skill) : undefined}
-                          />
-                        ))
-                      : p.must_have_skills.map((s, i) => <Chip key={i} label={s} variant="skill" />)
+                      ? job.skill_matches.must_have
+                          .filter(m => filteredMustHave.map(s => s.toLowerCase()).includes(m.skill.toLowerCase()))
+                          .map((m, i) => (
+                            <SkillChip
+                              key={i}
+                              match={m}
+                              added={addedSkills.has(m.skill.toLowerCase())}
+                              onClick={m.status !== 'matched' ? () => handleAddSkill(m.skill) : undefined}
+                            />
+                          ))
+                      : filteredMustHave.map((s, i) => <Chip key={i} label={s} variant="skill" />)
                     }
                   </div>
                 </div>
               )}
               {p?.nice_to_have_skills && p.nice_to_have_skills.length > 0 && (
-                <div>
+                <div className={techStackOnly.length > 0 ? 'mb-3' : ''}>
                   <p className="mb-1.5 text-xs text-zinc-600">Nice to have</p>
                   <div className="flex flex-wrap gap-1.5">
                     {job.skill_matches
@@ -616,24 +644,48 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
                   </div>
                 </div>
               )}
+              {techStackOnly.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs text-zinc-600">Tech stack</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {techStackOnly.map((s, i) => <Chip key={i} label={s} variant="skill" />)}
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
-          {/* ── Heuristic-only: requirements ─────────────────────── */}
-          {!isRAG && p?.experience_requirements && p.experience_requirements.length > 0 && (
-            <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
-                Requirements
-              </h2>
-              <ul className="space-y-1.5">
-                {p.experience_requirements.map((r, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-zinc-400">
-                    <span className="mt-0.5 shrink-0 text-zinc-700">·</span>
-                    <span>{r}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
+          {/* ── Prep zone: Interview Prep (RAG only) ───────────────── */}
+          {isRAG && ((scored.talking_points?.length ?? 0) > 0 || (scored.stories_to_prepare?.length ?? 0) > 0) && (
+            <>
+              {scored.talking_points && scored.talking_points.length > 0 && (
+                <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+                  <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                    Interview prep
+                  </h2>
+                  <ul className="space-y-2">
+                    {scored.talking_points.map((t, i) => (
+                      <li key={i} className="flex gap-2 text-sm text-zinc-300">
+                        <span className="mt-0.5 shrink-0 text-zinc-600">→</span>
+                        <span className="leading-relaxed">{t}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {scored.stories_to_prepare && scored.stories_to_prepare.length > 0 && (
+                <section>
+                  <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                    Stories to prepare
+                  </h2>
+                  <div className="flex flex-wrap gap-1.5">
+                    {scored.stories_to_prepare.map((s, i) => (
+                      <Chip key={i} label={s} />
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
           )}
 
           {/* ── Red flags (always, if any) ─────────────────────────── */}
