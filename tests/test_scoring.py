@@ -56,19 +56,19 @@ def _make_parsed(**overrides):
 
 class TestComputeTier:
     def test_tier_a_boundary(self):
-        assert compute_tier(50) == "A"
+        assert compute_tier(61) == "A"
 
     def test_tier_a_high(self):
         assert compute_tier(100) == "A"
 
     def test_tier_b_boundary(self):
-        assert compute_tier(30) == "B"
+        assert compute_tier(41) == "B"
 
     def test_tier_b_high(self):
-        assert compute_tier(49) == "B"
+        assert compute_tier(60) == "B"
 
     def test_tier_c_boundary(self):
-        assert compute_tier(29) == "C"
+        assert compute_tier(40) == "C"
 
     def test_tier_c_zero(self):
         assert compute_tier(0) == "C"

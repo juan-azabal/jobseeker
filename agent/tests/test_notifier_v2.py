@@ -20,6 +20,7 @@ _PATCH_MAIN = {
     "_PROFILE_SKILLS": ["analytics", "kafka"],
     "_HOME_LOCATIONS": ["barcelona"],
     "_HOME_REGIONS": [],
+    "_COUNTRY_WEIGHTS": {},  # isolate from stale global state
 }
 
 

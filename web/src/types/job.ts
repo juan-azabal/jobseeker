@@ -12,6 +12,7 @@ export interface JobSummary {
   url: string;
   applied_at: string | null;
   geo_restricted: boolean;  // true = remote restriction excludes user's home region
+  eligibility_warning?: string | null;
 }
 
 export interface ScoreBreakdown {

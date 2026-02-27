@@ -264,6 +264,76 @@ _SALARY_THRESHOLD = 130000
 _HOME_LOCATIONS = []
 _HOME_REGIONS = []  # auto-derived from home_locations via country-converter
 _HOME_REGION_RE = None  # compiled regex for word-boundary region matching
+_COUNTRY_WEIGHTS: dict = {}  # populated by _load_heuristic_config(); e.g. {"remote": 10, "netherlands": -10}
+_LOCATION_PREFERENCE: str = "b"  # populated by _load_heuristic_config()
+
+# DUAL-COPY: keep identical to api/scoring.py _CITY_TO_COUNTRY.
+_CITY_TO_COUNTRY: dict[str, str] = {
+    # Spain
+    "barcelona": "spain",
+    "madrid": "spain",
+    "valencia": "spain",
+    "bilbao": "spain",
+    "seville": "spain",
+    "sevilla": "spain",
+    # France
+    "paris": "france",
+    "lyon": "france",
+    "marseille": "france",
+    "toulouse": "france",
+    # Germany
+    "berlin": "germany",
+    "munich": "germany",
+    "münchen": "germany",
+    "hamburg": "germany",
+    "frankfurt": "germany",
+    "cologne": "germany",
+    "köln": "germany",
+    # Netherlands
+    "amsterdam": "netherlands",
+    "rotterdam": "netherlands",
+    "utrecht": "netherlands",
+    # UK
+    "london": "uk",
+    "manchester": "uk",
+    "edinburgh": "uk",
+    "bristol": "uk",
+    # Portugal
+    "lisbon": "portugal",
+    "porto": "portugal",
+    "lisboa": "portugal",
+    # Italy
+    "milan": "italy",
+    "rome": "italy",
+    "milano": "italy",
+    "roma": "italy",
+    # Sweden
+    "stockholm": "sweden",
+    "gothenburg": "sweden",
+    # Denmark
+    "copenhagen": "denmark",
+    # Belgium
+    "brussels": "belgium",
+    "bruxelles": "belgium",
+    # Ireland
+    "dublin": "ireland",
+    # Switzerland
+    "zurich": "switzerland",
+    "zürich": "switzerland",
+    "geneva": "switzerland",
+    # Austria
+    "vienna": "austria",
+    "wien": "austria",
+    # Poland
+    "warsaw": "poland",
+    "krakow": "poland",
+    # Czech Republic
+    "prague": "czech republic",
+    # Finland
+    "helsinki": "finland",
+    # Norway
+    "oslo": "norway",
+}
 
 
 def _load_heuristic_config(profile: dict):
@@ -272,6 +342,7 @@ def _load_heuristic_config(profile: dict):
 
     global _PROFILE_SKILLS, _DOMAIN_SCORES, _SENIORITY_SCORES
     global _SALARY_THRESHOLD, _HOME_LOCATIONS, _HOME_REGIONS, _HOME_REGION_RE
+    global _COUNTRY_WEIGHTS, _LOCATION_PREFERENCE
     _PROFILE_SKILLS = [s.lower() for s in (profile.get("skills") or [])]
     _DOMAIN_SCORES = {k.lower(): v for k, v in (profile.get("target", {}).get("domains") or {}).items()}
     # 3-tier fallback: seniority_weights (current) > seniority (legacy) > compute from level+track
@@ -285,6 +356,8 @@ def _load_heuristic_config(profile: dict):
     _HOME_LOCATIONS = [loc.lower() for loc in (profile.get("user", {}).get("home_locations") or [])]
     _HOME_REGIONS = derive_home_regions(_HOME_LOCATIONS)
     _HOME_REGION_RE = build_region_pattern(_HOME_REGIONS)
+    _COUNTRY_WEIGHTS = {k.lower(): int(v) for k, v in (target.get("country_weights") or {}).items()}
+    _LOCATION_PREFERENCE = (profile.get("user", {}).get("location_preference") or "b").lower()
 
 
 # Domain override: if parser says "other" but keywords match, reclassify.
@@ -667,6 +740,55 @@ def _infer_domain(parsed):
     return best_domain if best_count >= 1 else "other"
 
 
+def _agent_eligibility_penalty(parsed: dict, job: dict) -> int:
+    """Return -20 when a geo-restricted remote job excludes the user's home country.
+
+    DUAL-COPY: mirrors api/scoring.py::_compute_eligibility_penalty().
+    Uses module-level globals (_HOME_LOCATIONS, _HOME_REGIONS, _LOCATION_PREFERENCE).
+
+    Fires when ALL conditions are met:
+    1. parsed.remote_restriction is non-empty
+    2. _LOCATION_PREFERENCE != "d" (anywhere in Europe)
+    3. User's home country is NOT in the restriction text
+    Only applies to remote jobs.
+    """
+    from geo import is_pure_timezone
+
+    restriction = (parsed.get("remote_restriction") or "").strip()
+    if not restriction or restriction.lower() in ("null", "none"):
+        return 0
+    if is_pure_timezone(restriction):
+        return 0  # Timezone-only restrictions (CET, UTC+2) are not country barriers
+    if parsed.get("location_type") != "remote":
+        return 0
+    if _LOCATION_PREFERENCE == "d":
+        return 0
+
+    restriction_lower = restriction.lower()
+
+    home_countries: set[str] = set()
+    for loc in _HOME_LOCATIONS:
+        country = _CITY_TO_COUNTRY.get(loc, loc)
+        home_countries.add(country)
+        home_countries.add(loc)
+
+    if any(country in restriction_lower for country in home_countries if country):
+        return 0
+
+    _REGION_ALIASES: dict[str, list[str]] = {
+        "eu": ["eu ", "eu/", "european union", "europe"],
+        "eea": ["eea"],
+    }
+    for region in _HOME_REGIONS:
+        aliases = _REGION_ALIASES.get(region.lower(), [region.lower()])
+        if any(alias in restriction_lower for alias in aliases):
+            return 0
+    if "europe" in restriction_lower and _HOME_REGIONS:
+        return 0
+
+    return -20
+
+
 def _heuristic_score(job):
     """Quick fit score 0-100 from parsed data. No API calls."""
     p = job.get("parsed")
@@ -683,16 +805,52 @@ def _heuristic_score(job):
     # Seniority (0-15)
     score += _SENIORITY_SCORES.get(p.get("seniority", "unknown"), 0)
 
-    # Location (0-10)
-    # Country-pinned remote gets no bonus — treated as reloc
+    # Location (0-10) — 19.1.3: graduated scoring for geo-restricted remote
+    from geo import is_pure_timezone as _is_pure_tz
     loc_type = p.get("location_type", "unknown")
     job_loc = (job.get("location") or "").lower()
-    if loc_type == "remote" and not _is_remote_requiring_reloc(job):
-        score += 10
+    remote_restriction = (p.get("remote_restriction") or "").strip()
+    _is_geo_restricted_remote = (
+        loc_type == "remote"
+        and bool(remote_restriction)
+        and remote_restriction.lower() not in ("null", "none")
+        and not _is_pure_tz(remote_restriction)  # timezone-only is not a country barrier
+    )
+    if loc_type == "remote":
+        if _is_geo_restricted_remote:
+            # Graduated: eligible user (home country matches restriction) → +8, ineligible → +2
+            restriction_lower = remote_restriction.lower()
+            home_countries_check: set[str] = set()
+            for _loc in _HOME_LOCATIONS:
+                home_countries_check.add(_CITY_TO_COUNTRY.get(_loc, _loc))
+                home_countries_check.add(_loc)
+            # Mirrors api/scoring.py eligibility check: home country OR any home region
+            _user_eligible = (
+                any(c in restriction_lower for c in home_countries_check if c)
+                or (bool(_HOME_REGIONS) and (
+                    "europe" in restriction_lower
+                    or any(r.lower() in restriction_lower for r in _HOME_REGIONS)
+                ))
+            )
+            score += 8 if _user_eligible else 2  # 19.1.3
+        else:
+            score += 10
     elif loc_type == "hybrid" and any(c in job_loc for c in _HOME_LOCATIONS):
         score += 8
     elif loc_type == "onsite" and any(c in job_loc for c in _HOME_LOCATIONS):
         score += 6
+
+    # Country weights (±10)
+    # 19.2.1: Only inject 'remote' when there is NO geo restriction.
+    # When restricted, the actual country from locations_mentioned is the signal.
+    if _COUNTRY_WEIGHTS:
+        locations_mentioned = [loc.lower() for loc in (p.get("locations_mentioned") or [])]
+        normalized_locs = {_CITY_TO_COUNTRY.get(loc, loc) for loc in locations_mentioned}
+        if loc_type == "remote" and not _is_geo_restricted_remote:
+            normalized_locs.add("remote")
+        if normalized_locs:
+            best = max(_COUNTRY_WEIGHTS.get(loc, 0) for loc in normalized_locs)
+            score += max(-10, min(10, best))
 
     # Skill overlap (0-30)
     all_text = " ".join(
@@ -706,6 +864,9 @@ def _heuristic_score(job):
 
     # Red flags (-5 each, max -15)
     score -= min(15, len(p.get("red_flags") or []) * 5)
+
+    # Eligibility penalty: -20 when geo-restricted remote excludes user's home country
+    score += _agent_eligibility_penalty(p, job)
 
     return max(0, min(100, score))
 
@@ -955,29 +1116,26 @@ def ranked_jobs(jobs):
         j["_salary_eur"] = _extract_max_salary_eur(j)
         j["_fit_score"] = _heuristic_score(j)
         rag = j.get("rag_score")
-        if rag is None:
-            j["_display_score"] = j["_fit_score"]
-        elif "score" in rag:
-            # v1: use stored numeric RAG score
-            j["_display_score"] = rag["score"]
-        else:
+        if rag is not None and "technical_depth" in rag:
             # v2: hybrid = heuristic + grade points, clamped [0, 100]
             tech_pts = _grade_to_points(rag.get("technical_depth"))
             prof_pts = _grade_to_points(rag.get("profile_evidence"))
             j["_display_score"] = min(100, max(0, j["_fit_score"] + tech_pts + prof_pts))
+        else:
+            # v1 or unscored: heuristic only (v1 stored scores not used directly)
+            j["_display_score"] = j["_fit_score"]
 
     # Reloc jobs only appear in Tier A — not worth showing if score doesn't justify moving
-    tier_a = sorted([j for j in parsed_jobs if j["_display_score"] >= 50], key=_sort_key)
-    tier_b = sorted([j for j in parsed_jobs if 30 <= j["_display_score"] < 50 and not _is_reloc(j)], key=_sort_key)
-    tier_c = sorted([j for j in parsed_jobs if j["_display_score"] < 30 and not _is_reloc(j)], key=_sort_key)
+    tier_a = sorted([j for j in parsed_jobs if j["_display_score"] > 60], key=_sort_key)
+    tier_b = sorted([j for j in parsed_jobs if 40 < j["_display_score"] <= 60 and not _is_reloc(j)], key=_sort_key)
+    tier_c = sorted([j for j in parsed_jobs if j["_display_score"] <= 40 and not _is_reloc(j)], key=_sort_key)
     return tier_a, tier_b, tier_c
 
 
 def print_summary(jobs):
-    """Print tiered digest: A (≥50) → B (30-49) → C (<30)."""
+    """Print tiered digest: A (>60) → B (41-60) → C (≤40)."""
     has_v2 = any("technical_depth" in (j.get("rag_score") or {}) for j in jobs if j.get("parsed"))
-    has_v1 = any("score" in (j.get("rag_score") or {}) for j in jobs if j.get("parsed"))
-    mode = "hybrid score" if has_v2 else ("RAG score" if has_v1 else "heuristic fit")
+    mode = "hybrid score" if has_v2 else "heuristic fit"
 
     tier_a, tier_b, tier_c = ranked_jobs(jobs)
     parsed_jobs = tier_a + tier_b + tier_c
@@ -1002,9 +1160,9 @@ def print_summary(jobs):
         return counter
 
     counter = 1
-    counter = _print_tier("TIER A — APPLY  score ≥ 50", tier_a, counter)
-    counter = _print_tier("TIER B — EXPLORE  score 30-49", tier_b, counter)
-    counter = _print_tier("TIER C — NOISE  score < 30  [skim or skip]", tier_c, counter)
+    counter = _print_tier("TIER A — APPLY  score > 60", tier_a, counter)
+    counter = _print_tier("TIER B — EXPLORE  score 41-60", tier_b, counter)
+    counter = _print_tier("TIER C — NOISE  score ≤ 40  [skim or skip]", tier_c, counter)
 
     # Stats
     domains = {}
@@ -1012,7 +1170,7 @@ def print_summary(jobs):
         d = j["parsed"].get("domain", "unknown")
         domains[d] = domains.get(d, 0) + 1
 
-    hidden_reloc = sum(1 for j in parsed_jobs if _is_reloc(j) and j["_display_score"] < 50)
+    hidden_reloc = sum(1 for j in parsed_jobs if _is_reloc(j) and j["_display_score"] <= 60)
     with_salary_count = sum(1 for j in parsed_jobs if j["_salary_eur"] > 0)
     scored_count = sum(1 for j in parsed_jobs if j.get("rag_score"))
     print(f"\n{'=' * 70}")
@@ -1026,7 +1184,7 @@ def print_summary(jobs):
 def _auto_skip_reloc(jobs, applied_path="config/applied.yaml"):
     """Auto-add low-score reloc jobs to not_interested.ids.
 
-    A reloc job that doesn't reach Tier A (score < 50) is not worth relocating
+    A reloc job that doesn't reach Tier A (score ≤ 60) is not worth relocating
     for — skip it permanently so it never costs parse/score tokens again.
     """
     import yaml
@@ -1037,18 +1195,17 @@ def _auto_skip_reloc(jobs, applied_path="config/applied.yaml"):
             j["_salary_eur"] = _extract_max_salary_eur(j)
             j["_fit_score"] = _heuristic_score(j)
             rag = j.get("rag_score")
-            if rag is None:
-                j["_display_score"] = j["_fit_score"]
-            elif "score" in rag:
-                j["_display_score"] = rag["score"]
-            else:
+            if rag is not None and "technical_depth" in rag:
                 tech_pts = _grade_to_points(rag.get("technical_depth"))
                 prof_pts = _grade_to_points(rag.get("profile_evidence"))
                 j["_display_score"] = min(100, max(0, j["_fit_score"] + tech_pts + prof_pts))
+            else:
+                # v1 or unscored: heuristic only (v1 stored scores not used directly)
+                j["_display_score"] = j["_fit_score"]
 
-    # Find reloc jobs with score < 50 that aren't already tracked
+    # Find reloc jobs with score ≤ 60 that aren't already tracked
     candidates = [
-        j for j in jobs if j.get("parsed") and _is_reloc(j) and j.get("_display_score", 0) < 50 and j.get("id")
+        j for j in jobs if j.get("parsed") and _is_reloc(j) and j.get("_display_score", 0) <= 60 and j.get("id")
     ]
     if not candidates:
         return
@@ -1155,6 +1312,7 @@ def main():
     # Derive target_countries for geo filtering — single source of truth for all filters
     home_locations_for_geo = profile.get("user", {}).get("home_locations", [])
     from geo import derive_target_countries as _derive_target_countries  # noqa: PLC0415
+
     target_countries: list[str] = _derive_target_countries(home_locations_for_geo)
     if not target_countries:
         # Fallback: read wttj_countries from profile as proxy for target countries
@@ -1190,22 +1348,20 @@ def main():
     # Enrichment stats: measure Glassdoor ↔ LinkedIn overlap after merge
     _src_counts: dict[str, int] = {}
     for j in raw_jobs:
-        for s in (j.sources or []):
+        for s in j.sources or []:
             _src_counts[s] = _src_counts.get(s, 0) + 1
     _multi_src = sum(1 for j in raw_jobs if len(j.sources or []) > 1)
-    _ld_gd = sum(
-        1 for j in raw_jobs
-        if j.sources and "linkedin" in j.sources and "glassdoor" in j.sources
-    )
+    _ld_gd = sum(1 for j in raw_jobs if j.sources and "linkedin" in j.sources and "glassdoor" in j.sources)
     _ld_gd_enriched = sum(
-        1 for j in raw_jobs
-        if j.sources and "linkedin" in j.sources and "glassdoor" in j.sources and j.location
+        1 for j in raw_jobs if j.sources and "linkedin" in j.sources and "glassdoor" in j.sources and j.location
     )
     if _src_counts:
         src_summary = ", ".join(f"{s}={n}" for s, n in sorted(_src_counts.items()))
         print(f"\n📊 Sources: {src_summary}")
         if _multi_src:
-            print(f"   Multi-source merges: {_multi_src} | LinkedIn∩Glassdoor: {_ld_gd} ({_ld_gd_enriched} with location enriched)")
+            print(
+                f"   Multi-source merges: {_multi_src} | LinkedIn∩Glassdoor: {_ld_gd} ({_ld_gd_enriched} with location enriched)"
+            )
         logger.info(
             "merge_enrichment_stats",
             source_counts=_src_counts,
@@ -1268,9 +1424,7 @@ def main():
             f"\n🌍 Geo filter: {geo_rejected_at_scrape} rejected at scrape, "
             f"{geo_rejected_at_prefilter} rejected at prefilter → {geo_passed} passed"
         )
-        geo_rejected_jobs = [
-            j for j in rejected if "non-target geography" in (j.get("reject_reason") or "")
-        ]
+        geo_rejected_jobs = [j for j in rejected if "non-target geography" in (j.get("reject_reason") or "")]
         if geo_rejected_jobs:
             print("   Sample geo rejections:")
             for j in geo_rejected_jobs[:5]:
@@ -1284,9 +1438,7 @@ def main():
     )
 
     # PostHog per-job geo filter tracking (15.8)
-    geo_rejected_jobs = [
-        j for j in rejected if "non-target geography" in (j.get("reject_reason") or "")
-    ]
+    geo_rejected_jobs = [j for j in rejected if "non-target geography" in (j.get("reject_reason") or "")]
     for j in geo_rejected_jobs:
         _capture(
             profile_id,

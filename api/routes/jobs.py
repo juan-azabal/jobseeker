@@ -36,7 +36,7 @@ from api.geo import (
     is_pure_timezone,
 )
 from api.middleware.auth import get_current_user
-from api.scoring import compute_tier, hybrid_score, load_profile_data, VALID_DOMAINS
+from api.scoring import compute_tier, hybrid_score, load_profile_data, VALID_DOMAINS, _compute_eligibility_penalty
 from api.skill_matcher import match_skills
 from api import analytics
 
@@ -205,8 +205,6 @@ def _score_and_tier_jobs(
         job_domain_override = domain_overrides.get(job["job_id"]) if profile else None
         if job.get("ujs_scored_v2") == 1 and profile:
             # v2: hybrid_score with actual LLM grades
-            # No relocation penalty: v2 ingest stores score=0 (not NULL), so the
-            # original ujs_score-is-None guard never fired for v2 jobs either.
             score = hybrid_score(
                 profile,
                 job["_parsed_dict"],
@@ -217,11 +215,8 @@ def _score_and_tier_jobs(
                 db_path=_db_path(),
                 domain_override=job_domain_override,
             )
-        elif job.get("ujs_score") is not None:
-            # v1: use stored RAG score unchanged
-            score = job["ujs_score"]
         else:
-            # unscored: shared helper (includes relocation penalty)
+            # v1 or unscored: re-score via current profile (v1 stored scores ignored)
             score = _score_single_job(
                 job,
                 job["_parsed_dict"],
@@ -234,6 +229,13 @@ def _score_and_tier_jobs(
 
         job["score"] = score
         job["tier"] = compute_tier(score)
+
+        # Eligibility warning: expose restriction text when penalty fired
+        parsed_dict = job["_parsed_dict"]
+        if profile and _compute_eligibility_penalty(profile, parsed_dict, job) < 0:
+            job["eligibility_warning"] = (parsed_dict.get("remote_restriction") or "").strip() or None
+        else:
+            job["eligibility_warning"] = None
 
     jobs.sort(key=lambda j: j["score"], reverse=True)
     return jobs
@@ -373,17 +375,8 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
         except (json.JSONDecodeError, TypeError):
             logger.warning("Malformed scored JSON for job_id=%s user_id=%s", job_id, user["id"])
             row["scored"] = None
-    elif ujs:
-        # v1: use stored RAG score unchanged
-        row["score"] = ujs["score"]
-        row["tier"] = ujs["tier"]
-        try:
-            row["scored"] = json.loads(ujs["scored"]) if ujs.get("scored") else None
-        except (json.JSONDecodeError, TypeError):
-            logger.warning("Malformed scored JSON for job_id=%s user_id=%s", job_id, user["id"])
-            row["scored"] = None
     else:
-        # unscored: shared helper (includes relocation penalty)
+        # v1 or unscored: re-score via current profile (v1 stored scores ignored)
         row["score"] = _score_single_job(
             row,
             row["parsed"] or {},
@@ -399,8 +392,6 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
     # Scoring method: communicate to frontend how this score was computed
     if ujs and ujs.get("scored_v2") == 1:
         row["scoring_method"] = "rag_v2"
-    elif ujs and ujs.get("score") is not None:
-        row["scoring_method"] = "rag_v1"
     else:
         row["scoring_method"] = "heuristic"
 
@@ -412,6 +403,13 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
     # Expose domain override in response (already computed above for scoring)
     row["domain_override"] = domain_override
     row["geo_restricted"] = is_reloc
+
+    # Eligibility warning: expose restriction text when penalty fired
+    parsed_for_penalty = row.get("parsed") or {}
+    if profile and _compute_eligibility_penalty(profile, parsed_for_penalty, row) < 0:
+        row["eligibility_warning"] = (parsed_for_penalty.get("remote_restriction") or "").strip() or None
+    else:
+        row["eligibility_warning"] = None
 
     # Skill matches: compute semantic match status for each skill
     row["skill_matches"] = _compute_skill_matches(row, user)
