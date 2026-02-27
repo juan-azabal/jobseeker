@@ -93,19 +93,27 @@ def _call_anthropic(
             "ANTHROPIC_API_KEY environment variable is not set. Set it in .env or your deployment environment."
         )
 
-    from posthog.ai.anthropic import Anthropic  # noqa: PLC0415
-
     model = model_override or _DEFAULTS["anthropic"]
+    use_posthog = bool(os.environ.get("POSTHOG_API_KEY"))
+
     if _anthropic_client is None:
-        _anthropic_client = Anthropic(api_key=api_key)
-    response = _anthropic_client.messages.create(
-        model=model,
-        max_tokens=4096,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-        posthog_distinct_id=distinct_id,
-        posthog_properties={"source": "cv_generation"},
-    )
+        if use_posthog:
+            from posthog.ai.anthropic import Anthropic as _AnthropicCls  # noqa: PLC0415
+        else:
+            from anthropic import Anthropic as _AnthropicCls  # noqa: PLC0415
+        _anthropic_client = _AnthropicCls(api_key=api_key)
+
+    create_kwargs: dict = {
+        "model": model,
+        "max_tokens": 4096,
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": user_prompt}],
+    }
+    if use_posthog and distinct_id:
+        create_kwargs["posthog_distinct_id"] = distinct_id
+        create_kwargs["posthog_properties"] = {"source": "cv_generation"}
+
+    response = _anthropic_client.messages.create(**create_kwargs)
     return response.content[0].text
 
 
@@ -122,19 +130,27 @@ def _call_openai(
             "OPENAI_API_KEY environment variable is not set. Set it in .env or your deployment environment."
         )
 
-    from posthog.ai.openai import OpenAI  # noqa: PLC0415
-
     model = model_override or _DEFAULTS["openai"]
+    use_posthog = bool(os.environ.get("POSTHOG_API_KEY"))
+
     if _openai_client is None:
-        _openai_client = OpenAI(api_key=api_key)
-    response = _openai_client.chat.completions.create(
-        model=model,
-        max_tokens=4096,
-        messages=[
+        if use_posthog:
+            from posthog.ai.openai import OpenAI as _OpenAICls  # noqa: PLC0415
+        else:
+            from openai import OpenAI as _OpenAICls  # noqa: PLC0415
+        _openai_client = _OpenAICls(api_key=api_key)
+
+    create_kwargs: dict = {
+        "model": model,
+        "max_tokens": 4096,
+        "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        posthog_distinct_id=distinct_id,
-        posthog_properties={"source": "cv_generation"},
-    )
+    }
+    if use_posthog and distinct_id:
+        create_kwargs["posthog_distinct_id"] = distinct_id
+        create_kwargs["posthog_properties"] = {"source": "cv_generation"}
+
+    response = _openai_client.chat.completions.create(**create_kwargs)
     return response.choices[0].message.content

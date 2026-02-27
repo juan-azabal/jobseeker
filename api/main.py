@@ -4,8 +4,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()  # Must be before route imports — auth.py reads env vars at module level.
-# NOTE: no override=True — Railway env vars must always take precedence over any .env file.
+load_dotenv(override=True)  # Must be before route imports — auth.py reads env vars at module level.
+# override=True: .env files are gitignored and never deployed to Railway, so this is safe.
+# Without override=True, vars already set in the shell as empty strings (e.g. ANTHROPIC_API_KEY="")
+# silently win over .env values — causing hard-to-debug "API key is required" errors in local dev.
 
 import structlog
 from asgi_correlation_id import CorrelationIdMiddleware, correlation_id
