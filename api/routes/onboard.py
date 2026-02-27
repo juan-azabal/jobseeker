@@ -1056,6 +1056,148 @@ async def add_skill(body: AddSkillRequest, user: dict = Depends(get_current_user
     return {"skills": skills}
 
 
+class ReplaceCVRequest(BaseModel):
+    cv_markdown: str
+    extracted_profile: dict
+
+
+@router.patch("/replace-cv")
+async def replace_cv(body: ReplaceCVRequest, user: dict = Depends(get_current_user)):
+    """Server-side additive merge of a new CV extraction into the existing profile.
+
+    Returns merged_profile and a diff summary showing what changed.
+    The profile is saved to DB before returning — no separate save step needed.
+    """
+    from ruamel.yaml import YAML  # noqa: PLC0415
+    from ruamel.yaml.comments import CommentedMap, CommentedSeq  # noqa: PLC0415
+    import io  # noqa: PLC0415
+    from api.profile_merge import merge_profiles, compute_diff  # noqa: PLC0415
+
+    profile_id = user.get("profile_id")
+    if not profile_id:
+        raise HTTPException(status_code=404, detail="No profile found")
+
+    jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "agent"))
+    yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}.yaml")
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+
+    # Restore YAML from DB if the filesystem was wiped
+    if not os.path.exists(yaml_path):
+        stored_yaml = get_user_profile_yaml(db_path, user["id"])
+        if not stored_yaml:
+            raise HTTPException(status_code=404, detail="Profile file not found")
+        os.makedirs(os.path.dirname(yaml_path), exist_ok=True)
+        with open(yaml_path, "w") as f:
+            f.write(stored_yaml)
+
+    ry = YAML()
+    ry.preserve_quotes = True
+    with open(yaml_path) as f:
+        raw = ry.load(f)
+
+    # Normalize existing YAML to flat dict (same shape as merge_profiles expects)
+    user_block = raw.get("user") or {}
+    target_block = raw.get("target") or {}
+    stored_sw = target_block.get("seniority_weights") or {}
+    if not stored_sw:
+        stored_sw = _derive_seniority_weights({"target_level": target_block.get("level", "senior")})
+
+    existing_flat = {
+        "name": user_block.get("name", ""),
+        "email": user_block.get("email"),
+        "languages": list(user_block.get("languages") or []),
+        "home_locations": list(user_block.get("home_locations") or []),
+        "track": target_block.get("track", "ic"),
+        "target_level": target_block.get("level", ""),
+        "role_type": target_block.get("role_type", ""),
+        "role_function": target_block.get("role_function", ""),
+        "seniority_weights": dict(stored_sw),
+        "domains": dict(target_block.get("domains") or {}),
+        "skills": list(raw.get("skills") or []),
+        "exclude_companies": list(raw.get("exclude_companies") or []),
+        "country_weights": dict(target_block.get("country_weights") or {}),
+        "company_type_weights": dict(target_block.get("company_type_weights") or {}),
+        "current_level": "",
+        "salary_min": target_block.get("salary_min", 60000),
+        "location_preference": user_block.get("location_preference", "b"),
+    }
+
+    # Merge extracted profile into existing
+    merged = merge_profiles(existing_flat, body.extracted_profile)
+    diff = compute_diff(existing_flat, merged)
+
+    # Write merged data back to YAML using ruamel (surgical)
+    raw.setdefault("user", CommentedMap())
+    raw.setdefault("target", CommentedMap())
+
+    raw["user"]["name"] = merged.get("name", "")
+    if merged.get("email"):
+        raw["user"]["email"] = merged["email"]
+    if merged.get("languages"):
+        raw["user"]["languages"] = merged["languages"]
+    if merged.get("home_locations"):
+        raw["user"]["home_locations"] = merged["home_locations"]
+    if merged.get("location_preference"):
+        raw["user"]["location_preference"] = merged["location_preference"]
+
+    if merged.get("target_level"):
+        raw["target"]["level"] = merged["target_level"]
+    for field in ("role_type", "role_function", "track"):
+        val = merged.get(field, "")
+        if val:
+            raw["target"][field] = val
+        elif field in raw["target"]:
+            del raw["target"][field]
+
+    raw["target"]["domains"] = CommentedMap(merged.get("domains") or {})
+    if merged.get("seniority_weights"):
+        raw["target"]["seniority_weights"] = CommentedMap(merged["seniority_weights"])
+    if merged.get("country_weights") is not None:
+        raw["target"]["country_weights"] = CommentedMap(merged.get("country_weights") or {})
+    if merged.get("company_type_weights") is not None:
+        raw["target"]["company_type_weights"] = CommentedMap(merged.get("company_type_weights") or {})
+
+    raw["skills"] = CommentedSeq(merged.get("skills") or [])
+
+    # exclude_companies lives at root level
+    exclude = merged.get("exclude_companies") or []
+    if exclude:
+        raw["exclude_companies"] = exclude
+
+    buf = io.StringIO()
+    ry.dump(raw, buf)
+    updated_yaml = buf.getvalue()
+    with open(yaml_path, "w") as f:
+        f.write(updated_yaml)
+
+    # Persist to DB
+    if body.cv_markdown:
+        save_user_cv_md(db_path, user["id"], body.cv_markdown)
+        knowledge_dir = os.path.join(jobagent_dir, "knowledge", profile_id)
+        os.makedirs(knowledge_dir, exist_ok=True)
+        with open(os.path.join(knowledge_dir, "cv.md"), "w") as f:
+            f.write(body.cv_markdown)
+    save_user_profile_yaml(db_path, user["id"], updated_yaml)
+
+    # Push to GitHub (fire-and-forget)
+    try:
+        await _push_file_to_github(
+            f"agent/config/profiles/{profile_id}.yaml",
+            updated_yaml,
+            f"chore: replace-cv merge for {profile_id} [skip ci]",
+        )
+        if body.cv_markdown:
+            await _push_file_to_github(
+                f"agent/knowledge/{profile_id}/cv.md",
+                body.cv_markdown,
+                f"chore: replace-cv markdown for {profile_id} [skip ci]",
+            )
+    except Exception:
+        logger.exception("GitHub sync failed after replace-cv for %s (non-fatal)", profile_id)
+
+    return {"merged_profile": merged, "diff": diff}
+
+
 @router.post("/upload-cv", dependencies=[Depends(get_current_user)])
 async def upload_cv(file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".docx"):

@@ -1,3 +1,40 @@
+def compute_diff(existing: dict, merged: dict) -> dict:
+    """Compute a human-readable diff between existing and merged profiles.
+
+    Returns a dict describing what changed, for display in the review screen.
+    """
+    # Skills
+    existing_skills_lower = {s.lower() for s in (existing.get("skills") or [])}
+    merged_skills = merged.get("skills") or []
+    skills_added = [s for s in merged_skills if s.lower() not in existing_skills_lower]
+    skills_kept = [s for s in merged_skills if s.lower() in existing_skills_lower]
+
+    # Domains
+    existing_domains = existing.get("domains") or {}
+    merged_domains = merged.get("domains") or {}
+    domains_added = {k: v for k, v in merged_domains.items() if k not in existing_domains}
+    domains_kept = {k: v for k, v in merged_domains.items() if k in existing_domains}
+
+    # Factual fields that changed
+    factual_fields = ("name", "email", "languages", "home_locations", "current_level", "target_level")
+    fields_updated = [f for f in factual_fields if merged.get(f) != existing.get(f) and merged.get(f) is not None]
+
+    # Preserved weight fields
+    preserved_fields = []
+    for f in ("seniority_weights", "country_weights", "company_type_weights"):
+        if existing.get(f) and merged.get(f) == existing.get(f):
+            preserved_fields.append(f)
+
+    return {
+        "skills_added": skills_added,
+        "skills_kept": skills_kept,
+        "domains_added": domains_added,
+        "domains_kept": domains_kept,
+        "fields_updated": fields_updated,
+        "fields_preserved": preserved_fields,
+    }
+
+
 def merge_profiles(existing: dict, extracted: dict) -> dict:
     """Merge LLM-extracted profile data into existing user profile.
 
