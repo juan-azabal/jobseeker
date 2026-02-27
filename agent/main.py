@@ -265,6 +265,7 @@ _HOME_LOCATIONS = []
 _HOME_REGIONS = []  # auto-derived from home_locations via country-converter
 _HOME_REGION_RE = None  # compiled regex for word-boundary region matching
 _COUNTRY_WEIGHTS: dict = {}  # populated by _load_heuristic_config(); e.g. {"remote": 10, "netherlands": -10}
+_LOCATION_PREFERENCE: str = "b"  # populated by _load_heuristic_config()
 
 # DUAL-COPY: keep identical to api/scoring.py _CITY_TO_COUNTRY.
 _CITY_TO_COUNTRY: dict[str, str] = {
@@ -341,7 +342,7 @@ def _load_heuristic_config(profile: dict):
 
     global _PROFILE_SKILLS, _DOMAIN_SCORES, _SENIORITY_SCORES
     global _SALARY_THRESHOLD, _HOME_LOCATIONS, _HOME_REGIONS, _HOME_REGION_RE
-    global _COUNTRY_WEIGHTS
+    global _COUNTRY_WEIGHTS, _LOCATION_PREFERENCE
     _PROFILE_SKILLS = [s.lower() for s in (profile.get("skills") or [])]
     _DOMAIN_SCORES = {k.lower(): v for k, v in (profile.get("target", {}).get("domains") or {}).items()}
     # 3-tier fallback: seniority_weights (current) > seniority (legacy) > compute from level+track
@@ -356,6 +357,7 @@ def _load_heuristic_config(profile: dict):
     _HOME_REGIONS = derive_home_regions(_HOME_LOCATIONS)
     _HOME_REGION_RE = build_region_pattern(_HOME_REGIONS)
     _COUNTRY_WEIGHTS = {k.lower(): int(v) for k, v in (target.get("country_weights") or {}).items()}
+    _LOCATION_PREFERENCE = (profile.get("user", {}).get("location_preference") or "b").lower()
 
 
 # Domain override: if parser says "other" but keywords match, reclassify.
@@ -738,6 +740,55 @@ def _infer_domain(parsed):
     return best_domain if best_count >= 1 else "other"
 
 
+def _agent_eligibility_penalty(parsed: dict, job: dict) -> int:
+    """Return -20 when a geo-restricted remote job excludes the user's home country.
+
+    DUAL-COPY: mirrors api/scoring.py::_compute_eligibility_penalty().
+    Uses module-level globals (_HOME_LOCATIONS, _HOME_REGIONS, _LOCATION_PREFERENCE).
+
+    Fires when ALL conditions are met:
+    1. parsed.remote_restriction is non-empty
+    2. _LOCATION_PREFERENCE != "d" (anywhere in Europe)
+    3. User's home country is NOT in the restriction text
+    Only applies to remote jobs.
+    """
+    from geo import is_pure_timezone
+
+    restriction = (parsed.get("remote_restriction") or "").strip()
+    if not restriction or restriction.lower() in ("null", "none"):
+        return 0
+    if is_pure_timezone(restriction):
+        return 0  # Timezone-only restrictions (CET, UTC+2) are not country barriers
+    if parsed.get("location_type") != "remote":
+        return 0
+    if _LOCATION_PREFERENCE == "d":
+        return 0
+
+    restriction_lower = restriction.lower()
+
+    home_countries: set[str] = set()
+    for loc in _HOME_LOCATIONS:
+        country = _CITY_TO_COUNTRY.get(loc, loc)
+        home_countries.add(country)
+        home_countries.add(loc)
+
+    if any(country in restriction_lower for country in home_countries if country):
+        return 0
+
+    _REGION_ALIASES: dict[str, list[str]] = {
+        "eu": ["eu ", "eu/", "european union", "europe"],
+        "eea": ["eea"],
+    }
+    for region in _HOME_REGIONS:
+        aliases = _REGION_ALIASES.get(region.lower(), [region.lower()])
+        if any(alias in restriction_lower for alias in aliases):
+            return 0
+    if "europe" in restriction_lower and _HOME_REGIONS:
+        return 0
+
+    return -20
+
+
 def _heuristic_score(job):
     """Quick fit score 0-100 from parsed data. No API calls."""
     p = job.get("parsed")
@@ -754,8 +805,8 @@ def _heuristic_score(job):
     # Seniority (0-15)
     score += _SENIORITY_SCORES.get(p.get("seniority", "unknown"), 0)
 
-    # Location (0-10)
-    # Country-pinned remote gets no bonus — treated as reloc
+    # Location (0-10) — 19.1.3: graduated scoring for geo-restricted remote
+    from geo import is_pure_timezone as _is_pure_tz
     loc_type = p.get("location_type", "unknown")
     job_loc = (job.get("location") or "").lower()
     remote_restriction = (p.get("remote_restriction") or "").strip()
@@ -763,9 +814,23 @@ def _heuristic_score(job):
         loc_type == "remote"
         and bool(remote_restriction)
         and remote_restriction.lower() not in ("null", "none")
+        and not _is_pure_tz(remote_restriction)  # timezone-only is not a country barrier
     )
-    if loc_type == "remote" and not _is_remote_requiring_reloc(job):
-        score += 10
+    if loc_type == "remote":
+        if _is_geo_restricted_remote:
+            # Graduated: eligible user (home country matches restriction) → +8, ineligible → +2
+            restriction_lower = remote_restriction.lower()
+            home_countries_check: set[str] = set()
+            for _loc in _HOME_LOCATIONS:
+                home_countries_check.add(_CITY_TO_COUNTRY.get(_loc, _loc))
+                home_countries_check.add(_loc)
+            _user_eligible = (
+                any(c in restriction_lower for c in home_countries_check if c)
+                or ("europe" in restriction_lower and bool(_HOME_REGIONS))
+            )
+            score += 8 if _user_eligible else 2  # 19.1.3
+        else:
+            score += 10
     elif loc_type == "hybrid" and any(c in job_loc for c in _HOME_LOCATIONS):
         score += 8
     elif loc_type == "onsite" and any(c in job_loc for c in _HOME_LOCATIONS):
@@ -795,6 +860,9 @@ def _heuristic_score(job):
 
     # Red flags (-5 each, max -15)
     score -= min(15, len(p.get("red_flags") or []) * 5)
+
+    # Eligibility penalty: -20 when geo-restricted remote excludes user's home country
+    score += _agent_eligibility_penalty(p, job)
 
     return max(0, min(100, score))
 

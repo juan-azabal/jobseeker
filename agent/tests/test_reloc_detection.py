@@ -344,7 +344,7 @@ class TestUSUserReloc:
 
 
 class TestHeuristicScoreRelocPenalty:
-    """Country-pinned remote jobs should NOT get the +10 remote bonus."""
+    """Country-pinned remote jobs get reduced location score + eligibility penalty."""
 
     def setup_method(self):
         _setup_juan()
@@ -355,20 +355,33 @@ class TestHeuristicScoreRelocPenalty:
         # domain data=15 + seniority senior=8 + remote=10 + country_weights(remote=10) = 43
         assert score == 43
 
-    def test_pinned_remote_no_bonus(self):
+    def test_timezone_only_restriction_not_pinned(self):
+        """Timezone-only restriction (CET) is not a country barrier — gets full remote bonus."""
         job = _make_remote_job(
             "Senior PM (Remote from Netherlands)",
             restriction="CET timezone hours",
         )
         score = _heuristic_score(job)
-        # domain data=15 + seniority senior=8 + remote=0 (pinned) = 23
-        assert score == 23
+        # CET is pure timezone → NOT geo-restricted → +10 location, +10 country_weights(remote) = 43
+        assert score == 43
 
-    def test_score_difference_is_20(self):
-        """Global remote scores +20 more than pinned: +10 location bonus + +10 remote country weight."""
-        global_job = _make_remote_job("Senior PM - Data", restriction="")
-        pinned_job = _make_remote_job(
-            "Senior PM (Remote from Denmark)",
-            restriction="CET timezone hours",
+    def test_country_pinned_remote_gets_reduced_bonus_and_penalty(self):
+        """Country restriction (US only) → location +2 + penalty -20 for ineligible user."""
+        job = _make_remote_job(
+            "Senior PM - Data Platform",
+            restriction="Must be based in the United States",
         )
-        assert _heuristic_score(global_job) - _heuristic_score(pinned_job) == 20
+        score = _heuristic_score(job)
+        # domain(15) + seniority(8) + location(2, ineligible geo-restricted) + country_weights(0) + penalty(-20) = 5
+        assert score == 5
+
+    def test_score_difference_is_38_for_country_pinned(self):
+        """Global remote vs US-pinned: diff = 38 (location +8, penalty +20, country_weights +10)."""
+        global_job = _make_remote_job("Senior PM - Data", restriction="")
+        us_only_job = _make_remote_job(
+            "Senior PM - Data",
+            restriction="Must be based in the United States",
+        )
+        diff = _heuristic_score(global_job) - _heuristic_score(us_only_job)
+        # 43 - 5 = 38
+        assert diff == 38
