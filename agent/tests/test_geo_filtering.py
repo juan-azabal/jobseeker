@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from geo import resolve_location_country, derive_target_countries
 from prefilter import prefilter_jobs
+from wttj_scraper import _build_geo_filter
 
 # Load geo test fixtures (fixtures/ has no __init__.py, import directly)
 import importlib.util as _ilu
@@ -178,6 +179,15 @@ class TestGeoRegressionBaseline:
         _, rejected_ids, _ = self._run(jobs, geo_prefs_file, empty_applied, empty_seen)
         assert "fr-onsite" in rejected_ids
 
+    def test_us_remote_fulltime_currently_rejected(self, geo_prefs_file, empty_applied, empty_seen):
+        """US remote fulltime with location='United States' → currently rejected by _is_us_only.
+        This is a known false negative fixed in 15.5 (unified geo filter has remote exception).
+        """
+        jobs = [j for j in GEO_TEST_JOBS if j.id == "us-remote-ft"]
+        _, rejected_ids, _ = self._run(jobs, geo_prefs_file, empty_applied, empty_seen)
+        # Documents current behavior: rejected due to "united states" in location string.
+        assert "us-remote-ft" in rejected_ids
+
     def test_baseline_stats_printed(self, geo_prefs_file, empty_applied, empty_seen, capsys):
         """Full baseline run prints stats."""
         job_dicts = [dict(j) for j in GEO_TEST_JOBS]
@@ -190,3 +200,48 @@ class TestGeoRegressionBaseline:
         print(f"\nBaseline stats: {stats}")
         print(f"Passed: {[j['id'] for j in passed]}")
         print(f"Rejected: {[(j['id'], j.get('reject_reason', '')) for j in rejected]}")
+
+
+# ---------------------------------------------------------------------------
+# 15.3 — WTTJ _build_geo_filter tests
+# ---------------------------------------------------------------------------
+
+
+class TestWTTJGeoFilter:
+    """Test that partial-remote from non-target countries is excluded."""
+
+    def _in_filter(self, filter_str: str, offices_code: str, remote: str) -> bool:
+        """Simulate Algolia filter evaluation.
+
+        A job matches the filter if:
+        - offices.country_code:<code> is in the filter, OR
+        - remote:<type> is in the filter
+        """
+        office_clause = f"offices.country_code:{offices_code}"
+        remote_clause = f"remote:{remote}"
+        return office_clause in filter_str or remote_clause in filter_str
+
+    def test_fr_partial_not_in_es_filter(self):
+        """FR office + partial remote → NOT included (partial from non-target excluded)."""
+        f = _build_geo_filter(["ES"])
+        assert not self._in_filter(f, "FR", "partial")
+
+    def test_es_partial_in_es_filter(self):
+        """ES office + partial remote → included (target country)."""
+        f = _build_geo_filter(["ES"])
+        assert self._in_filter(f, "ES", "partial")
+
+    def test_fr_fulltime_in_es_filter(self):
+        """FR office + fulltime remote → included (remote fulltime always passes)."""
+        f = _build_geo_filter(["ES"])
+        assert self._in_filter(f, "FR", "fulltime")
+
+    def test_es_onsite_in_es_filter(self):
+        """ES office + no remote → included (onsite in target country)."""
+        f = _build_geo_filter(["ES"])
+        assert self._in_filter(f, "ES", "no")
+
+    def test_fr_onsite_not_in_es_filter(self):
+        """FR office + no remote → NOT included (onsite in non-target)."""
+        f = _build_geo_filter(["ES"])
+        assert not self._in_filter(f, "FR", "no")
