@@ -54,6 +54,32 @@ function relativeDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function freshnessDisplay(firstSeen: string, lastSeen?: string): { text: string; color: string } {
+  const now = Date.now();
+  const lastMs = lastSeen ? new Date(lastSeen).getTime() : new Date(firstSeen).getTime();
+  const ageDays = Math.floor((now - lastMs) / 86_400_000);
+  const firstPart = `First seen ${relativeDate(firstSeen)}`;
+  if (ageDays < 7) return { text: `${firstPart} · Active`, color: 'text-emerald-400' };
+  const lastPart = lastSeen ? ` · Last seen ${relativeDate(lastSeen)}` : '';
+  if (ageDays <= 21) return { text: `${firstPart}${lastPart}`, color: 'text-amber-400' };
+  return { text: `${firstPart}${lastPart}`, color: 'text-red-400' };
+}
+
+function formatSalary(job: JobDetail): { text: string; estimated: boolean } | null {
+  if (job.salary_min != null) {
+    const curr = job.salary_currency ?? '';
+    const intv = job.salary_interval ?? 'year';
+    const fmt = (n: number) => n.toLocaleString('en-US');
+    const range = job.salary_max != null
+      ? `${curr}${fmt(job.salary_min)}–${curr}${fmt(job.salary_max)}`
+      : `${curr}${fmt(job.salary_min)}+`;
+    return { text: `${range}/${intv}`, estimated: job.salary_source === 'estimated' };
+  }
+  const mentioned = job.parsed?.salary_mentioned;
+  if (mentioned) return { text: mentioned, estimated: false };
+  return null;
+}
+
 function Chip({ label, variant = 'default' }: { label: string; variant?: 'default' | 'skill' | 'warn' | 'violet' }) {
   const cls = {
     default: 'bg-zinc-800 text-zinc-400',
@@ -356,7 +382,9 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <span className="text-sm text-zinc-400">{job.company}</span>
+            <span className="text-sm text-zinc-400">
+              {job.company}{job.company_size && <span className="text-zinc-600"> · {job.company_size}</span>}
+            </span>
             <span className="text-zinc-700">·</span>
             <span className="text-sm text-zinc-500">{job.location}</span>
             {job.location_type && job.location_type !== 'unknown' && (
@@ -370,7 +398,7 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
                   {p.remote_restriction}
                 </span>
               ) : (
-                <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-xs text-sky-400 border border-sky-500/20">
+                <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-400 border border-zinc-700">
                   {p.remote_restriction}
                 </span>
               )
@@ -381,6 +409,15 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
             {isApplied && (
               <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-400">
                 Applied
+              </span>
+            )}
+            {job.scoring_method && (
+              <span className={`rounded border px-2 py-0.5 text-xs ${
+                job.scoring_method !== 'heuristic'
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  : 'bg-zinc-800 border-zinc-700 text-zinc-400'
+              }`}>
+                {job.scoring_method !== 'heuristic' ? 'AI scored' : 'Estimated'}
               </span>
             )}
           </div>
@@ -395,24 +432,34 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
               parsedDomain={p?.domain}
               domainOverride={job.domain_override}
             />
-            {p?.salary_mentioned && (
-              <span className="text-zinc-500">{p.salary_mentioned}</span>
-            )}
+            {(() => {
+              const sal = formatSalary(job);
+              if (!sal) return null;
+              return (
+                <span className={sal.estimated ? 'italic text-zinc-500' : 'text-zinc-500'}>
+                  {sal.text}{sal.estimated ? ' (estimated)' : ''}
+                </span>
+              );
+            })()}
             {p?.team_size_hints && (
               <span>{p.team_size_hints}</span>
             )}
-            <span className="text-zinc-700">First seen {relativeDate(job.first_seen)}</span>
+            {(() => {
+              const f = freshnessDisplay(job.first_seen, job.last_seen);
+              return <span className={f.color}>{f.text}</span>;
+            })()}
           </div>
+
+          {/* Verdict in hero (RAG only) */}
+          {scored?.one_line_verdict && (
+            <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+              <p className="text-sm italic text-zinc-300">{scored.one_line_verdict}</p>
+            </div>
+          )}
         </div>
 
         <div className="space-y-4">
 
-          {/* ── One-line verdict (RAG only) ────────────────────────── */}
-          {scored?.one_line_verdict && (
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3">
-              <p className="text-sm italic text-zinc-300">{scored.one_line_verdict}</p>
-            </div>
-          )}
 
           {/* ── About this role ────────────────────────────────────── */}
           {p?.responsibilities_summary && (
@@ -519,7 +566,7 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
                   </h2>
                   <div className="flex flex-wrap gap-1.5">
                     {scored.stories_to_prepare.map((s, i) => (
-                      <Chip key={i} label={s} variant="violet" />
+                      <Chip key={i} label={s} />
                     ))}
                   </div>
                 </section>
@@ -633,6 +680,9 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
                 View posting
                 <span className="text-xs text-zinc-500">↗</span>
               </a>
+              {job.last_seen && Math.floor((Date.now() - new Date(job.last_seen).getTime()) / 86_400_000) > 21 && (
+                <span className="text-xs text-red-400">This posting may no longer be active</span>
+              )}
 
               <button
                 onClick={handleApplyToggle}
