@@ -1775,10 +1775,23 @@ def main():
                 "n_watchlist": n_watchlist,
                 "date": datetime.now().strftime("%d %b %Y"),
             }
-            email_sent = send_digest(all_parsed, prefilter_stats, run_meta, profile=profile)
+            _email_railway_url = os.environ.get("RAILWAY_URL", "")
+            _email_ingest_key = os.environ.get("INGEST_API_KEY", "")
+            if _email_railway_url and _email_ingest_key:
+                email_sent = send_digest(
+                    railway_url=_email_railway_url,
+                    profile_id=profile_id,
+                    ingest_key=_email_ingest_key,
+                    rejected_stats=prefilter_stats,
+                    run_meta=run_meta,
+                    profile=profile,
+                )
+            else:
+                print("⚠  RAILWAY_URL or INGEST_API_KEY not set — skipping email digest")
+                email_sent = False
             if not email_sent:
-                logger.warning("email_skipped", reason="seen_ids_already_updated")
-                print("⚠  Email not sent (seen_ids already updated — sync will persist them)")
+                logger.warning("email_skipped", reason="api_unavailable_or_no_jobs")
+                print("⚠  Email not sent")
         except Exception as e:
             logger.error("email_error", error=str(e), exc_info=True)
             print(f"⚠  Email notify error (pipeline succeeded): {e}")
