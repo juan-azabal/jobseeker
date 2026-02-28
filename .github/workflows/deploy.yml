@@ -63,7 +63,7 @@ jobs:
             -X POST "https://backboard.railway.app/graphql/v2" \
             -H "Authorization: Bearer $RAILWAY_TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{"query":"mutation { serviceInstanceRedeploy(serviceId: \"'${{ secrets.RAILWAY_SERVICE_ID }}'\")}"}')
+            -d '{"query":"mutation { serviceInstanceRedeploy(serviceId: \"'${{ secrets.RAILWAY_SERVICE_ID }}'\", environmentId: \"'${{ secrets.RAILWAY_ENVIRONMENT_ID }}'\")}"}')
           cat /tmp/railway_response.json
           if [ "$HTTP_CODE" != "200" ]; then
             echo "::error::Railway API returned HTTP $HTTP_CODE"
