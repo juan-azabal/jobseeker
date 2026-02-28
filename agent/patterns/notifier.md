@@ -54,9 +54,9 @@ These thresholds mirror `patterns/scorer.md`. If you change tier boundaries, upd
 
 ## Template
 
-Template: `templates/email_digest.html.j2`
+Templates: `templates/email_digest.html.j2` (v2, default) · `templates/email_digest_v1.html.j2` (v1 backup, activate via `DIGEST_TEMPLATE` env var).
 
-**DO NOT regenerate the template — design is final.** Zinc monochrome palette, orange (#e97316) accent on CTAs only. Table-based layout for Outlook compatibility.
+**v2 design**: Dark-first zinc palette (zinc-950 bg), violet-500 (#8b5cf6) accent. Table-based layout for Outlook compatibility. Dark mode: `color-scheme` meta tags + `@media prefers-color-scheme` for Apple Mail/iOS.
 
 Template variables are documented in `schemas/digest_context.json`.
 
@@ -72,10 +72,12 @@ Read from environment (`.env`):
 ## Subject Format
 
 ```
-"JobAgent: {n_apply} roles · {headline} — {date}"
+"JobSeeker · {n_apply} nuevos roles · {headline} — {date}"
 ```
 
-Where `headline` is `"{company} · {location_type}"` from the best Tier A job.
+Where `headline` is `"{company} · {location_type} · {score}"` from the best Tier A job (score = display score).
+
+Sender `From` header: `"JobSeeker <{gmail_address}>"`.
 
 ## Invariants
 
