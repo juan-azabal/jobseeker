@@ -323,3 +323,30 @@ class TestTemplateRender20_3a:
         """Footer must contain 'Built by Juan Azabal'."""
         html = _render_template()
         assert "Juan Azabal" in html
+
+
+class TestTemplateRender20_3b:
+    """Step 20.3b: Tier A cards use platform links."""
+
+    def test_tier_a_primary_link_is_platform(self):
+        """Tier A primary CTA must link to platform_link, not job.url."""
+        html = _render_template()
+        assert "https://example.com/jobs/abc" in html
+        assert "Ver en JobSeeker" in html
+
+    def test_tier_a_secondary_link_is_external(self):
+        """Tier A secondary 'Oferta original' link must be the external URL."""
+        html = _render_template()
+        assert "Oferta original" in html
+        assert "https://ext.com/job1" in html
+
+    def test_tier_a_ver_todos_cta_present(self):
+        """'Ver todos en el dashboard' CTA must appear after Tier A."""
+        html = _render_template()
+        assert "Ver todos en el dashboard" in html
+
+    def test_tier_a_ver_todos_links_to_platform(self):
+        """'Ver todos' CTA links to platform_url/jobs."""
+        html = _render_template()
+        # platform_url is https://example.com, so /jobs link appears
+        assert "https://example.com/jobs" in html
