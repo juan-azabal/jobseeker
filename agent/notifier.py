@@ -46,7 +46,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
-TEMPLATE_NAME = "email_digest.html.j2"
+TEMPLATE_NAME = os.getenv("DIGEST_TEMPLATE", "email_digest.html.j2")
 
 
 def _is_reloc(job, home_locations=None, home_regions=None) -> bool:

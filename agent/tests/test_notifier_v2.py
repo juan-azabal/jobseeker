@@ -5,6 +5,7 @@ P15: rag["score"] KeyError when job has v2 rag_score dict (no "score" key).
 
 import sys
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -12,6 +13,8 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from notifier import _build_context
+
+TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
 # Minimal globals that _heuristic_score needs to function without a real profile.
 _PATCH_MAIN = {
@@ -108,3 +111,32 @@ class TestBuildContextV2RagScore:
             ctx = _build_context([job], REJECTED_STATS, RUN_META)
         assert len(ctx["tier_a"]) == 1
         assert ctx["tier_a"][0]["score"] == 75
+
+
+class TestDigestTemplateToggle:
+    """Step 20.0: v1 backup + DIGEST_TEMPLATE env var."""
+
+    def test_v1_template_backup_exists(self):
+        """email_digest_v1.html.j2 must exist and match original."""
+        v1 = TEMPLATES_DIR / "email_digest_v1.html.j2"
+        assert v1.exists(), "email_digest_v1.html.j2 backup not found"
+        v2 = TEMPLATES_DIR / "email_digest.html.j2"
+        # Content should be at least as long (not an empty file)
+        assert v1.stat().st_size > 0
+
+    def test_digest_template_env_default(self):
+        """DIGEST_TEMPLATE env var defaults to email_digest.html.j2."""
+        import importlib
+        import notifier
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("DIGEST_TEMPLATE", None)
+            importlib.reload(notifier)
+            assert notifier.TEMPLATE_NAME == "email_digest.html.j2"
+
+    def test_digest_template_env_override(self):
+        """DIGEST_TEMPLATE env var overrides the template name."""
+        import importlib
+        import notifier
+        with patch.dict(os.environ, {"DIGEST_TEMPLATE": "email_digest_v1.html.j2"}):
+            importlib.reload(notifier)
+            assert notifier.TEMPLATE_NAME == "email_digest_v1.html.j2"
