@@ -124,13 +124,14 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 | `INGEST_API_KEY` | Shared secret for Railway API | — |
 
 ## Deployment
-- **Auto-deploy DISABLED.** Push to main does NOT deploy to Railway.
-- Deploy happens ONLY via GitHub Actions (`.github/workflows/deploy.yml`): tests green → `railway up`.
+- **Auto-deploy DISABLED.** Push to main does NOT deploy to Railway automatically.
+- Deploy happens ONLY via GitHub Actions (`.github/workflows/deploy.yml`): backend + agent tests green → Railway GraphQL API `serviceInstanceRedeploy`.
+- **NEVER modify `.github/workflows/deploy.yml`** — it uses curl to Railway's GraphQL API. Do NOT replace with `railway up`, deploy hooks, or any other method.
 - NEVER trigger deploys from Railway dashboard, Railway MCP, or manually.
 - Before pushing to main: run tests locally (`pytest tests/` + `cd agent && pytest tests/`).
 - Commits to main should be logically grouped, not one-per-file.
 - Railway MCP is READ-ONLY: logs and deployment status only.
-- GHA secrets: `RAILWAY_TOKEN`, `RAILWAY_SERVICE_ID`.
+- GHA secrets: `RAILWAY_TOKEN`, `RAILWAY_SERVICE_ID`, `RAILWAY_ENVIRONMENT_ID`.
 
 ## Conventions
 - Commits: conventional (`type: description`)
