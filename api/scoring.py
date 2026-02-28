@@ -517,6 +517,16 @@ _CITY_TO_COUNTRY: dict[str, str] = {
     "helsinki": "finland",
     # Norway
     "oslo": "norway",
+    # United States
+    "new york": "us",
+    "new york city": "us",
+    "nyc": "us",
+    "san francisco": "us",
+    "los angeles": "us",
+    "seattle": "us",
+    "boston": "us",
+    "chicago": "us",
+    "austin": "us",
 }
 
 # ISO language code → text signals that appear in JDs.
@@ -828,61 +838,105 @@ def _score_skills(
 
 
 def _compute_eligibility_penalty(profile: dict, parsed: dict, job: dict) -> int:
-    """Return -20 when a geo-restricted remote job excludes the user's home country.
+    """Return -20 when a job excludes the user from working there legally.
 
-    Fires when ALL conditions are met:
-    1. parsed.remote_restriction is non-empty (job has a geo constraint)
-    2. profile.location_preference != "d" (anywhere in Europe) — "d" users opted in
-    3. User's home country is NOT in the restriction text
+    For REMOTE jobs: fires when remote_restriction is non-empty and user's home
+    country/region is NOT in the restriction text.
+
+    For ONSITE/HYBRID jobs: fires when job country is identifiable via
+    locations_mentioned or job.location AND is NOT in the user's home countries.
+    Conservative: if job country cannot be determined, returns 0.
+
+    Also fires when:
+    - profile.location_preference != "d" (anywhere in Europe) — "d" users opted in
 
     Returns -20 when user is ineligible, 0 otherwise.
-    Only applies to remote jobs (remote_restriction is meaningless for onsite).
     """
     from api.geo import is_pure_timezone
 
-    restriction = (parsed.get("remote_restriction") or "").strip()
-    if not restriction or restriction.lower() in ("null", "none"):
-        return 0
-
-    # Timezone-only restrictions (CET, UTC+2) are not country barriers — no penalty
-    if is_pure_timezone(restriction):
-        return 0
-
-    # Only applies to remote jobs
     loc_type = parsed.get("location_type", "")
-    if loc_type != "remote":
+
+    # --- REMOTE path ---
+    restriction = (parsed.get("remote_restriction") or "").strip()
+    if loc_type == "remote":
+        if not restriction or restriction.lower() in ("null", "none"):
+            return 0
+        # Timezone-only restrictions (CET, UTC+2) are not country barriers — no penalty
+        if is_pure_timezone(restriction):
+            return 0
+        # "d" (anywhere in Europe) users opted into cross-border jobs — no penalty
+        if profile.get("location_preference") == "d":
+            return 0
+
+        restriction_lower = restriction.lower()
+
+        # Derive home countries from home_locations via city→country lookup
+        home_locations = profile.get("home_locations", [])
+        home_countries: set[str] = set()
+        for loc in home_locations:
+            country = _CITY_TO_COUNTRY.get(loc, loc)
+            home_countries.add(country)
+            home_countries.add(loc)  # also check the raw location name
+
+        # Check if any home country appears in restriction text
+        if any(country in restriction_lower for country in home_countries if country):
+            return 0
+
+        # Check home_regions (catches "EU only", "Europe only", "EEA only")
+        home_regions = profile.get("home_regions", [])
+        _REGION_ALIASES: dict[str, list[str]] = {
+            "eu": ["eu ", "eu/", "european union", "europe"],
+            "eea": ["eea"],
+        }
+        for region in home_regions:
+            aliases = _REGION_ALIASES.get(region.lower(), [region.lower()])
+            if any(alias in restriction_lower for alias in aliases):
+                return 0
+        # Broad "europe" match covers most EU-wide restrictions
+        if "europe" in restriction_lower and home_regions:
+            return 0
+
+        return -20
+
+    # --- ONSITE / HYBRID path ---
+    # Resolve job country from locations_mentioned, then fall back to job.location tokens
+    locations_mentioned = [loc.lower() for loc in (parsed.get("locations_mentioned") or [])]
+    job_countries: set[str] = set()
+    for loc in locations_mentioned:
+        resolved = _CITY_TO_COUNTRY.get(loc)
+        if resolved:
+            job_countries.add(resolved)
+
+    if not job_countries:
+        # Substring match over all keys in _CITY_TO_COUNTRY against the raw job location.
+        # Handles multi-word cities ("New York", "New York City", "San Francisco") that
+        # won't survive single-token splitting.
+        raw_loc = (job.get("location") or "").lower().replace(",", " ")
+        for city_key, country in _CITY_TO_COUNTRY.items():
+            if city_key in raw_loc:
+                job_countries.add(country)
+
+    # Conservative: if job country is unidentifiable, no penalty
+    if not job_countries:
         return 0
 
-    # "d" (anywhere in Europe) users opted into cross-border jobs — no penalty
+    # "d" users opted into cross-border jobs — no penalty
     if profile.get("location_preference") == "d":
         return 0
 
-    restriction_lower = restriction.lower()
-
-    # Derive home countries from home_locations via city→country lookup
+    # Build home countries from home_locations
     home_locations = profile.get("home_locations", [])
-    home_countries: set[str] = set()
-    for loc in home_locations:
-        country = _CITY_TO_COUNTRY.get(loc, loc)
-        home_countries.add(country)
-        home_countries.add(loc)  # also check the raw location name
-
-    # Check if any home country appears in restriction text
-    if any(country in restriction_lower for country in home_countries if country):
+    # Conservative: if user has no home locations configured, can't determine eligibility
+    if not home_locations:
         return 0
 
-    # Check home_regions (catches "EU only", "Europe only", "EEA only")
-    home_regions = profile.get("home_regions", [])
-    _REGION_ALIASES: dict[str, list[str]] = {
-        "eu": ["eu ", "eu/", "european union", "europe"],
-        "eea": ["eea"],
-    }
-    for region in home_regions:
-        aliases = _REGION_ALIASES.get(region.lower(), [region.lower()])
-        if any(alias in restriction_lower for alias in aliases):
-            return 0
-    # Broad "europe" match covers most EU-wide restrictions
-    if "europe" in restriction_lower and home_regions:
+    home_countries_onsite: set[str] = set()
+    for loc in home_locations:
+        home_countries_onsite.add(_CITY_TO_COUNTRY.get(loc, loc))
+        home_countries_onsite.add(loc)
+
+    # If any job country is a home country → eligible, no penalty
+    if any(c in home_countries_onsite for c in job_countries):
         return 0
 
     return -20

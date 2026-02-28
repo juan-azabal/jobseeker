@@ -215,6 +215,11 @@ def _score_and_tier_jobs(
                 db_path=_db_path(),
                 domain_override=job_domain_override,
             )
+            # v2: apply relocation penalty (same as _score_single_job unscored path)
+            if is_reloc and score > 0:
+                loc_type = job.get("location_type") or job["_parsed_dict"].get("location_type") or ""
+                penalty = 5 if loc_type == "remote" else 15
+                score = max(0, score - penalty)
         else:
             # v1 or unscored: re-score via current profile (v1 stored scores ignored)
             score = _score_single_job(
@@ -233,7 +238,12 @@ def _score_and_tier_jobs(
         # Eligibility warning: expose restriction text when penalty fired
         parsed_dict = job["_parsed_dict"]
         if profile and _compute_eligibility_penalty(profile, parsed_dict, job) < 0:
-            job["eligibility_warning"] = (parsed_dict.get("remote_restriction") or "").strip() or None
+            restriction = (parsed_dict.get("remote_restriction") or "").strip()
+            if not restriction:
+                # Onsite/hybrid: derive indicator from locations_mentioned or job location
+                locs = [l for l in (parsed_dict.get("locations_mentioned") or []) if l]
+                restriction = locs[0] if locs else (job.get("location") or "onsite")
+            job["eligibility_warning"] = restriction or None
         else:
             job["eligibility_warning"] = None
 
@@ -368,6 +378,11 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
             db_path=_db_path(),
             domain_override=domain_override,
         )
+        # v2: apply relocation penalty (same as unscored branch via _score_single_job)
+        if is_reloc and score > 0:
+            loc_type = row.get("location_type") or (row.get("parsed") or {}).get("location_type") or ""
+            penalty = 5 if loc_type == "remote" else 15
+            score = max(0, score - penalty)
         row["score"] = score
         row["tier"] = compute_tier(score)
         try:
@@ -407,7 +422,12 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
     # Eligibility warning: expose restriction text when penalty fired
     parsed_for_penalty = row.get("parsed") or {}
     if profile and _compute_eligibility_penalty(profile, parsed_for_penalty, row) < 0:
-        row["eligibility_warning"] = (parsed_for_penalty.get("remote_restriction") or "").strip() or None
+        restriction = (parsed_for_penalty.get("remote_restriction") or "").strip()
+        if not restriction:
+            # Onsite/hybrid: derive indicator from locations_mentioned or job location
+            locs = [l for l in (parsed_for_penalty.get("locations_mentioned") or []) if l]
+            restriction = locs[0] if locs else (row.get("location") or "onsite")
+        row["eligibility_warning"] = restriction or None
     else:
         row["eligibility_warning"] = None
 
