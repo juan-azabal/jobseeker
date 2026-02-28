@@ -15,6 +15,8 @@ import sys
 import time
 from datetime import datetime
 
+import httpx
+
 import structlog
 
 from logging_setup import configure_logging
@@ -174,6 +176,41 @@ def _heuristic_gate(jobs: list, profile: dict) -> tuple[list, list]:
         (to_score if score >= threshold else skipped).append(job)
 
     return to_score, skipped
+
+
+def _sync_to_railway(jobs: list, profile_id: str, railway_url: str, ingest_key: str) -> bool:
+    """POST jobs to /api/ingest on Railway so the digest endpoint has today's data.
+
+    Called as Step 10b, before the email digest (Step 11), to ensure Railway DB
+    is populated before GET /api/digest/{profile_id} is called.
+
+    Returns True on success, False on any failure (caller continues regardless).
+    """
+    url = railway_url.rstrip("/")
+    if url.startswith("http://"):
+        url = "https://" + url[len("http://"):]
+    endpoint = f"{url}/api/ingest"
+    payload = {"jobs": jobs, "profile_id": profile_id}
+
+    try:
+        resp = httpx.post(
+            endpoint,
+            json=payload,
+            headers={"X-Ingest-Key": ingest_key},
+            timeout=30.0,
+        )
+        resp.raise_for_status()
+        logger.info("railway_sync_ok", profile_id=profile_id, jobs=len(jobs), status=resp.status_code)
+        print(f"   Railway sync: {len(jobs)} jobs → {resp.status_code}")
+        return True
+    except httpx.TimeoutException as exc:
+        logger.warning("railway_sync_timeout", profile_id=profile_id, error=str(exc))
+        print(f"⚠  Railway sync timeout — email digest may have stale data")
+        return False
+    except Exception as exc:
+        logger.warning("railway_sync_failed", profile_id=profile_id, error=str(exc))
+        print(f"⚠  Railway sync failed ({exc}) — email digest may have stale data")
+        return False
 
 
 def _append_seen_ids(jobs, path=SEEN_IDS_PATH):
@@ -1654,6 +1691,13 @@ def main():
 
     if rejected:
         save_results(rejected, folder="output/rejected", profile_id=profile_id)
+
+    # Step 10b: Sync to Railway before email so GET /api/digest/{profile_id} has today's data.
+    # The GHA workflow curl POST /api/ingest is an idempotent backup (ON CONFLICT no-ops).
+    _railway_url = os.environ.get("RAILWAY_URL", "")
+    _ingest_key = os.environ.get("INGEST_API_KEY", "")
+    if _railway_url and _ingest_key:
+        _sync_to_railway(all_parsed, profile_id, _railway_url, _ingest_key)
 
     # Mark jobs as seen immediately after saving results.
     # Actual persistence to git only happens in GHA *after* successful Railway sync,
