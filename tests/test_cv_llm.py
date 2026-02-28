@@ -1,26 +1,42 @@
-"""Tests for api/cv/llm.py — LLM abstraction layer."""
+"""Tests for api/cv/llm.py — LLM abstraction layer.
+
+All LLM calls are mocked. No real API calls, no cost.
+The singleton client is reset between tests via importlib.reload().
+"""
 
 import pytest
 from unittest.mock import patch, MagicMock
+import importlib
+
+
+def _reload_llm():
+    """Reload llm module to reset singleton clients."""
+    import api.cv.llm as llm_module
+
+    importlib.reload(llm_module)
+    return llm_module
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Anthropic provider tests
+# ══════════════════════════════════════════════════════════════════════════
 
 
 def test_anthropic_provider_calls_correct_client(monkeypatch):
     """generate_cv() with CV_LLM_PROVIDER=anthropic calls anthropic client."""
     monkeypatch.setenv("CV_LLM_PROVIDER", "anthropic")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.delenv("POSTHOG_API_KEY", raising=False)
 
     mock_response = MagicMock()
     mock_response.content = [MagicMock(text="# John Doe\nSoftware Engineer")]
-
     mock_client = MagicMock()
     mock_client.messages.create.return_value = mock_response
 
-    import importlib
-    import api.cv.llm as llm_module
+    llm_module = _reload_llm()
 
-    importlib.reload(llm_module)  # reset singleton so patch takes effect
-
-    with patch("posthog.ai.anthropic.Anthropic", return_value=mock_client):
+    # Without POSTHOG_API_KEY, code imports from anthropic (not posthog.ai.anthropic)
+    with patch("anthropic.Anthropic", return_value=mock_client):
         result = llm_module.generate_cv("system prompt", "user prompt")
 
     mock_client.messages.create.assert_called_once()
@@ -32,24 +48,47 @@ def test_anthropic_provider_calls_correct_client(monkeypatch):
     assert result == "# John Doe\nSoftware Engineer"
 
 
+def test_anthropic_provider_with_posthog(monkeypatch):
+    """generate_cv() with PostHog configured uses posthog.ai.anthropic wrapper."""
+    monkeypatch.setenv("CV_LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("POSTHOG_API_KEY", "phc_test")
+
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="# John Doe\nPM")]
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = mock_response
+
+    llm_module = _reload_llm()
+
+    with patch("posthog.ai.anthropic.Anthropic", return_value=mock_client):
+        result = llm_module.generate_cv("sys", "usr", distinct_id="user-1")
+
+    call_kwargs = mock_client.messages.create.call_args.kwargs
+    assert call_kwargs["posthog_distinct_id"] == "user-1"
+    assert result == "# John Doe\nPM"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# OpenAI provider tests
+# ══════════════════════════════════════════════════════════════════════════
+
+
 def test_openai_provider_calls_correct_client(monkeypatch):
     """generate_cv() with CV_LLM_PROVIDER=openai calls openai client."""
     monkeypatch.setenv("CV_LLM_PROVIDER", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.delenv("POSTHOG_API_KEY", raising=False)
 
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = "# Jane Doe\nProduct Manager"
-
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = mock_response
 
-    with patch("posthog.ai.openai.OpenAI", return_value=mock_client):
-        # Re-import to pick up new env var
-        import importlib
-        import api.cv.llm as llm_module
+    llm_module = _reload_llm()
 
-        importlib.reload(llm_module)  # reset singleton so patch takes effect
+    with patch("openai.OpenAI", return_value=mock_client):
         result = llm_module.generate_cv("system prompt", "user prompt")
 
     mock_client.chat.completions.create.assert_called_once()
@@ -59,14 +98,38 @@ def test_openai_provider_calls_correct_client(monkeypatch):
     assert result == "# Jane Doe\nProduct Manager"
 
 
+def test_openai_provider_with_posthog(monkeypatch):
+    """generate_cv() with PostHog configured uses posthog.ai.openai wrapper."""
+    monkeypatch.setenv("CV_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("POSTHOG_API_KEY", "phc_test")
+
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "# Jane Doe\nPM"
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = mock_response
+
+    llm_module = _reload_llm()
+
+    with patch("posthog.ai.openai.OpenAI", return_value=mock_client):
+        result = llm_module.generate_cv("sys", "usr", distinct_id="user-2")
+
+    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+    assert call_kwargs["posthog_distinct_id"] == "user-2"
+    assert result == "# Jane Doe\nPM"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Error handling
+# ══════════════════════════════════════════════════════════════════════════
+
+
 def test_invalid_provider_raises_value_error(monkeypatch):
     """generate_cv() with unknown provider raises ValueError."""
     monkeypatch.setenv("CV_LLM_PROVIDER", "fakeai")
 
-    import importlib
-    import api.cv.llm as llm_module
-
-    importlib.reload(llm_module)
+    llm_module = _reload_llm()
 
     with pytest.raises(ValueError, match="fakeai"):
         llm_module.generate_cv("system", "user")
@@ -77,10 +140,7 @@ def test_missing_anthropic_api_key_raises_runtime_error(monkeypatch):
     monkeypatch.setenv("CV_LLM_PROVIDER", "anthropic")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-    import importlib
-    import api.cv.llm as llm_module
-
-    importlib.reload(llm_module)
+    llm_module = _reload_llm()
 
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
         llm_module.generate_cv("system", "user")
@@ -91,13 +151,15 @@ def test_missing_openai_api_key_raises_runtime_error(monkeypatch):
     monkeypatch.setenv("CV_LLM_PROVIDER", "openai")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
-    import importlib
-    import api.cv.llm as llm_module
-
-    importlib.reload(llm_module)
+    llm_module = _reload_llm()
 
     with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
         llm_module.generate_cv("system", "user")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Model override
+# ══════════════════════════════════════════════════════════════════════════
 
 
 def test_cv_llm_model_override_anthropic(monkeypatch):
@@ -105,17 +167,16 @@ def test_cv_llm_model_override_anthropic(monkeypatch):
     monkeypatch.setenv("CV_LLM_PROVIDER", "anthropic")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setenv("CV_LLM_MODEL", "claude-opus-4-5")
+    monkeypatch.delenv("POSTHOG_API_KEY", raising=False)
 
     mock_response = MagicMock()
     mock_response.content = [MagicMock(text="result")]
     mock_client = MagicMock()
     mock_client.messages.create.return_value = mock_response
 
-    with patch("posthog.ai.anthropic.Anthropic", return_value=mock_client):
-        import importlib
-        import api.cv.llm as llm_module
+    llm_module = _reload_llm()
 
-        importlib.reload(llm_module)  # reset singleton so patch takes effect
+    with patch("anthropic.Anthropic", return_value=mock_client):
         llm_module.generate_cv("sys", "usr")
 
     call_kwargs = mock_client.messages.create.call_args.kwargs
@@ -127,6 +188,7 @@ def test_cv_llm_model_override_openai(monkeypatch):
     monkeypatch.setenv("CV_LLM_PROVIDER", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("CV_LLM_MODEL", "gpt-4-turbo")
+    monkeypatch.delenv("POSTHOG_API_KEY", raising=False)
 
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
@@ -134,11 +196,9 @@ def test_cv_llm_model_override_openai(monkeypatch):
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = mock_response
 
-    with patch("posthog.ai.openai.OpenAI", return_value=mock_client):
-        import importlib
-        import api.cv.llm as llm_module
+    llm_module = _reload_llm()
 
-        importlib.reload(llm_module)  # reset singleton so patch takes effect
+    with patch("openai.OpenAI", return_value=mock_client):
         llm_module.generate_cv("sys", "usr")
 
     call_kwargs = mock_client.chat.completions.create.call_args.kwargs
@@ -146,7 +206,7 @@ def test_cv_llm_model_override_openai(monkeypatch):
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# strip_analysis tests (Step 6.3)
+# strip_analysis tests
 # ══════════════════════════════════════════════════════════════════════════
 
 _CV_SAMPLE = """# John Doe
@@ -172,7 +232,7 @@ def test_strip_analysis_removes_block():
 
     raw = f"<analysis>\nSummary angle: emphasize consulting.\n</analysis>\n\n{_CV_SAMPLE}"
     result = strip_analysis(raw)
-    assert result.startswith("# John Doe"), f"Expected output to start with '# John Doe', got: {result[:80]!r}"
+    assert result.startswith("# John Doe")
     assert "<analysis>" not in result
     assert "</analysis>" not in result
 
@@ -228,6 +288,7 @@ def test_generate_cv_strips_analysis_automatically(monkeypatch):
     """generate_cv() automatically strips <analysis> blocks from LLM output."""
     monkeypatch.setenv("CV_LLM_PROVIDER", "anthropic")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.delenv("POSTHOG_API_KEY", raising=False)
 
     raw_with_analysis = (
         "<analysis>\nSome reasoning here.\n</analysis>\n\n# John Doe\nSenior PM\n## Summary\nExperienced PM."
@@ -237,12 +298,10 @@ def test_generate_cv_strips_analysis_automatically(monkeypatch):
     mock_client = MagicMock()
     mock_client.messages.create.return_value = mock_response
 
-    with patch("posthog.ai.anthropic.Anthropic", return_value=mock_client):
-        import importlib
-        import api.cv.llm as llm_module
+    llm_module = _reload_llm()
 
-        importlib.reload(llm_module)  # reset singleton so patch takes effect
+    with patch("anthropic.Anthropic", return_value=mock_client):
         result = llm_module.generate_cv("system", "user")
 
-    assert "<analysis>" not in result, "generate_cv must strip analysis blocks"
+    assert "<analysis>" not in result
     assert "# John Doe" in result

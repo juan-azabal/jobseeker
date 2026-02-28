@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
 
@@ -14,6 +12,7 @@ jobs:
   backend-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - uses: actions/checkout@v4
 
@@ -27,11 +26,14 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run backend tests
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python -m pytest tests/ -x -q --tb=short
 
   agent-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - uses: actions/checkout@v4
 
@@ -50,6 +52,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - uses: actions/checkout@v4
 

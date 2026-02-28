@@ -137,9 +137,7 @@ class TestTrackChangeRegeneratesSearches:
             f"Expected 'Senior Product Manager' in IC searches, got: {all_terms}"
         )
         # Management-only titles should not be primary
-        assert "Head of Product" not in all_terms, (
-            "IC track should not generate 'Head of Product' titles"
-        )
+        assert "Head of Product" not in all_terms, "IC track should not generate 'Head of Product' titles"
 
     def test_patch_writes_track_to_yaml(self, onboarded_client):
         """PATCH with track=management → profile YAML persists track=management."""

@@ -137,6 +137,7 @@ def _is_non_target_geo(
     Conservative: unresolved location AND no signals → pass (return False).
     """
     import geonamescache as _gnc  # lazy import — module already loaded
+
     _gc = _gnc.GeonamesCache()
 
     remote_type = (job.get("remote_type") or "").lower()
@@ -155,7 +156,7 @@ def _is_non_target_geo(
         # country is None → fall through to description layers
 
     # Layer 2: city/country mentions in description near location-signaling context words
-    description = (job.get("description") or "")
+    description = job.get("description") or ""
     desc_lower = description.lower()
 
     # Only scan if location is null/empty (already handled above if location exists)

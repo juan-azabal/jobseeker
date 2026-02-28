@@ -109,7 +109,9 @@ def on_startup():
         refs_files = [f.name for f in sorted(refs_dir.iterdir()) if f.is_file()]
         logger.info("CV references dir", path=str(refs_dir), files=refs_files)
     else:
-        logger.warning("CV references dir not found", path=str(refs_dir), cv_references_dir_env=refs_dir_env or "(not set)")
+        logger.warning(
+            "CV references dir not found", path=str(refs_dir), cv_references_dir_env=refs_dir_env or "(not set)"
+        )
 
     analytics.init_posthog()
 

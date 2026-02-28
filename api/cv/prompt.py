@@ -282,9 +282,7 @@ def _load_reference_files(refs_dir: Path) -> str:
                 refs_dir=str(refs_dir),
                 refs_dir_exists=refs_dir.exists(),
                 refs_dir_contents=(
-                    [f.name for f in sorted(refs_dir.iterdir()) if f.is_file()]
-                    if refs_dir.exists()
-                    else []
+                    [f.name for f in sorted(refs_dir.iterdir()) if f.is_file()] if refs_dir.exists() else []
                 ),
             )
             raise FileNotFoundError(
@@ -352,10 +350,7 @@ def build_cv_prompts(
     # master-cv-experience.md) that used to be committed to the repo.
     cv_section = ""
     if user_cv_markdown and user_cv_markdown.strip():
-        cv_section = (
-            "\n\n--- SECTION: candidate-master-cv.md ---\n\n"
-            + user_cv_markdown.strip()
-        )
+        cv_section = "\n\n--- SECTION: candidate-master-cv.md ---\n\n" + user_cv_markdown.strip()
 
     # Parse JSON blobs from job
     parsed: dict = {}

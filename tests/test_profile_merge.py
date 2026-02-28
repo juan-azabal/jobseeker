@@ -8,6 +8,7 @@ from api.profile_merge import merge_profiles
 # Skills
 # ---------------------------------------------------------------------------
 
+
 def test_skills_union_preserves_order():
     existing = {"skills": ["sql", "python"]}
     extracted = {"skills": ["python", "kafka"]}
@@ -26,17 +27,19 @@ def test_skills_dedup_case_insensitive():
 # Domains
 # ---------------------------------------------------------------------------
 
+
 def test_domains_existing_weights_preserved():
     existing = {"domains": {"saas": 15}}
     extracted = {"domains": {"saas": 12, "fintech": 8}}
     result = merge_profiles(existing, extracted)
-    assert result["domains"]["saas"] == 15      # existing wins
-    assert result["domains"]["fintech"] == 8    # new domain added
+    assert result["domains"]["saas"] == 15  # existing wins
+    assert result["domains"]["fintech"] == 8  # new domain added
 
 
 # ---------------------------------------------------------------------------
 # Weights — not overwritten
 # ---------------------------------------------------------------------------
+
 
 def test_seniority_weights_not_overwritten():
     existing = {"seniority_weights": {"senior": 15, "staff": 5}}
@@ -62,6 +65,7 @@ def test_company_type_weights_not_overwritten():
 # ---------------------------------------------------------------------------
 # Factual fields — new CV wins
 # ---------------------------------------------------------------------------
+
 
 def test_name_email_from_new_cv():
     existing = {"name": "Jon", "email": "jon@old.com"}
@@ -89,6 +93,7 @@ def test_home_locations_from_new_cv():
 # exclude_companies — union
 # ---------------------------------------------------------------------------
 
+
 def test_exclude_companies_union():
     existing = {"exclude_companies": ["A"]}
     extracted = {"exclude_companies": ["B"]}
@@ -106,6 +111,7 @@ def test_exclude_companies_union_dedup():
 # ---------------------------------------------------------------------------
 # role_type, role_function, track — new wins if non-null
 # ---------------------------------------------------------------------------
+
 
 def test_role_type_new_wins_if_present():
     existing = {"role_type": "Product Manager"}
@@ -160,6 +166,7 @@ def test_current_target_level_from_new():
 # ---------------------------------------------------------------------------
 # Edge cases
 # ---------------------------------------------------------------------------
+
 
 def test_empty_extraction_preserves_all():
     existing = {

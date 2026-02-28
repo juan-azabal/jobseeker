@@ -32,9 +32,7 @@ def _geo_job(**kwargs) -> dict:
 
 class TestIsNonTargetGeo:
     def test_us_city_rejected_for_es(self):
-        rejected, country, _ = _is_non_target_geo(
-            _geo_job(location="San Francisco, CA"), ["ES"]
-        )
+        rejected, country, _ = _is_non_target_geo(_geo_job(location="San Francisco, CA"), ["ES"])
         assert rejected is True
         assert country == "US"
 
@@ -281,9 +279,7 @@ class TestPrefilterJobs:
 
     def test_rejects_non_target_geo(self, prefs_file, empty_applied, empty_seen):
         jobs = [self._make_job(location="San Francisco, CA")]
-        passed, rejected, stats = prefilter_jobs(
-            jobs, prefs_file, empty_applied, empty_seen, target_countries=["ES"]
-        )
+        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, empty_seen, target_countries=["ES"])
         assert len(passed) == 0
         assert stats["non_target_geo"] == 1
 
