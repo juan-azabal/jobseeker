@@ -28,7 +28,8 @@ Raw pipeline job dicts are never passed directly to the template. `_flatten_job(
     "score":          int,       # _display_score: v2→hybrid (heuristic+grade_pts), v1→RAG numeric, else→heuristic
     "strength":       str,       # first RAG strength claim, or first must_have_skill
     "gap":            str,       # first RAG gap, or ""
-    "url":            str,
+    "url":            str,       # external job URL
+    "platform_link":  str,       # APP_BASE_URL/jobs/{job_id} (hash); falls back to url if job_id missing
 }
 ```
 
@@ -53,9 +54,9 @@ These thresholds mirror `patterns/scorer.md`. If you change tier boundaries, upd
 
 ## Template
 
-Template: `templates/email_digest.html.j2`
+Templates: `templates/email_digest.html.j2` (v2, default) · `templates/email_digest_v1.html.j2` (v1 backup, activate via `DIGEST_TEMPLATE` env var).
 
-**DO NOT regenerate the template — design is final.** Zinc monochrome palette, orange (#e97316) accent on CTAs only. Table-based layout for Outlook compatibility.
+**v2 design**: Dark-first zinc palette (zinc-950 bg), violet-500 (#8b5cf6) accent. Table-based layout for Outlook compatibility. Dark mode: `color-scheme` meta tags + `@media prefers-color-scheme` for Apple Mail/iOS.
 
 Template variables are documented in `schemas/digest_context.json`.
 
@@ -65,14 +66,18 @@ Read from environment (`.env`):
 - `GMAIL_ADDRESS` — sender
 - `GMAIL_APP_PASSWORD` — Gmail App Password (not account password)
 - `NOTIFY_EMAIL` — fallback recipient if `profile["user"]["email"]` not set
+- `APP_BASE_URL` — platform base URL for digest links (default: `https://jobseeker-production.up.railway.app`)
+- `DIGEST_TEMPLATE` — template filename override (default: `email_digest.html.j2`; set to `email_digest_v1.html.j2` for rollback)
 
 ## Subject Format
 
 ```
-"JobAgent: {n_apply} roles · {headline} — {date}"
+"JobSeeker · {n_apply} nuevos roles · {headline} — {date}"
 ```
 
-Where `headline` is `"{company} · {location_type}"` from the best Tier A job.
+Where `headline` is `"{company} · {location_type} · {score}"` from the best Tier A job (score = display score).
+
+Sender `From` header: `"JobSeeker <{gmail_address}>"`.
 
 ## Invariants
 

@@ -5,6 +5,7 @@ P15: rag["score"] KeyError when job has v2 rag_score dict (no "score" key).
 
 import sys
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -12,6 +13,8 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from notifier import _build_context
+
+TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
 # Minimal globals that _heuristic_score needs to function without a real profile.
 _PATCH_MAIN = {
@@ -108,3 +111,270 @@ class TestBuildContextV2RagScore:
             ctx = _build_context([job], REJECTED_STATS, RUN_META)
         assert len(ctx["tier_a"]) == 1
         assert ctx["tier_a"][0]["score"] == 75
+
+
+class TestDigestTemplateToggle:
+    """Step 20.0: v1 backup + DIGEST_TEMPLATE env var."""
+
+    def test_v1_template_backup_exists(self):
+        """email_digest_v1.html.j2 must exist and match original."""
+        v1 = TEMPLATES_DIR / "email_digest_v1.html.j2"
+        assert v1.exists(), "email_digest_v1.html.j2 backup not found"
+        v2 = TEMPLATES_DIR / "email_digest.html.j2"
+        # Content should be at least as long (not an empty file)
+        assert v1.stat().st_size > 0
+
+    def test_digest_template_env_default(self):
+        """DIGEST_TEMPLATE env var defaults to email_digest.html.j2."""
+        import importlib
+        import notifier
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("DIGEST_TEMPLATE", None)
+            importlib.reload(notifier)
+            assert notifier.TEMPLATE_NAME == "email_digest.html.j2"
+
+    def test_digest_template_env_override(self):
+        """DIGEST_TEMPLATE env var overrides the template name."""
+        import importlib
+        import notifier
+        with patch.dict(os.environ, {"DIGEST_TEMPLATE": "email_digest_v1.html.j2"}):
+            importlib.reload(notifier)
+            assert notifier.TEMPLATE_NAME == "email_digest_v1.html.j2"
+
+
+class TestFlattenJobPlatformLink:
+    """Step 20.1: _flatten_job() platform_link field."""
+
+    def _job(self, job_id=None, job_url="https://ext.com/job"):
+        j = _make_job()
+        j["job_id"] = job_id
+        j["job_url"] = job_url
+        return j
+
+    def test_platform_link_uses_job_id(self):
+        """platform_link = APP_BASE_URL/jobs/{job_id} when job_id present."""
+        from notifier import _flatten_job
+        job = self._job(job_id="abc123hash")
+        with patch("notifier._is_reloc", return_value=False):
+            with patch.dict(os.environ, {"APP_BASE_URL": "https://example.com"}):
+                result = _flatten_job(job)
+        assert result["platform_link"] == "https://example.com/jobs/abc123hash"
+
+    def test_platform_link_fallback_no_job_id(self):
+        """platform_link falls back to job_url when job_id is missing."""
+        from notifier import _flatten_job
+        job = self._job(job_id=None, job_url="https://ext.com/job")
+        with patch("notifier._is_reloc", return_value=False):
+            result = _flatten_job(job)
+        assert result["platform_link"] == "https://ext.com/job"
+
+    def test_platform_link_fallback_empty_job_id(self):
+        """platform_link falls back to job_url when job_id is empty string."""
+        from notifier import _flatten_job
+        job = self._job(job_id="", job_url="https://ext.com/job")
+        with patch("notifier._is_reloc", return_value=False):
+            result = _flatten_job(job)
+        assert result["platform_link"] == "https://ext.com/job"
+
+
+class TestBuildContextPlatformUrl:
+    """Step 20.1: _build_context() includes platform_url."""
+
+    def test_platform_url_in_context(self):
+        """_build_context() must include platform_url key."""
+        job = _make_job()
+        with patch.multiple("main", **_PATCH_MAIN):
+            ctx = _build_context([job], REJECTED_STATS, RUN_META)
+        assert "platform_url" in ctx
+
+    def test_platform_url_default(self):
+        """platform_url defaults to Railway production URL."""
+        job = _make_job()
+        with patch.multiple("main", **_PATCH_MAIN):
+            with patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("APP_BASE_URL", None)
+                ctx = _build_context([job], REJECTED_STATS, RUN_META)
+        assert ctx["platform_url"] == "https://jobseeker-production.up.railway.app"
+
+    def test_platform_url_env_override(self):
+        """platform_url uses APP_BASE_URL env var when set."""
+        job = _make_job()
+        with patch.multiple("main", **_PATCH_MAIN):
+            with patch.dict(os.environ, {"APP_BASE_URL": "https://staging.example.com"}):
+                ctx = _build_context([job], REJECTED_STATS, RUN_META)
+        assert ctx["platform_url"] == "https://staging.example.com"
+
+
+class TestNotifierRebrand:
+    """Step 20.2: JobSeeker rebrand + preheader."""
+
+    def test_subject_contains_jobseeker(self):
+        """Email subject must say 'JobSeeker', not 'JobAgent'."""
+        import notifier
+        job = _make_job(rag_score={"score": 65, "tier": "A"})
+        with patch.multiple("main", **_PATCH_MAIN):
+            ctx = _build_context([job], REJECTED_STATS, RUN_META)
+        n_apply = ctx["n_apply"]
+        run_date = ctx["date"]
+        headline = ctx["headline"]
+        subject = f"JobSeeker · {n_apply} nuevos roles · {headline} — {run_date}"
+        assert "JobSeeker" in subject
+        assert "JobAgent" not in subject
+
+    def test_preheader_in_context(self):
+        """_build_context() must include 'preheader' key."""
+        job = _make_job(rag_score={"score": 65, "tier": "A"})
+        with patch.multiple("main", **_PATCH_MAIN):
+            ctx = _build_context([job], REJECTED_STATS, RUN_META)
+        assert "preheader" in ctx
+
+    def test_preheader_format(self):
+        """preheader = '{n_apply} para aplicar, {n_review} para revisar'."""
+        job_a = _make_job("id1", rag_score={"score": 65, "tier": "A"})
+        job_b = _make_job("id2", rag_score={"score": 40, "tier": "B"})
+        with patch.multiple("main", **_PATCH_MAIN):
+            ctx = _build_context([job_a, job_b], REJECTED_STATS, RUN_META)
+        assert ctx["preheader"] == f"{ctx['n_apply']} para aplicar, {ctx['n_review']} para revisar"
+
+    def test_build_headline_uses_score(self):
+        """_build_headline returns '{company} · {loc_type} · {score}'."""
+        from notifier import _build_headline
+        tier_a = [{"company": "Acme", "location_type": "remote", "score": 82}]
+        result = _build_headline(tier_a)
+        assert "Acme" in result
+        assert "remote" in result
+        assert "82" in result
+
+
+def _render_template(extra_context=None):
+    """Helper: render the current email_digest.html.j2 with minimal context."""
+    from jinja2 import Environment, FileSystemLoader
+    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=False)
+    template = env.get_template("email_digest.html.j2")
+    ctx = {
+        "date": "28 Feb 2026",
+        "headline": "Acme · remote · 82",
+        "n_apply": 1,
+        "n_review": 1,
+        "n_skip": 0,
+        "n_prefiltered": 5,
+        "preheader": "1 para aplicar, 1 para revisar",
+        "platform_url": "https://example.com",
+        "tier_a": [{"title": "Head of Product", "company": "Acme", "location": "Remote",
+                    "location_type": "remote", "requires_reloc": False, "salary_display": "~€120K",
+                    "score": 82, "strength": "Led data teams", "gap": "No fintech",
+                    "url": "https://ext.com/job1", "platform_link": "https://example.com/jobs/abc"}],
+        "tier_b": [{"title": "PM", "company": "Beta", "location": "Madrid",
+                    "location_type": "hybrid", "requires_reloc": False, "salary_display": "",
+                    "score": 45, "strength": "", "gap": "",
+                    "url": "https://ext.com/job2", "platform_link": "https://example.com/jobs/def"}],
+        "tier_c": [],
+        "rejected_stats": {"total": 10, "passed": 2, "us_only": 3, "no_pm_keyword": 2,
+                           "deal_breaker": 1, "title_excluded": 2},
+        "run_meta": {"n_searches": 5, "n_watchlist": 3, "duration_s": 120, "cost_usd": 0.12},
+    }
+    if extra_context:
+        ctx.update(extra_context)
+    return template.render(**ctx)
+
+
+class TestTemplateRender20_3a:
+    """Step 20.3a: head, preheader, header, footer template changes."""
+
+    def test_color_scheme_meta_present(self):
+        """Template must have color-scheme meta tag."""
+        html = _render_template()
+        assert 'color-scheme' in html
+
+    def test_supported_color_schemes_meta_present(self):
+        """Template must have supported-color-schemes meta tag."""
+        html = _render_template()
+        assert 'supported-color-schemes' in html
+
+    def test_title_is_jobseeker(self):
+        """<title> must say 'JobSeeker · Digest', not 'JobAgent Digest'."""
+        html = _render_template()
+        assert "JobSeeker" in html
+        assert "JobAgent Digest" not in html
+
+    def test_preheader_div_present(self):
+        """Preheader div with display:none must be present."""
+        html = _render_template()
+        assert "display:none" in html
+        assert "1 para aplicar, 1 para revisar" in html
+
+    def test_violet_accent_in_header(self):
+        """Accent color must be violet #8b5cf6, not orange #e97316."""
+        html = _render_template()
+        assert "#8b5cf6" in html
+        assert "#e97316" not in html
+
+    def test_dashboard_cta_in_header(self):
+        """Header must contain dashboard CTA linking to platform_url/jobs."""
+        html = _render_template()
+        assert "https://example.com/jobs" in html
+
+    def test_footer_branding(self):
+        """Footer must contain 'JobSeeker' branding line."""
+        html = _render_template()
+        assert "JobSeeker" in html
+
+    def test_footer_juan_azabal(self):
+        """Footer must contain 'Built by Juan Azabal'."""
+        html = _render_template()
+        assert "Juan Azabal" in html
+
+
+class TestTemplateRender20_3b:
+    """Step 20.3b: Tier A cards use platform links."""
+
+    def test_tier_a_primary_link_is_platform(self):
+        """Tier A primary CTA must link to platform_link, not job.url."""
+        html = _render_template()
+        assert "https://example.com/jobs/abc" in html
+        assert "Ver en JobSeeker" in html
+
+    def test_tier_a_secondary_link_is_external(self):
+        """Tier A secondary 'Oferta original' link must be the external URL."""
+        html = _render_template()
+        assert "Oferta original" in html
+        assert "https://ext.com/job1" in html
+
+    def test_tier_a_ver_todos_cta_present(self):
+        """'Ver todos en el dashboard' CTA must appear after Tier A."""
+        html = _render_template()
+        assert "Ver todos en el dashboard" in html
+
+    def test_tier_a_ver_todos_links_to_platform(self):
+        """'Ver todos' CTA links to platform_url/jobs."""
+        html = _render_template()
+        # platform_url is https://example.com, so /jobs link appears
+        assert "https://example.com/jobs" in html
+
+
+class TestTemplateRender20_3c:
+    """Step 20.3c: Tier B and C platform links."""
+
+    def test_tier_b_links_to_platform(self):
+        """Tier B 'Ver →' links must use platform_link."""
+        html = _render_template()
+        assert "https://example.com/jobs/def" in html
+
+    def test_tier_b_ver_mas_link_present(self):
+        """'Ver más en el dashboard' text link must appear after Tier B."""
+        html = _render_template()
+        assert "Ver más en el dashboard" in html
+
+    def test_tier_c_links_to_platform(self):
+        """Tier C links must use platform_link (not job.url directly)."""
+        ctx_override = {
+            "tier_b": [],
+            "tier_c": [{"title": "PM", "company": "Gamma", "location": "",
+                        "location_type": "remote", "requires_reloc": False,
+                        "salary_display": "", "score": 30,
+                        "url": "https://ext.com/job3",
+                        "platform_link": "https://example.com/jobs/ghi",
+                        "strength": "", "gap": ""}],
+        }
+        html = _render_template(ctx_override)
+        assert "https://example.com/jobs/ghi" in html

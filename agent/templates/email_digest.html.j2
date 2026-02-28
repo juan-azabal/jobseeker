@@ -3,58 +3,78 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<style>
+  :root { color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) {
+    .email-body { background-color: #09090b !important; }
+    .email-card { background-color: #18181b !important; border-color: #3f3f46 !important; }
+  }
+</style>
 <!--
-  DESIGN SYSTEM
-  =============
-  Palette: Monochromatic zinc (#18181b → #fafafa) + single accent #e97316 (orange)
-  
-  WHY:
-  - No green/red semantic coding (deuteranopia-unsafe, 8% of men)
-  - Hierarchy via luminance + border weight, not hue
-  - Orange accent ONLY on CTAs = one action per scan
-  - Typography weight carries valence: bold = strength, muted = gap
-  
+  DESIGN SYSTEM v2
+  ================
+  Palette: Dark-first zinc (zinc-950 bg) + violet-500 (#8b5cf6) accent
+
+  Dark mode: color-scheme meta + @media prefers-color-scheme for Apple Mail/iOS.
+  Gmail strips <style> but renders inline styles correctly.
+
   TIERS (progressive density reduction):
-  - A (fit ≥ 50): 4px border #3f3f46, full card, strength/gap, 26px score
-  - B (fit 30-49): 2px border #d4d4d8, compact row, 18px score
-  - C (fit < 30): no border, single line, muted, inline score
-  
+  - A (fit > 60): 4px border #3f3f46, full card, strength/gap, 26px score
+  - B (fit 40-60): 2px border #3f3f46, compact row, 18px score
+  - C (fit <= 40): no border, single line, muted, inline score
+
   PILLS:
-  - Default: bg #f4f4f5, text #3f3f46 (remote, hybrid, onsite, salary)
+  - Default: bg #27272a, text #d4d4d8 (remote, hybrid, onsite, salary)
   - Warning: bg #fef3c7, text #92400e (ONLY reloc flag)
-  
+
   EMAIL CONSTRAINTS:
   - Inline CSS only (clients strip <style>)
   - Table layout (Outlook compat)
   - No background-image, CSS vars, calc(), flexbox
   - System font stack, no external loading
-  - All text ≥ 4.5:1 contrast ratio
+  - Touch targets ≥44px for all CTAs
 -->
-<title>JobAgent Digest</title>
+<title>JobSeeker · Digest</title>
 </head>
-<body style="margin:0; padding:0; background-color:#f4f4f5; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased;">
+<body class="email-body" style="margin:0; padding:0; background-color:#09090b; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased;">
 
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f4f4f5; padding:24px 16px;">
+<!-- PREHEADER: hidden text visible in inbox preview -->
+<div style="display:none; max-height:0; overflow:hidden; font-size:1px; line-height:1px; color:#09090b;">
+  {{ preheader }}
+  &#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;
+</div>
+
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#09090b; padding:24px 16px;">
 <tr><td align="center">
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px; background-color:#ffffff; border-radius:8px; overflow:hidden; border:1px solid #e4e4e7;">
+<table class="email-card" width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px; background-color:#18181b; border-radius:8px; overflow:hidden; border:1px solid #3f3f46;">
 
-<!-- HEADER: answers "should I care today?" in 2 seconds -->
+<!-- HEADER -->
 <tr><td style="background-color:#18181b; padding:28px 28px 24px;">
-  <p style="margin:0 0 4px; font-size:11px; letter-spacing:1.2px; color:#71717a; text-transform:uppercase; font-weight:500;">JobAgent · {{ date }}</p>
-  <p style="margin:0 0 14px; font-size:22px; font-weight:700; color:#fafafa; line-height:1.35;">
+  <p style="margin:0 0 4px; font-size:11px; letter-spacing:1.2px; color:#71717a; text-transform:uppercase; font-weight:500;">
+    <span style="color:#8b5cf6;">●</span> <strong style="color:#f4f4f5;">JobSeeker</strong> · {{ date }}
+  </p>
+  <p style="margin:0 0 14px; font-size:22px; font-weight:700; color:#f4f4f5; line-height:1.35;">
     {{ headline }}
   </p>
-  <p style="margin:0; font-size:13px; color:#a1a1aa; line-height:1.5;">
+  <p style="margin:0 0 20px; font-size:13px; color:#a1a1aa; line-height:1.5;">
     {{ n_apply }} aplicar · {{ n_review }} revisar · {{ n_skip }} descartar · {{ n_prefiltered }} prefiltrados
   </p>
+  <!-- Dashboard CTA -->
+  <table cellpadding="0" cellspacing="0" role="presentation">
+  <tr><td style="border-radius:6px; background-color:#8b5cf6;">
+    <a href="{{ platform_url }}/jobs" style="display:inline-block; padding:12px 24px; min-height:44px; line-height:20px; font-size:14px; font-weight:700; color:#ffffff; text-decoration:none; border-radius:6px;">Ver tu dashboard →</a>
+  </td></tr>
+  </table>
 </td></tr>
 
-<tr><td style="height:3px; background-color:#e97316;"></td></tr>
+<tr><td style="height:3px; background-color:#8b5cf6;"></td></tr>
 
-<!-- TIER A — APLICAR (fit >= 50) -->
+<!-- TIER A — APLICAR (fit > 60) -->
 {% if tier_a %}
 <tr><td style="padding:24px 28px 4px;">
-  <p style="margin:0 0 20px; font-size:12px; font-weight:700; color:#52525b; text-transform:uppercase; letter-spacing:1.2px;">
+  <p style="margin:0 0 20px; font-size:12px; font-weight:700; color:#a1a1aa; text-transform:uppercase; letter-spacing:1.2px;">
     Aplicar — {{ tier_a|length }} roles
   </p>
 
@@ -66,72 +86,81 @@
       <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
       <tr>
         <td style="vertical-align:top;">
-          <p style="margin:0 0 4px; font-size:16px; font-weight:700; color:#18181b; line-height:1.3;">{{ job.title }}</p>
-          <p style="margin:0; font-size:13px; color:#52525b; line-height:1.7;">
+          <p style="margin:0 0 4px; font-size:16px; font-weight:700; color:#f4f4f5; line-height:1.3;">{{ job.title }}</p>
+          <p style="margin:0; font-size:13px; color:#a1a1aa; line-height:1.7;">
             {{ job.company }}{% if job.location %} · {{ job.location }}{% endif %} ·
-            <span style="display:inline; background-color:#f4f4f5; color:#3f3f46; font-size:11px; font-weight:600; padding:2px 7px; border-radius:3px;">{{ job.location_type }}</span>
+            <span style="display:inline; background-color:#27272a; color:#d4d4d8; font-size:11px; font-weight:600; padding:2px 7px; border-radius:3px;">{{ job.location_type }}</span>
             {% if job.requires_reloc %}
             <span style="display:inline; background-color:#fef3c7; color:#92400e; font-size:11px; font-weight:600; padding:2px 7px; border-radius:3px; margin-left:2px;">reloc</span>
             {% endif %}
             {% if job.salary_display %}
-            <span style="display:inline; background-color:#f4f4f5; color:#3f3f46; font-size:11px; font-weight:600; padding:2px 7px; border-radius:3px; margin-left:2px;">{{ job.salary_display }}</span>
+            <span style="display:inline; background-color:#27272a; color:#d4d4d8; font-size:11px; font-weight:600; padding:2px 7px; border-radius:3px; margin-left:2px;">{{ job.salary_display }}</span>
             {% endif %}
           </p>
         </td>
         <td width="50" style="vertical-align:top; text-align:right;">
-          <p style="margin:0; font-size:26px; font-weight:800; color:#18181b; line-height:1;">{{ job.score }}</p>
+          <p style="margin:0; font-size:26px; font-weight:800; color:#f4f4f5; line-height:1;">{{ job.score }}</p>
         </td>
       </tr>
       </table>
-      <p style="margin:10px 0 0; font-size:13px; color:#3f3f46; line-height:1.7;">
+      <p style="margin:10px 0 0; font-size:13px; color:#d4d4d8; line-height:1.7;">
         <strong>+</strong> {{ job.strength }}<br>
         <span style="color:#71717a;"><strong>–</strong> {{ job.gap }}</span>
       </p>
-      <p style="margin:10px 0 0; text-align:right;">
-        <a href="{{ job.url }}" style="font-size:13px; font-weight:700; color:#e97316; text-decoration:none;">Ver oferta →</a>
+      <p style="margin:10px 0 0;">
+        <a href="{{ job.platform_link }}" style="font-size:13px; font-weight:700; color:#8b5cf6; text-decoration:none;">Ver en JobSeeker →</a>
+        &nbsp;&nbsp;
+        <a href="{{ job.url }}" style="font-size:11px; color:#71717a; text-decoration:none;">Oferta original →</a>
       </p>
     </td>
   </tr>
   </table>
   {% endfor %}
 
+  <!-- Ver todos CTA after Tier A -->
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:24px;">
+  <tr><td style="border-radius:6px; background-color:#8b5cf6; text-align:center;">
+    <a href="{{ platform_url }}/jobs" style="display:block; padding:12px 24px; min-height:44px; line-height:20px; font-size:14px; font-weight:700; color:#ffffff; text-decoration:none;">Ver todos en el dashboard →</a>
+  </td></tr>
+  </table>
+
 </td></tr>
 {% endif %}
 
-<tr><td style="padding:0 28px;"><table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td style="border-top:1px solid #e4e4e7;"></td></tr></table></td></tr>
+<tr><td style="padding:0 28px;"><table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td style="border-top:1px solid #3f3f46;"></td></tr></table></td></tr>
 
-<!-- TIER B — REVISAR (fit 30-49) -->
+<!-- TIER B — REVISAR (fit 40-60) -->
 {% if tier_b %}
 <tr><td style="padding:20px 28px 4px;">
-  <p style="margin:0 0 14px; font-size:12px; font-weight:700; color:#52525b; text-transform:uppercase; letter-spacing:1.2px;">
+  <p style="margin:0 0 14px; font-size:12px; font-weight:700; color:#a1a1aa; text-transform:uppercase; letter-spacing:1.2px;">
     Revisar — {{ tier_b|length }} roles
   </p>
 
   {% for job in tier_b %}
   <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:2px;">
   <tr>
-    <td width="2" style="background-color:#d4d4d8;"></td>
-    <td style="padding:10px 0 10px 14px;{% if not loop.last %} border-bottom:1px solid #f4f4f5;{% endif %}">
+    <td width="2" style="background-color:#3f3f46;"></td>
+    <td style="padding:10px 0 10px 14px;{% if not loop.last %} border-bottom:1px solid #27272a;{% endif %}">
       <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
       <tr>
         <td style="vertical-align:middle;">
-          <p style="margin:0 0 2px; font-size:14px; font-weight:600; color:#18181b;">{{ job.title }}</p>
+          <p style="margin:0 0 2px; font-size:14px; font-weight:600; color:#f4f4f5;">{{ job.title }}</p>
           <p style="margin:0; font-size:12px; color:#71717a;">
             {{ job.company }}{% if job.location %} · {{ job.location }}{% endif %} ·
-            <span style="background-color:#f4f4f5; color:#3f3f46; font-size:10px; font-weight:600; padding:1px 5px; border-radius:3px;">{{ job.location_type }}</span>
+            <span style="background-color:#27272a; color:#d4d4d8; font-size:10px; font-weight:600; padding:1px 5px; border-radius:3px;">{{ job.location_type }}</span>
             {% if job.requires_reloc %}
             <span style="background-color:#fef3c7; color:#92400e; font-size:10px; font-weight:600; padding:1px 5px; border-radius:3px; margin-left:2px;">reloc</span>
             {% endif %}
             {% if job.salary_display %}
-            <span style="background-color:#f4f4f5; color:#3f3f46; font-size:10px; font-weight:600; padding:1px 5px; border-radius:3px; margin-left:2px;">{{ job.salary_display }}</span>
+            <span style="background-color:#27272a; color:#d4d4d8; font-size:10px; font-weight:600; padding:1px 5px; border-radius:3px; margin-left:2px;">{{ job.salary_display }}</span>
             {% endif %}
           </p>
         </td>
         <td width="36" style="text-align:right; vertical-align:middle;">
-          <p style="margin:0; font-size:18px; font-weight:700; color:#3f3f46;">{{ job.score }}</p>
+          <p style="margin:0; font-size:18px; font-weight:700; color:#a1a1aa;">{{ job.score }}</p>
         </td>
-        <td width="56" style="text-align:right; vertical-align:middle;">
-          <a href="{{ job.url }}" style="font-size:12px; font-weight:600; color:#e97316; text-decoration:none;">Ver →</a>
+        <td width="80" style="text-align:right; vertical-align:middle;">
+          <a href="{{ job.platform_link }}" style="font-size:12px; font-weight:600; color:#8b5cf6; text-decoration:none;">Ver →</a>
         </td>
       </tr>
       </table>
@@ -140,33 +169,45 @@
   </table>
   {% endfor %}
 
+  <!-- Ver más link after Tier B -->
+  <p style="margin:12px 0 4px; font-size:12px; text-align:right;">
+    <a href="{{ platform_url }}/jobs" style="color:#a1a1aa; text-decoration:none;">Ver más en el dashboard →</a>
+  </p>
+
 </td></tr>
 {% endif %}
 
-<tr><td style="padding:0 28px;"><table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td style="border-top:1px solid #e4e4e7;"></td></tr></table></td></tr>
+<tr><td style="padding:0 28px;"><table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td style="border-top:1px solid #3f3f46;"></td></tr></table></td></tr>
 
-<!-- TIER C — BAJA PRIORIDAD (fit < 30) -->
+<!-- TIER C — BAJA PRIORIDAD (fit <= 40) -->
 {% if tier_c %}
 <tr><td style="padding:16px 28px 20px;">
-  <p style="margin:0 0 8px; font-size:12px; font-weight:700; color:#a1a1aa; text-transform:uppercase; letter-spacing:1.2px;">
+  <p style="margin:0 0 8px; font-size:12px; font-weight:700; color:#71717a; text-transform:uppercase; letter-spacing:1.2px;">
     Baja prioridad — {{ tier_c|length }}
   </p>
-  <p style="margin:0; font-size:12px; color:#a1a1aa; line-height:2;">
+  <p style="margin:0; font-size:12px; color:#71717a; line-height:2;">
     {% for job in tier_c %}
-    {{ job.company }} · {{ job.title }} · {{ job.score }} · <a href="{{ job.url }}" style="color:#a1a1aa; text-decoration:underline;">ver</a>{% if not loop.last %}<br>{% endif %}
+    {{ job.company }} · {{ job.title }} · {{ job.score }} · <a href="{{ job.platform_link }}" style="color:#71717a; text-decoration:underline;">ver</a>{% if not loop.last %}<br>{% endif %}
     {% endfor %}
   </p>
 </td></tr>
 {% endif %}
 
 <!-- FOOTER -->
-<tr><td style="padding:20px 28px; background-color:#fafafa; border-top:1px solid #e4e4e7;">
-  <p style="margin:0 0 4px; font-size:11px; color:#a1a1aa; line-height:1.7;">
-    <span style="color:#71717a; font-weight:600;">{{ rejected_stats.total }} prefiltrados:</span>
+<tr><td style="padding:20px 28px; background-color:#09090b; border-top:1px solid #3f3f46;">
+  <p style="margin:0 0 4px; font-size:11px; color:#71717a; line-height:1.7;">
+    <span style="color:#a1a1aa; font-weight:600;">{{ rejected_stats.total }} prefiltrados:</span>
     {{ rejected_stats.us_only }} US-only · {{ rejected_stats.no_pm_keyword }} sin PM keyword · {{ rejected_stats.deal_breaker }} deal breaker · {{ rejected_stats.title_excluded }} título
   </p>
-  <p style="margin:0; font-size:11px; color:#d4d4d8;">
+  <p style="margin:0 0 16px; font-size:11px; color:#52525b;">
     {{ run_meta.n_searches }} searches · {{ run_meta.n_watchlist }} watchlist · {{ run_meta.duration_s }}s · ${{ "%.2f"|format(run_meta.cost_usd) }} OpenAI
+  </p>
+  <tr><td style="padding:0 28px 4px;"><table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td style="border-top:1px solid #27272a;"></td></tr></table></td></tr>
+  <p style="margin:12px 0 4px; font-size:11px; color:#a1a1aa;">
+    <a href="{{ platform_url }}" style="color:#8b5cf6; text-decoration:none; font-weight:600;">JobSeeker</a> — Know your fit before you apply
+  </p>
+  <p style="margin:0; font-size:11px; color:#52525b;">
+    Built by <a href="https://www.linkedin.com/in/juanazabal/" style="color:#71717a; text-decoration:none;">Juan Azabal</a>
   </p>
 </td></tr>
 
