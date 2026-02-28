@@ -52,15 +52,21 @@ jobs:
   deploy:
     needs: [backend-tests, agent-tests]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     if: "!contains(github.event.head_commit.message, '[skip deploy]')"
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy to Railway
+      - name: Trigger Railway redeploy
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
+        run: |
+          HTTP_CODE=$(curl -s -o /tmp/railway_response.json -w "%{http_code}" \
+            -X POST "https://backboard.railway.app/graphql/v2" \
+            -H "Authorization: Bearer $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"query":"mutation { serviceInstanceRedeploy(serviceId: \"'${{ secrets.RAILWAY_SERVICE_ID }}'\")}"}')
+          cat /tmp/railway_response.json
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Railway API returned HTTP $HTTP_CODE"
+            exit 1
+          fi
+          echo "Deploy triggered successfully"
