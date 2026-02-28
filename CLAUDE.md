@@ -123,6 +123,15 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 | `RAILWAY_URL` | Railway API base URL (cross-user cache) | — |
 | `INGEST_API_KEY` | Shared secret for Railway API | — |
 
+## Deployment
+- **Auto-deploy DISABLED.** Push to main does NOT deploy to Railway.
+- Deploy happens ONLY via GitHub Actions (`.github/workflows/deploy.yml`): tests green → `railway up`.
+- NEVER trigger deploys from Railway dashboard, Railway MCP, or manually.
+- Before pushing to main: run tests locally (`pytest tests/` + `cd agent && pytest tests/`).
+- Commits to main should be logically grouped, not one-per-file.
+- Railway MCP is READ-ONLY: logs and deployment status only.
+- GHA secrets: `RAILWAY_TOKEN`, `RAILWAY_SERVICE_ID`.
+
 ## Conventions
 - Commits: conventional (`type: description`)
 - Backend has zero import dependency on agent/ (api/geo.py + api/onboard_utils.py are self-contained copies)
