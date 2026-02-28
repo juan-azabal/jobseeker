@@ -18,7 +18,13 @@ import time
 from datetime import datetime
 from dotenv import load_dotenv
 
+import os
+
 load_dotenv()
+
+# Default APP_BASE_URL if not in .env
+if not os.getenv("APP_BASE_URL"):
+    os.environ["APP_BASE_URL"] = "https://jobseeker-production.up.railway.app"
 
 # ── resolve profile ──────────────────────────────────────────────────────────
 from user_config import load_profile, list_profiles
@@ -67,7 +73,8 @@ with open(input_file) as f:
 # Restore internal _salary_eur / _fit_score fields stripped by save_results
 # (they'll be recomputed by ranked_jobs / notifier anyway — just need parsed)
 parsed_jobs = [j for j in jobs if j.get("parsed")]
-print(f"Jobs loaded: {len(jobs)} total, {len(parsed_jobs)} with parsed data")
+n_with_job_id = sum(1 for j in parsed_jobs if j.get("job_id"))
+print(f"Jobs loaded: {len(jobs)} total, {len(parsed_jobs)} with parsed data, {n_with_job_id} with job_id")
 
 # Clear any existing rag_score so we force a fresh score
 for j in parsed_jobs:
@@ -113,6 +120,15 @@ run_meta = {
     "n_watchlist": 0,
     "date": datetime.now().strftime("%d %b %Y"),
 }
+
+from notifier import _build_context
+
+ctx = _build_context(scored_jobs, prefilter_stats, run_meta, profile=profile)
+if ctx["tier_a"]:
+    first_a = ctx["tier_a"][0]
+    print(f"\nFirst Tier A platform_link: {first_a.get('platform_link', '(missing)')}")
+    print(f"First Tier A url (original): {first_a.get('url', '(missing)')}")
+print(f"Preheader: {ctx.get('preheader', '(missing)')}")
 
 print("\nSending email digest (test mode — seen_ids NOT updated)...")
 ok = send_digest(scored_jobs, prefilter_stats, run_meta, profile=profile)
