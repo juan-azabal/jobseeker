@@ -52,32 +52,15 @@ jobs:
   deploy:
     needs: [backend-tests, agent-tests]
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     if: "!contains(github.event.head_commit.message, '[skip deploy]')"
     steps:
-      - name: Trigger Railway redeploy
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
-        run: |
-          # Step 1: fetch environmentId from the service instances
-          ENV_RESPONSE=$(curl -s -X POST "https://backboard.railway.app/graphql/v2" \
-            -H "Authorization: Bearer $RAILWAY_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"query\":\"query { service(id: \\\"$RAILWAY_SERVICE_ID\\\") { serviceInstances { edges { node { environmentId } } } } }\"}")
-          echo "Environments response: $ENV_RESPONSE"
-          ENV_ID=$(echo "$ENV_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['data']['service']['serviceInstances']['edges'][0]['node']['environmentId'])")
-          echo "Environment ID: $ENV_ID"
-
-          # Step 2: trigger redeploy with serviceId + environmentId
-          HTTP_CODE=$(curl -s -o /tmp/railway_response.json -w "%{http_code}" \
-            -X POST "https://backboard.railway.app/graphql/v2" \
-            -H "Authorization: Bearer $RAILWAY_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"query\":\"mutation { serviceInstanceRedeploy(serviceId: \\\"$RAILWAY_SERVICE_ID\\\", environmentId: \\\"$ENV_ID\\\") }\"}")
-          cat /tmp/railway_response.json
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "::error::Railway API returned HTTP $HTTP_CODE"
-            exit 1
-          fi
-          echo "Deploy triggered successfully"
+        run: railway up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
