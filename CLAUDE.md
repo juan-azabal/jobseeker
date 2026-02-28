@@ -122,6 +122,8 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 | `GMAIL_APP_PASSWORD` | Gmail app password | — |
 | `RAILWAY_URL` | Railway API base URL (cross-user cache) | — |
 | `INGEST_API_KEY` | Shared secret for Railway API | — |
+| `APP_BASE_URL` | Platform URL for digest links | `https://jobseeker-production.up.railway.app` |
+| `DIGEST_TEMPLATE` | Email template filename (rollback toggle) | `email_digest.html.j2` |
 
 ## Deployment
 - **Auto-deploy DISABLED.** Push to main does NOT deploy to Railway automatically.
@@ -282,6 +284,20 @@ Phase 19 — Location Eligibility + Scoring Recalibration (complete: 2026-02-28)
 - 19.5.1–19.5.3: Full agent parity for penalty + location scoring; cross-system regression tests reveal and fix two parity bugs (timezone check + EU region eligibility)
 - GATE 19: 639 backend tests + 470 agent tests passing; BUGS.md created
 
+Phase 20 — Email Digest Overhaul (complete: 2026-02-28)
+- Rebrand: "JobAgent" → "JobSeeker" in subject, sender name, header, footer
+- Platform links: all "Ver" links point to /jobs/{job_id} using hash (same ID used by frontend route + DB)
+- Secondary "Oferta original" link in Tier A preserves direct access to external posting
+- Prominent CTA: "Ver tu dashboard →" violet button in header + "Ver todos en el dashboard →" after Tier A
+- Preheader: hidden text for inbox preview ("{n} para aplicar, {n} para revisar")
+- Dark mode: color-scheme meta tags + @media prefers-color-scheme overrides (Apple Mail/iOS)
+- Footer: branding line + "Built by Juan Azabal" + LinkedIn link
+- Design: violet-500 (#8b5cf6) accent replaces orange-500 (#e97316), dark-first zinc theme (zinc-950/900/800)
+- Rollback: DIGEST_TEMPLATE env var switches between v2 (default) and v1 backup (email_digest_v1.html.j2)
+- APP_BASE_URL env var for platform URL in digest (default: Railway production URL)
+- _build_headline() updated to include score: "{company} · {loc_type} · {score}"
+- GATE 20: 517 agent tests passing (1 pre-existing scorer failure); test_digest_template.py with 21 regression tests
+
 ### Current
 Ingestion Overhaul — complete (2026-02-26)
 - Phase 0.1: WTTJ geographic filter — run_wttj_scraper(target_countries) + Algolia geo filter; juan.yaml: target.wttj_countries: [ES, NL, DE, GB, IE]; 6 tests
@@ -379,6 +395,11 @@ Phase 15 — Geo Filtering (complete: 2026-02-27)
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
+- Email digest platform links (Phase 20): uses job_id hash directly (same identifier used by DB WHERE job_id=? and frontend /jobs/:jobId). No integer PK lookup needed. APP_BASE_URL env var (default: Railway production URL). Falls back to external job_url if job_id missing.
+- Email digest rebrand (Phase 20): accent color changed from orange (#e97316) to violet (#8b5cf6) to match web app. "JobAgent" retired everywhere (subject, sender From header, template). Platform links preferred over external URLs.
+- Digest dark mode (Phase 20): template is dark-first (zinc-950 bg). Added color-scheme meta + @media prefers-color-scheme for Apple Mail/iOS. Gmail strips <style> but renders inline styles correctly. Outlook renders table layout with inline styles.
+- Digest rollback (Phase 20): v1 template preserved as email_digest_v1.html.j2. DIGEST_TEMPLATE env var selects template filename. Default: email_digest.html.j2 (v2). Toggle: set DIGEST_TEMPLATE=email_digest_v1.html.j2 for instant rollback.
+- No unsubscribe link (Phase 20): deferred until notification preferences exist in /profile. A dead link erodes trust more than no link.
 - Repo cleanup (2026-02-27): Plan files moved to Planes/ (gitignored). Merged worktrees pruned (amazing-austin, competent-neumann, suspicious-jones, trusting-montalcini). Dead code removed: UserMenu.tsx component, update_user_profile_id() function in queries.py. Ruff clean. File copy consistency audited (see docs/copy-sync-report.md) — all dual copies in sync.
 - Geo filtering architecture (Phase 15): three-layer detection chain. L1=resolve_location_country() on structured location field (highest confidence). L2=geonamescache city mention in description near context words ("based in", "office in" etc). L3=US visa/auth language ("e-verify", "remote within the us", "must be authorized to work in the u.s"). Conservative: unresolved location + no signals → pass. Remote fulltime always passes regardless of location. "nan" added to sentinel pass-through list (geonamescache resolves it to "CN" via city name match).
 - Geo filter layer tracking (Phase 15): _is_non_target_geo() returns 3-tuple (rejected, country, filter_layer). filter_layer: "prefilter_location" | "prefilter_description" | "prefilter_signal" | None. Stored as job["_geo_layer"] for PostHog tracking. PostHog events: geo_filter_applied (per-job) + geo_filter_run_stats (aggregate per pipeline run).

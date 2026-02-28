@@ -46,7 +46,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
-TEMPLATE_NAME = "email_digest.html.j2"
+TEMPLATE_NAME = os.getenv("DIGEST_TEMPLATE", "email_digest.html.j2")
 
 
 def _is_reloc(job, home_locations=None, home_regions=None) -> bool:
@@ -76,6 +76,9 @@ def _salary_display(salary_eur: float) -> str:
     return ""
 
 
+_APP_BASE_URL_DEFAULT = "https://jobseeker-production.up.railway.app"
+
+
 def _flatten_job(job, home_locations=None, home_regions=None) -> dict:
     """Convert a raw pipeline job dict into the flat schema the template expects."""
     parsed = job.get("parsed") or {}
@@ -98,6 +101,14 @@ def _flatten_job(job, home_locations=None, home_regions=None) -> dict:
 
     salary_eur = job.get("_salary_eur", 0) or 0
 
+    # Platform link: prefer /jobs/{job_id} hash, fall back to external URL
+    app_base_url = os.getenv("APP_BASE_URL", _APP_BASE_URL_DEFAULT)
+    job_id = job.get("job_id") or ""
+    if job_id:
+        platform_link = f"{app_base_url}/jobs/{job_id}"
+    else:
+        platform_link = job.get("job_url", "#")
+
     return {
         "title": job.get("title", ""),
         "company": job.get("company", ""),
@@ -109,6 +120,7 @@ def _flatten_job(job, home_locations=None, home_regions=None) -> dict:
         "strength": strength,
         "gap": gap,
         "url": job.get("job_url", "#"),
+        "platform_link": platform_link,
     }
 
 
@@ -135,7 +147,8 @@ def _build_headline(tier_a: list) -> str:
     best = tier_a[0]
     company = best["company"]
     loc_type = best["location_type"]
-    return f"{company} · {loc_type}"
+    score = best.get("score", 0)
+    return f"{company} · {loc_type} · {score}"
 
 
 def _build_context(jobs, rejected_stats, run_meta, profile=None):
@@ -195,12 +208,15 @@ def _build_context(jobs, rejected_stats, run_meta, profile=None):
 
     headline = _build_headline(tier_a)
     n_prefiltered = rejected_stats.get("total", 0) - rejected_stats.get("passed", 0)
+    platform_url = os.getenv("APP_BASE_URL", _APP_BASE_URL_DEFAULT)
+    n_apply = len(tier_a)
+    n_review = len(tier_b)
 
     return {
         "date": run_meta.get("date", date.today().strftime("%d %b %Y")),
         "headline": headline,
-        "n_apply": len(tier_a),
-        "n_review": len(tier_b),
+        "n_apply": n_apply,
+        "n_review": n_review,
         "n_skip": len(tier_c),
         "n_prefiltered": n_prefiltered,
         "tier_a": tier_a,
@@ -208,6 +224,8 @@ def _build_context(jobs, rejected_stats, run_meta, profile=None):
         "tier_c": tier_c,
         "rejected_stats": rejected_stats,
         "run_meta": run_meta,
+        "platform_url": platform_url,
+        "preheader": f"{n_apply} para aplicar, {n_review} para revisar",
     }
 
 
@@ -265,13 +283,13 @@ def send_digest(
     n_apply = context["n_apply"]
     run_date = context["date"]
     headline = context["headline"]
-    subject = f"JobAgent: {n_apply} roles · {headline} — {run_date}"
+    subject = f"JobSeeker · {n_apply} nuevos roles · {headline} — {run_date}"
 
     # Send via Gmail SMTP
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = f"JobAgent <{gmail_address}>"
+        msg["From"] = f"JobSeeker <{gmail_address}>"
         msg["To"] = to_email
         msg.attach(MIMEText(html_body, "html"))
 

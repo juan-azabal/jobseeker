@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!--
+  DESIGN SYSTEM
+  =============
+  Palette: Monochromatic zinc (#18181b → #fafafa) + single accent #e97316 (orange)
+  
+  WHY:
+  - No green/red semantic coding (deuteranopia-unsafe, 8% of men)
+  - Hierarchy via luminance + border weight, not hue
+  - Orange accent ONLY on CTAs = one action per scan
+  - Typography weight carries valence: bold = strength, muted = gap
+  
+  TIERS (progressive density reduction):
+  - A (fit ≥ 50): 4px border #3f3f46, full card, strength/gap, 26px score
+  - B (fit 30-49): 2px border #d4d4d8, compact row, 18px score
+  - C (fit < 30): no border, single line, muted, inline score
+  
+  PILLS:
+  - Default: bg #f4f4f5, text #3f3f46 (remote, hybrid, onsite, salary)
+  - Warning: bg #fef3c7, text #92400e (ONLY reloc flag)
+  
+  EMAIL CONSTRAINTS:
+  - Inline CSS only (clients strip <style>)
+  - Table layout (Outlook compat)
+  - No background-image, CSS vars, calc(), flexbox
+  - System font stack, no external loading
+  - All text ≥ 4.5:1 contrast ratio
+-->
+<title>JobAgent Digest</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f4f4f5; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased;">
+
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f4f4f5; padding:24px 16px;">
+<tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px; background-color:#ffffff; border-radius:8px; overflow:hidden; border:1px solid #e4e4e7;">
+
+<!-- HEADER: answers "should I care today?" in 2 seconds -->
+<tr><td style="background-color:#18181b; padding:28px 28px 24px;">
+  <p style="margin:0 0 4px; font-size:11px; letter-spacing:1.2px; color:#71717a; text-transform:uppercase; font-weight:500;">JobAgent · {{ date }}</p>
+  <p style="margin:0 0 14px; font-size:22px; font-weight:700; color:#fafafa; line-height:1.35;">
+    {{ headline }}
+  </p>
+  <p style="margin:0; font-size:13px; color:#a1a1aa; line-height:1.5;">
+    {{ n_apply }} aplicar · {{ n_review }} revisar · {{ n_skip }} descartar · {{ n_prefiltered }} prefiltrados
+  </p>
+</td></tr>
+
+<tr><td style="height:3px; background-color:#e97316;"></td></tr>
+
+<!-- TIER A — APLICAR (fit >= 50) -->
+{% if tier_a %}
+<tr><td style="padding:24px 28px 4px;">
+  <p style="margin:0 0 20px; font-size:12px; font-weight:700; color:#52525b; text-transform:uppercase; letter-spacing:1.2px;">
+    Aplicar — {{ tier_a|length }} roles
+  </p>
+
+  {% for job in tier_a %}
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:24px;">
+  <tr>
+    <td width="4" style="background-color:#3f3f46; border-radius:2px;"></td>
+    <td style="padding:14px 0 14px 16px;">
+      <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+      <tr>
+        <td style="vertical-align:top;">
+          <p style="margin:0 0 4px; font-size:16px; font-weight:700; color:#18181b; line-height:1.3;">{{ job.title }}</p>
+          <p style="margin:0; font-size:13px; color:#52525b; line-height:1.7;">
+            {{ job.company }}{% if job.location %} · {{ job.location }}{% endif %} ·
+            <span style="display:inline; background-color:#f4f4f5; color:#3f3f46; font-size:11px; font-weight:600; padding:2px 7px; border-radius:3px;">{{ job.location_type }}</span>
+            {% if job.requires_reloc %}
+            <span style="display:inline; background-color:#fef3c7; color:#92400e; font-size:11px; font-weight:600; padding:2px 7px; border-radius:3px; margin-left:2px;">reloc</span>
+            {% endif %}
+            {% if job.salary_display %}
+            <span style="display:inline; background-color:#f4f4f5; color:#3f3f46; font-size:11px; font-weight:600; padding:2px 7px; border-radius:3px; margin-left:2px;">{{ job.salary_display }}</span>
+            {% endif %}
+          </p>
+        </td>
+        <td width="50" style="vertical-align:top; text-align:right;">
+          <p style="margin:0; font-size:26px; font-weight:800; color:#18181b; line-height:1;">{{ job.score }}</p>
+        </td>
+      </tr>
+      </table>
+      <p style="margin:10px 0 0; font-size:13px; color:#3f3f46; line-height:1.7;">
+        <strong>+</strong> {{ job.strength }}<br>
+        <span style="color:#71717a;"><strong>–</strong> {{ job.gap }}</span>
+      </p>
+      <p style="margin:10px 0 0; text-align:right;">
+        <a href="{{ job.url }}" style="font-size:13px; font-weight:700; color:#e97316; text-decoration:none;">Ver oferta →</a>
+      </p>
+    </td>
+  </tr>
+  </table>
+  {% endfor %}
+
+</td></tr>
+{% endif %}
+
+<tr><td style="padding:0 28px;"><table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td style="border-top:1px solid #e4e4e7;"></td></tr></table></td></tr>
+
+<!-- TIER B — REVISAR (fit 30-49) -->
+{% if tier_b %}
+<tr><td style="padding:20px 28px 4px;">
+  <p style="margin:0 0 14px; font-size:12px; font-weight:700; color:#52525b; text-transform:uppercase; letter-spacing:1.2px;">
+    Revisar — {{ tier_b|length }} roles
+  </p>
+
+  {% for job in tier_b %}
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:2px;">
+  <tr>
+    <td width="2" style="background-color:#d4d4d8;"></td>
+    <td style="padding:10px 0 10px 14px;{% if not loop.last %} border-bottom:1px solid #f4f4f5;{% endif %}">
+      <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+      <tr>
+        <td style="vertical-align:middle;">
+          <p style="margin:0 0 2px; font-size:14px; font-weight:600; color:#18181b;">{{ job.title }}</p>
+          <p style="margin:0; font-size:12px; color:#71717a;">
+            {{ job.company }}{% if job.location %} · {{ job.location }}{% endif %} ·
+            <span style="background-color:#f4f4f5; color:#3f3f46; font-size:10px; font-weight:600; padding:1px 5px; border-radius:3px;">{{ job.location_type }}</span>
+            {% if job.requires_reloc %}
+            <span style="background-color:#fef3c7; color:#92400e; font-size:10px; font-weight:600; padding:1px 5px; border-radius:3px; margin-left:2px;">reloc</span>
+            {% endif %}
+            {% if job.salary_display %}
+            <span style="background-color:#f4f4f5; color:#3f3f46; font-size:10px; font-weight:600; padding:1px 5px; border-radius:3px; margin-left:2px;">{{ job.salary_display }}</span>
+            {% endif %}
+          </p>
+        </td>
+        <td width="36" style="text-align:right; vertical-align:middle;">
+          <p style="margin:0; font-size:18px; font-weight:700; color:#3f3f46;">{{ job.score }}</p>
+        </td>
+        <td width="56" style="text-align:right; vertical-align:middle;">
+          <a href="{{ job.url }}" style="font-size:12px; font-weight:600; color:#e97316; text-decoration:none;">Ver →</a>
+        </td>
+      </tr>
+      </table>
+    </td>
+  </tr>
+  </table>
+  {% endfor %}
+
+</td></tr>
+{% endif %}
+
+<tr><td style="padding:0 28px;"><table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td style="border-top:1px solid #e4e4e7;"></td></tr></table></td></tr>
+
+<!-- TIER C — BAJA PRIORIDAD (fit < 30) -->
+{% if tier_c %}
+<tr><td style="padding:16px 28px 20px;">
+  <p style="margin:0 0 8px; font-size:12px; font-weight:700; color:#a1a1aa; text-transform:uppercase; letter-spacing:1.2px;">
+    Baja prioridad — {{ tier_c|length }}
+  </p>
+  <p style="margin:0; font-size:12px; color:#a1a1aa; line-height:2;">
+    {% for job in tier_c %}
+    {{ job.company }} · {{ job.title }} · {{ job.score }} · <a href="{{ job.url }}" style="color:#a1a1aa; text-decoration:underline;">ver</a>{% if not loop.last %}<br>{% endif %}
+    {% endfor %}
+  </p>
+</td></tr>
+{% endif %}
+
+<!-- FOOTER -->
+<tr><td style="padding:20px 28px; background-color:#fafafa; border-top:1px solid #e4e4e7;">
+  <p style="margin:0 0 4px; font-size:11px; color:#a1a1aa; line-height:1.7;">
+    <span style="color:#71717a; font-weight:600;">{{ rejected_stats.total }} prefiltrados:</span>
+    {{ rejected_stats.us_only }} US-only · {{ rejected_stats.no_pm_keyword }} sin PM keyword · {{ rejected_stats.deal_breaker }} deal breaker · {{ rejected_stats.title_excluded }} título
+  </p>
+  <p style="margin:0; font-size:11px; color:#d4d4d8;">
+    {{ run_meta.n_searches }} searches · {{ run_meta.n_watchlist }} watchlist · {{ run_meta.duration_s }}s · ${{ "%.2f"|format(run_meta.cost_usd) }} OpenAI
+  </p>
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+
+</body>
+</html>
