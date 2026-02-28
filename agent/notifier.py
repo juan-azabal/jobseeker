@@ -76,6 +76,9 @@ def _salary_display(salary_eur: float) -> str:
     return ""
 
 
+_APP_BASE_URL_DEFAULT = "https://jobseeker-production.up.railway.app"
+
+
 def _flatten_job(job, home_locations=None, home_regions=None) -> dict:
     """Convert a raw pipeline job dict into the flat schema the template expects."""
     parsed = job.get("parsed") or {}
@@ -98,6 +101,14 @@ def _flatten_job(job, home_locations=None, home_regions=None) -> dict:
 
     salary_eur = job.get("_salary_eur", 0) or 0
 
+    # Platform link: prefer /jobs/{job_id} hash, fall back to external URL
+    app_base_url = os.getenv("APP_BASE_URL", _APP_BASE_URL_DEFAULT)
+    job_id = job.get("job_id") or ""
+    if job_id:
+        platform_link = f"{app_base_url}/jobs/{job_id}"
+    else:
+        platform_link = job.get("job_url", "#")
+
     return {
         "title": job.get("title", ""),
         "company": job.get("company", ""),
@@ -109,6 +120,7 @@ def _flatten_job(job, home_locations=None, home_regions=None) -> dict:
         "strength": strength,
         "gap": gap,
         "url": job.get("job_url", "#"),
+        "platform_link": platform_link,
     }
 
 
@@ -195,6 +207,7 @@ def _build_context(jobs, rejected_stats, run_meta, profile=None):
 
     headline = _build_headline(tier_a)
     n_prefiltered = rejected_stats.get("total", 0) - rejected_stats.get("passed", 0)
+    platform_url = os.getenv("APP_BASE_URL", _APP_BASE_URL_DEFAULT)
 
     return {
         "date": run_meta.get("date", date.today().strftime("%d %b %Y")),
@@ -208,6 +221,7 @@ def _build_context(jobs, rejected_stats, run_meta, profile=None):
         "tier_c": tier_c,
         "rejected_stats": rejected_stats,
         "run_meta": run_meta,
+        "platform_url": platform_url,
     }
 
 

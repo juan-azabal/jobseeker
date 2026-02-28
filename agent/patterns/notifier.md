@@ -28,7 +28,8 @@ Raw pipeline job dicts are never passed directly to the template. `_flatten_job(
     "score":          int,       # _display_score: v2→hybrid (heuristic+grade_pts), v1→RAG numeric, else→heuristic
     "strength":       str,       # first RAG strength claim, or first must_have_skill
     "gap":            str,       # first RAG gap, or ""
-    "url":            str,
+    "url":            str,       # external job URL
+    "platform_link":  str,       # APP_BASE_URL/jobs/{job_id} (hash); falls back to url if job_id missing
 }
 ```
 
@@ -65,6 +66,8 @@ Read from environment (`.env`):
 - `GMAIL_ADDRESS` — sender
 - `GMAIL_APP_PASSWORD` — Gmail App Password (not account password)
 - `NOTIFY_EMAIL` — fallback recipient if `profile["user"]["email"]` not set
+- `APP_BASE_URL` — platform base URL for digest links (default: `https://jobseeker-production.up.railway.app`)
+- `DIGEST_TEMPLATE` — template filename override (default: `email_digest.html.j2`; set to `email_digest_v1.html.j2` for rollback)
 
 ## Subject Format
 

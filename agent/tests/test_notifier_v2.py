@@ -140,3 +140,66 @@ class TestDigestTemplateToggle:
         with patch.dict(os.environ, {"DIGEST_TEMPLATE": "email_digest_v1.html.j2"}):
             importlib.reload(notifier)
             assert notifier.TEMPLATE_NAME == "email_digest_v1.html.j2"
+
+
+class TestFlattenJobPlatformLink:
+    """Step 20.1: _flatten_job() platform_link field."""
+
+    def _job(self, job_id=None, job_url="https://ext.com/job"):
+        j = _make_job()
+        j["job_id"] = job_id
+        j["job_url"] = job_url
+        return j
+
+    def test_platform_link_uses_job_id(self):
+        """platform_link = APP_BASE_URL/jobs/{job_id} when job_id present."""
+        from notifier import _flatten_job
+        job = self._job(job_id="abc123hash")
+        with patch("notifier._is_reloc", return_value=False):
+            with patch.dict(os.environ, {"APP_BASE_URL": "https://example.com"}):
+                result = _flatten_job(job)
+        assert result["platform_link"] == "https://example.com/jobs/abc123hash"
+
+    def test_platform_link_fallback_no_job_id(self):
+        """platform_link falls back to job_url when job_id is missing."""
+        from notifier import _flatten_job
+        job = self._job(job_id=None, job_url="https://ext.com/job")
+        with patch("notifier._is_reloc", return_value=False):
+            result = _flatten_job(job)
+        assert result["platform_link"] == "https://ext.com/job"
+
+    def test_platform_link_fallback_empty_job_id(self):
+        """platform_link falls back to job_url when job_id is empty string."""
+        from notifier import _flatten_job
+        job = self._job(job_id="", job_url="https://ext.com/job")
+        with patch("notifier._is_reloc", return_value=False):
+            result = _flatten_job(job)
+        assert result["platform_link"] == "https://ext.com/job"
+
+
+class TestBuildContextPlatformUrl:
+    """Step 20.1: _build_context() includes platform_url."""
+
+    def test_platform_url_in_context(self):
+        """_build_context() must include platform_url key."""
+        job = _make_job()
+        with patch.multiple("main", **_PATCH_MAIN):
+            ctx = _build_context([job], REJECTED_STATS, RUN_META)
+        assert "platform_url" in ctx
+
+    def test_platform_url_default(self):
+        """platform_url defaults to Railway production URL."""
+        job = _make_job()
+        with patch.multiple("main", **_PATCH_MAIN):
+            with patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("APP_BASE_URL", None)
+                ctx = _build_context([job], REJECTED_STATS, RUN_META)
+        assert ctx["platform_url"] == "https://jobseeker-production.up.railway.app"
+
+    def test_platform_url_env_override(self):
+        """platform_url uses APP_BASE_URL env var when set."""
+        job = _make_job()
+        with patch.multiple("main", **_PATCH_MAIN):
+            with patch.dict(os.environ, {"APP_BASE_URL": "https://staging.example.com"}):
+                ctx = _build_context([job], REJECTED_STATS, RUN_META)
+        assert ctx["platform_url"] == "https://staging.example.com"
