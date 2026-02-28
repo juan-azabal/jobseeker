@@ -122,6 +122,8 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 | `GMAIL_APP_PASSWORD` | Gmail app password | — |
 | `RAILWAY_URL` | Railway API base URL (cross-user cache) | — |
 | `INGEST_API_KEY` | Shared secret for Railway API | — |
+| `APP_BASE_URL` | Platform URL for digest links | `https://jobseeker-production.up.railway.app` |
+| `DIGEST_TEMPLATE` | Email template filename (rollback toggle) | `email_digest.html.j2` |
 
 ## Deployment
 - **Auto-deploy DISABLED.** Push to main does NOT deploy to Railway automatically.
