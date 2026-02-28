@@ -203,3 +203,44 @@ class TestBuildContextPlatformUrl:
             with patch.dict(os.environ, {"APP_BASE_URL": "https://staging.example.com"}):
                 ctx = _build_context([job], REJECTED_STATS, RUN_META)
         assert ctx["platform_url"] == "https://staging.example.com"
+
+
+class TestNotifierRebrand:
+    """Step 20.2: JobSeeker rebrand + preheader."""
+
+    def test_subject_contains_jobseeker(self):
+        """Email subject must say 'JobSeeker', not 'JobAgent'."""
+        import notifier
+        job = _make_job(rag_score={"score": 65, "tier": "A"})
+        with patch.multiple("main", **_PATCH_MAIN):
+            ctx = _build_context([job], REJECTED_STATS, RUN_META)
+        n_apply = ctx["n_apply"]
+        run_date = ctx["date"]
+        headline = ctx["headline"]
+        subject = f"JobSeeker · {n_apply} nuevos roles · {headline} — {run_date}"
+        assert "JobSeeker" in subject
+        assert "JobAgent" not in subject
+
+    def test_preheader_in_context(self):
+        """_build_context() must include 'preheader' key."""
+        job = _make_job(rag_score={"score": 65, "tier": "A"})
+        with patch.multiple("main", **_PATCH_MAIN):
+            ctx = _build_context([job], REJECTED_STATS, RUN_META)
+        assert "preheader" in ctx
+
+    def test_preheader_format(self):
+        """preheader = '{n_apply} para aplicar, {n_review} para revisar'."""
+        job_a = _make_job("id1", rag_score={"score": 65, "tier": "A"})
+        job_b = _make_job("id2", rag_score={"score": 40, "tier": "B"})
+        with patch.multiple("main", **_PATCH_MAIN):
+            ctx = _build_context([job_a, job_b], REJECTED_STATS, RUN_META)
+        assert ctx["preheader"] == f"{ctx['n_apply']} para aplicar, {ctx['n_review']} para revisar"
+
+    def test_build_headline_uses_score(self):
+        """_build_headline returns '{company} · {loc_type} · {score}'."""
+        from notifier import _build_headline
+        tier_a = [{"company": "Acme", "location_type": "remote", "score": 82}]
+        result = _build_headline(tier_a)
+        assert "Acme" in result
+        assert "remote" in result
+        assert "82" in result

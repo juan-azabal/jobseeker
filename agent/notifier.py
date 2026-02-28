@@ -147,7 +147,8 @@ def _build_headline(tier_a: list) -> str:
     best = tier_a[0]
     company = best["company"]
     loc_type = best["location_type"]
-    return f"{company} · {loc_type}"
+    score = best.get("score", 0)
+    return f"{company} · {loc_type} · {score}"
 
 
 def _build_context(jobs, rejected_stats, run_meta, profile=None):
@@ -208,12 +209,14 @@ def _build_context(jobs, rejected_stats, run_meta, profile=None):
     headline = _build_headline(tier_a)
     n_prefiltered = rejected_stats.get("total", 0) - rejected_stats.get("passed", 0)
     platform_url = os.getenv("APP_BASE_URL", _APP_BASE_URL_DEFAULT)
+    n_apply = len(tier_a)
+    n_review = len(tier_b)
 
     return {
         "date": run_meta.get("date", date.today().strftime("%d %b %Y")),
         "headline": headline,
-        "n_apply": len(tier_a),
-        "n_review": len(tier_b),
+        "n_apply": n_apply,
+        "n_review": n_review,
         "n_skip": len(tier_c),
         "n_prefiltered": n_prefiltered,
         "tier_a": tier_a,
@@ -222,6 +225,7 @@ def _build_context(jobs, rejected_stats, run_meta, profile=None):
         "rejected_stats": rejected_stats,
         "run_meta": run_meta,
         "platform_url": platform_url,
+        "preheader": f"{n_apply} para aplicar, {n_review} para revisar",
     }
 
 
@@ -279,13 +283,13 @@ def send_digest(
     n_apply = context["n_apply"]
     run_date = context["date"]
     headline = context["headline"]
-    subject = f"JobAgent: {n_apply} roles · {headline} — {run_date}"
+    subject = f"JobSeeker · {n_apply} nuevos roles · {headline} — {run_date}"
 
     # Send via Gmail SMTP
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = f"JobAgent <{gmail_address}>"
+        msg["From"] = f"JobSeeker <{gmail_address}>"
         msg["To"] = to_email
         msg.attach(MIMEText(html_body, "html"))
 
