@@ -244,3 +244,82 @@ class TestNotifierRebrand:
         assert "Acme" in result
         assert "remote" in result
         assert "82" in result
+
+
+def _render_template(extra_context=None):
+    """Helper: render the current email_digest.html.j2 with minimal context."""
+    from jinja2 import Environment, FileSystemLoader
+    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=False)
+    template = env.get_template("email_digest.html.j2")
+    ctx = {
+        "date": "28 Feb 2026",
+        "headline": "Acme · remote · 82",
+        "n_apply": 1,
+        "n_review": 1,
+        "n_skip": 0,
+        "n_prefiltered": 5,
+        "preheader": "1 para aplicar, 1 para revisar",
+        "platform_url": "https://example.com",
+        "tier_a": [{"title": "Head of Product", "company": "Acme", "location": "Remote",
+                    "location_type": "remote", "requires_reloc": False, "salary_display": "~€120K",
+                    "score": 82, "strength": "Led data teams", "gap": "No fintech",
+                    "url": "https://ext.com/job1", "platform_link": "https://example.com/jobs/abc"}],
+        "tier_b": [{"title": "PM", "company": "Beta", "location": "Madrid",
+                    "location_type": "hybrid", "requires_reloc": False, "salary_display": "",
+                    "score": 45, "strength": "", "gap": "",
+                    "url": "https://ext.com/job2", "platform_link": "https://example.com/jobs/def"}],
+        "tier_c": [],
+        "rejected_stats": {"total": 10, "passed": 2, "us_only": 3, "no_pm_keyword": 2,
+                           "deal_breaker": 1, "title_excluded": 2},
+        "run_meta": {"n_searches": 5, "n_watchlist": 3, "duration_s": 120, "cost_usd": 0.12},
+    }
+    if extra_context:
+        ctx.update(extra_context)
+    return template.render(**ctx)
+
+
+class TestTemplateRender20_3a:
+    """Step 20.3a: head, preheader, header, footer template changes."""
+
+    def test_color_scheme_meta_present(self):
+        """Template must have color-scheme meta tag."""
+        html = _render_template()
+        assert 'color-scheme' in html
+
+    def test_supported_color_schemes_meta_present(self):
+        """Template must have supported-color-schemes meta tag."""
+        html = _render_template()
+        assert 'supported-color-schemes' in html
+
+    def test_title_is_jobseeker(self):
+        """<title> must say 'JobSeeker · Digest', not 'JobAgent Digest'."""
+        html = _render_template()
+        assert "JobSeeker" in html
+        assert "JobAgent Digest" not in html
+
+    def test_preheader_div_present(self):
+        """Preheader div with display:none must be present."""
+        html = _render_template()
+        assert "display:none" in html
+        assert "1 para aplicar, 1 para revisar" in html
+
+    def test_violet_accent_in_header(self):
+        """Accent color must be violet #8b5cf6, not orange #e97316."""
+        html = _render_template()
+        assert "#8b5cf6" in html
+        assert "#e97316" not in html
+
+    def test_dashboard_cta_in_header(self):
+        """Header must contain dashboard CTA linking to platform_url/jobs."""
+        html = _render_template()
+        assert "https://example.com/jobs" in html
+
+    def test_footer_branding(self):
+        """Footer must contain 'JobSeeker' branding line."""
+        html = _render_template()
+        assert "JobSeeker" in html
+
+    def test_footer_juan_azabal(self):
+        """Footer must contain 'Built by Juan Azabal'."""
+        html = _render_template()
+        assert "Juan Azabal" in html
