@@ -350,3 +350,31 @@ class TestTemplateRender20_3b:
         html = _render_template()
         # platform_url is https://example.com, so /jobs link appears
         assert "https://example.com/jobs" in html
+
+
+class TestTemplateRender20_3c:
+    """Step 20.3c: Tier B and C platform links."""
+
+    def test_tier_b_links_to_platform(self):
+        """Tier B 'Ver →' links must use platform_link."""
+        html = _render_template()
+        assert "https://example.com/jobs/def" in html
+
+    def test_tier_b_ver_mas_link_present(self):
+        """'Ver más en el dashboard' text link must appear after Tier B."""
+        html = _render_template()
+        assert "Ver más en el dashboard" in html
+
+    def test_tier_c_links_to_platform(self):
+        """Tier C links must use platform_link (not job.url directly)."""
+        ctx_override = {
+            "tier_b": [],
+            "tier_c": [{"title": "PM", "company": "Gamma", "location": "",
+                        "location_type": "remote", "requires_reloc": False,
+                        "salary_display": "", "score": 30,
+                        "url": "https://ext.com/job3",
+                        "platform_link": "https://example.com/jobs/ghi",
+                        "strength": "", "gap": ""}],
+        }
+        html = _render_template(ctx_override)
+        assert "https://example.com/jobs/ghi" in html
