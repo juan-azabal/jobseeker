@@ -91,7 +91,8 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `web/src/components/CVReplaceSummary.tsx` — read-only diff view after CV replace (Phase 18)
   - `api/profile_merge.py` — merge_profiles() + compute_diff() pure functions (Phase 18)
 - Shared: `shared/`
-  - `shared/scoring_core.py` — single source of truth for scoring logic (domain data, grade mapping, eligibility penalty, heuristic score); imported by both `api/` and `agent/`
+  - `shared/scoring_core.py` — scoring logic (domain inference, grade mapping, eligibility penalty, heuristic score); imported by both `api/` and `agent/`
+  - `shared/scoring_data.py` — scoring data constants (domains, keywords, city map, lang signals)
 - DB: `data/jobseeker.db` (gitignored)
 - Static build: `web/dist/` (gitignored)
 - Scripts: `scripts/seed_dev.py` — dev database seeder, `scripts/backfill_embeddings.py` — one-time skill embedding backfill
@@ -412,6 +413,10 @@ Phase 20b — Email Digest API Architecture (complete: 2026-03-01)
 - Removed strength/gap from template: list API doesn't return; old values were inconsistent with RAG output
 - API parity: 2 parity tests verify score/tier identical between digest and web list_jobs(period='today')
 - GATE 20b: 659 backend tests + 523 agent tests passing (1 pre-existing scorer failure)
+
+Scoring data extraction (complete: 2026-03-01)
+- Scoring data extraction: pure data constants in shared/scoring_data.py, logic in shared/scoring_core.py (~370 lines). Re-exports preserve all import paths.
+- GATE: 692 backend tests + 429 agent tests passing (1 pre-existing scorer failure); scoring_core.py ~370 lines; no import path broken.
 
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
