@@ -56,6 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
+      PYTHONPATH: ${{ github.workspace }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
       GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
