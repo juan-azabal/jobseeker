@@ -3,6 +3,7 @@
 Returns today's scored and tiered jobs for a profile, using the exact same
 scoring path as list_jobs(period="today"). Auth: X-Ingest-Key header.
 """
+
 import os
 from datetime import date
 

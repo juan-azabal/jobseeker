@@ -88,17 +88,25 @@ def _build_context() -> dict:
             _make_tier_c_job("hash_c1"),
         ],
         "rejected_stats": {
-            "total": 20, "passed": 5, "us_only": 5, "no_pm_keyword": 3,
-            "deal_breaker": 2, "title_excluded": 2,
+            "total": 20,
+            "passed": 5,
+            "us_only": 5,
+            "no_pm_keyword": 3,
+            "deal_breaker": 2,
+            "title_excluded": 2,
         },
         "run_meta": {
-            "n_searches": 5, "n_watchlist": 3, "duration_s": 90, "cost_usd": 0.15,
+            "n_searches": 5,
+            "n_watchlist": 3,
+            "duration_s": 90,
+            "cost_usd": 0.15,
         },
     }
 
 
 def _render() -> str:
     from jinja2 import Environment, FileSystemLoader
+
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=False)
     template = env.get_template("email_digest.html.j2")
     return template.render(**_build_context())
@@ -125,10 +133,10 @@ class TestPresence:
         assert "Juan Azabal" in _render()
 
     def test_color_scheme_meta(self):
-        assert 'color-scheme' in _render()
+        assert "color-scheme" in _render()
 
     def test_supported_color_schemes_meta(self):
-        assert 'supported-color-schemes' in _render()
+        assert "supported-color-schemes" in _render()
 
     def test_tier_a_platform_links(self):
         """All Tier A job links must use /jobs/ platform path."""
@@ -198,6 +206,7 @@ class TestTemplateRendersWithoutError:
     def test_empty_tiers(self):
         """Template must render even when all tiers are empty."""
         from jinja2 import Environment, FileSystemLoader
+
         env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=False)
         template = env.get_template("email_digest.html.j2")
         ctx = _build_context()
@@ -210,6 +219,7 @@ class TestTemplateRendersWithoutError:
     def test_missing_salary(self):
         """Jobs without salary_display must render without errors."""
         from jinja2 import Environment, FileSystemLoader
+
         env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=False)
         template = env.get_template("email_digest.html.j2")
         ctx = _build_context()
@@ -220,6 +230,7 @@ class TestTemplateRendersWithoutError:
     def test_reloc_warning_pill(self):
         """Jobs with requires_reloc=True must show 'reloc' warning pill."""
         from jinja2 import Environment, FileSystemLoader
+
         env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=False)
         template = env.get_template("email_digest.html.j2")
         ctx = _build_context()

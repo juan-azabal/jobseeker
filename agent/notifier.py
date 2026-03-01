@@ -30,6 +30,7 @@ Each job dict in a tier:
   title, company, location, location_type, requires_reloc,
   salary_display, score, tier, url, platform_link, eligibility_warning
 """
+
 import os
 import time
 from datetime import date

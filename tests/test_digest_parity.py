@@ -3,6 +3,7 @@
 For each job returned by the digest endpoint, the score and tier must be
 identical to what list_jobs() would compute via the same code path.
 """
+
 import json
 from datetime import date
 
@@ -25,10 +26,15 @@ JOBS = [
         "url": "https://ex.com/p1",
         "location_type": "remote",
         "domain": "saas",
-        "parsed": json.dumps({
-            "domain": "saas", "seniority": "senior", "location_type": "remote",
-            "skills": ["product strategy"], "remote_restriction": None,
-        }),
+        "parsed": json.dumps(
+            {
+                "domain": "saas",
+                "seniority": "senior",
+                "location_type": "remote",
+                "skills": ["product strategy"],
+                "remote_restriction": None,
+            }
+        ),
         "first_seen": TODAY,
         "last_seen": TODAY,
         "ingested_at": f"{TODAY}T10:00:00",
@@ -41,10 +47,15 @@ JOBS = [
         "url": "https://ex.com/p2",
         "location_type": "onsite",
         "domain": "fintech",
-        "parsed": json.dumps({
-            "domain": "fintech", "seniority": "senior", "location_type": "onsite",
-            "skills": ["roadmap"], "remote_restriction": None,
-        }),
+        "parsed": json.dumps(
+            {
+                "domain": "fintech",
+                "seniority": "senior",
+                "location_type": "onsite",
+                "skills": ["roadmap"],
+                "remote_restriction": None,
+            }
+        ),
         "first_seen": TODAY,
         "last_seen": TODAY,
         "ingested_at": f"{TODAY}T09:00:00",
@@ -57,10 +68,15 @@ JOBS = [
         "url": "https://ex.com/p3",
         "location_type": "remote",
         "domain": "ecommerce",
-        "parsed": json.dumps({
-            "domain": "ecommerce", "seniority": "lead", "location_type": "remote",
-            "skills": [], "remote_restriction": None,
-        }),
+        "parsed": json.dumps(
+            {
+                "domain": "ecommerce",
+                "seniority": "lead",
+                "location_type": "remote",
+                "skills": [],
+                "remote_restriction": None,
+            }
+        ),
         "first_seen": TODAY,
         "last_seen": TODAY,
         "ingested_at": f"{TODAY}T08:00:00",

@@ -10,6 +10,7 @@ Verifies:
 - Critical: notifier.py has no '50' or '30' as tier threshold literals.
 - Template rendering tests (existing suite preserved).
 """
+
 import importlib
 import os
 import sys
@@ -101,6 +102,7 @@ class TestFetchDigest:
 
     def test_500_retries_and_returns_none(self):
         import httpx as _httpx
+
         resp_500 = self._mock_response(500)
         with patch("httpx.get", side_effect=Exception("Server Error")):
             with patch("time.sleep"):
@@ -109,6 +111,7 @@ class TestFetchDigest:
 
     def test_timeout_retries_and_returns_none(self):
         import httpx as _httpx
+
         with patch("httpx.get", side_effect=_httpx.TimeoutException("timeout")):
             with patch("time.sleep"):
                 result = notifier.fetch_digest("https://app.railway.app", "juan", "key")
@@ -126,8 +129,19 @@ class TestFlattenApiJob:
     def test_all_required_fields_present(self):
         job = _make_digest_job()
         result = notifier._flatten_api_job(job, APP_BASE)
-        for field in ("title", "company", "location", "location_type", "requires_reloc",
-                      "salary_display", "score", "tier", "url", "platform_link", "eligibility_warning"):
+        for field in (
+            "title",
+            "company",
+            "location",
+            "location_type",
+            "requires_reloc",
+            "salary_display",
+            "score",
+            "tier",
+            "url",
+            "platform_link",
+            "eligibility_warning",
+        ):
             assert field in result, f"Missing field: {field}"
 
     def test_platform_link_uses_job_id(self):
@@ -194,18 +208,14 @@ class TestBuildContextFromApi:
 
     def test_tier_counts_match_summary(self):
         digest = _make_digest(tier_a=2, tier_b=3, tier_c=1)
-        ctx = notifier._build_context_from_api(
-            digest, {"total": 10, "passed": 6}, {"date": "01 Mar 2026"}
-        )
+        ctx = notifier._build_context_from_api(digest, {"total": 10, "passed": 6}, {"date": "01 Mar 2026"})
         assert len(ctx["tier_a"]) == 2
         assert len(ctx["tier_b"]) == 3
         assert len(ctx["tier_c"]) == 1
 
     def test_headline_from_best_tier_a(self):
         digest = _make_digest(tier_a=2, tier_b=1, tier_c=0)
-        ctx = notifier._build_context_from_api(
-            digest, {}, {"date": "01 Mar 2026"}
-        )
+        ctx = notifier._build_context_from_api(digest, {}, {"date": "01 Mar 2026"})
         # Headline contains company of first tier A job
         assert digest["jobs"][0]["company"] in ctx["headline"]
 
@@ -223,8 +233,20 @@ class TestBuildContextFromApi:
     def test_required_context_keys_present(self):
         digest = _make_digest()
         ctx = notifier._build_context_from_api(digest, {}, {"date": "01 Mar 2026"})
-        for key in ("date", "headline", "n_apply", "n_review", "n_skip", "tier_a",
-                    "tier_b", "tier_c", "platform_url", "preheader", "rejected_stats", "run_meta"):
+        for key in (
+            "date",
+            "headline",
+            "n_apply",
+            "n_review",
+            "n_skip",
+            "tier_a",
+            "tier_b",
+            "tier_c",
+            "platform_url",
+            "preheader",
+            "rejected_stats",
+            "run_meta",
+        ):
             assert key in ctx, f"Missing context key: {key}"
 
 
@@ -389,6 +411,7 @@ class TestTemplateRenderSuite:
 
     def test_build_headline_uses_score(self):
         from notifier import _build_headline
+
         tier_a = [{"company": "Acme", "location_type": "remote", "score": 82}]
         result = _build_headline(tier_a)
         assert "Acme" in result

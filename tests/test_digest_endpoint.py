@@ -1,4 +1,5 @@
 """Tests for GET /api/digest/{profile_id} endpoint."""
+
 import json
 from datetime import date
 

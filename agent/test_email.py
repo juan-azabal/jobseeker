@@ -21,6 +21,7 @@ Manual checklist after running:
   [ ] PARITY: same jobs appear in same tiers as web
   [ ] PARITY: tier counts in email match web sidebar counts
 """
+
 import os
 import sys
 from datetime import datetime

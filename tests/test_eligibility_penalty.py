@@ -8,6 +8,7 @@ Tests for:
 - Bug fix: onsite non-home country → -20 eligibility penalty
 - Bug fix: v2 relocation penalty applied in _score_and_tier_jobs()
 """
+
 import json
 import sqlite3
 import tempfile
@@ -62,6 +63,7 @@ def _job(location_type: str = "remote", location: str = "Remote") -> dict:
 # 19.1.1 — _compute_eligibility_penalty() unit tests
 # ---------------------------------------------------------------------------
 
+
 class TestComputeEligibilityPenalty:
     def test_no_restriction_returns_0(self):
         parsed = _parsed(remote_restriction=None)
@@ -113,6 +115,7 @@ class TestComputeEligibilityPenalty:
 # 19.1.2 — penalty wired into heuristic_score()
 # ---------------------------------------------------------------------------
 
+
 class TestHeuristicScoreWithPenalty:
     def test_restricted_job_scores_lower_than_unrestricted(self):
         """Netherlands-only job (home=barcelona) scores lower than unrestricted."""
@@ -149,6 +152,7 @@ class TestHeuristicScoreWithPenalty:
 # ---------------------------------------------------------------------------
 # 19.1.3 — location scoring distinctions
 # ---------------------------------------------------------------------------
+
 
 class TestLocationScoringGeoRestricted:
     def _location_component(self, parsed: dict, job: dict) -> int:
@@ -191,6 +195,7 @@ class TestLocationScoringGeoRestricted:
 # ---------------------------------------------------------------------------
 # 19.2.1 — country_weights uses actual country for geo-restricted remote
 # ---------------------------------------------------------------------------
+
 
 class TestCountryWeightsGeoRestricted:
     def _country_component(self, parsed: dict, job: dict, country_weights: dict) -> int:
@@ -243,9 +248,7 @@ class TestCountryWeightsGeoRestricted:
         cw = {"netherlands": 5, "remote": 10}
         score = self._country_component(parsed, _job(), cw)
         # location=2 (geo-restricted ineligible) + country=5 (netherlands used, NOT remote:10)
-        assert score == 7, (
-            f"Expected 7 for NL-restricted remote + netherlands:5, got {score}"
-        )
+        assert score == 7, f"Expected 7 for NL-restricted remote + netherlands:5, got {score}"
         # Confirm remote:+10 was NOT used (would give 2+10=12 if injected)
         assert score < 12, "remote weight (+10) must not override NL weight when job is geo-restricted"
 
@@ -348,14 +351,13 @@ class TestOnsiteEligibilityPenalty:
         assert score_us < score_bcn, (
             f"US onsite ({score_us}) should score lower than BCN onsite ({score_bcn}) due to -20 penalty"
         )
-        assert score_us <= score_bcn - 20, (
-            f"Penalty delta should be ≥20: US={score_us}, BCN={score_bcn}"
-        )
+        assert score_us <= score_bcn - 20, f"Penalty delta should be ≥20: US={score_us}, BCN={score_bcn}"
 
 
 # ---------------------------------------------------------------------------
 # Bug fix: v2 relocation penalty applied in _score_and_tier_jobs()
 # ---------------------------------------------------------------------------
+
 
 def _make_minimal_db() -> str:
     tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
@@ -428,8 +430,15 @@ class TestV2RelocPenaltyApplied:
         con.execute(
             "INSERT INTO jobs (job_id, title, company, location, location_type, parsed, domain)"
             " VALUES (?, ?, ?, ?, ?, ?, ?)",
-            ("job-nyc", "Head of Product", "MongoDB", "New York City, NY", "onsite",
-             json.dumps(_PARSED_NYC_ONSITE), "saas"),
+            (
+                "job-nyc",
+                "Head of Product",
+                "MongoDB",
+                "New York City, NY",
+                "onsite",
+                json.dumps(_PARSED_NYC_ONSITE),
+                "saas",
+            ),
         )
         con.execute(
             "INSERT INTO user_job_scores (user_id, job_id, score, tier, scored, technical_grade, profile_grade, scored_v2)"
@@ -470,8 +479,9 @@ class TestV2RelocPenaltyApplied:
         # With fix: hybrid_score() - 15 (onsite reloc) applied
         # Also -20 eligibility penalty fires inside heuristic_score (Bug 2 fix)
         # So score must be substantially lower than a plain hybrid_score with B+A grades
-        base_hybrid = hybrid_score(_PROFILE_BCN_RICH, _PARSED_NYC_ONSITE, job, is_reloc=False,
-                                   technical_grade="B", profile_grade="A")
+        base_hybrid = hybrid_score(
+            _PROFILE_BCN_RICH, _PARSED_NYC_ONSITE, job, is_reloc=False, technical_grade="B", profile_grade="A"
+        )
         assert score < base_hybrid, (
             f"v2 onsite reloc score ({score}) must be < base hybrid ({base_hybrid}) after reloc + eligibility penalties"
         )
@@ -498,9 +508,5 @@ class TestMongodbRegression:
             penalty = 5 if _PARSED_NYC_ONSITE.get("location_type") == "remote" else 15
             score = max(0, score - penalty)
 
-        assert score <= 40, (
-            f"MongoDB NYC onsite (v2 B+A) should score ≤ 40 after both fixes, got {score}"
-        )
-        assert compute_tier(score) == "C", (
-            f"Expected tier C (skip), got {compute_tier(score)} for score={score}"
-        )
+        assert score <= 40, f"MongoDB NYC onsite (v2 B+A) should score ≤ 40 after both fixes, got {score}"
+        assert compute_tier(score) == "C", f"Expected tier C (skip), got {compute_tier(score)} for score={score}"
