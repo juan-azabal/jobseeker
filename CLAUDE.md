@@ -7,6 +7,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 - `api/` — FastAPI backend
 - `web/` — React frontend
 - `agent/` — scraping/scoring engine (formerly standalone `jobagent` repo)
+- `shared/` — shared scoring core (single source of truth; imported by api/ and agent/)
 - `data/` — SQLite DB (gitignored)
 - `tests/` — backend tests
 - `scripts/` — utility scripts
@@ -47,7 +48,12 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `web/src/constants/domains.ts` — 30-domain canonical enum, display labels, grouped categories
   - `web/src/analytics.ts` — posthog-js wrapper (initPostHog, identifyUser, resetPostHog)
 - Agent: `agent/`
-  - `agent/main.py` — pipeline orchestrator (scrape → parse → score → notify)
+  - `agent/main.py` — thin CLI wrapper: parse args → load profile → call run_pipeline()
+  - `agent/pipeline.py` — pipeline orchestrator (scrape → parse → score → notify); `run_pipeline()` + `PipelineOptions`
+  - `agent/scoring.py` — heuristic scoring + config loader (wraps shared/scoring_core.py with module globals)
+  - `agent/display.py` — `ranked_jobs()`, `print_summary()` (display/ranking logic)
+  - `agent/reloc.py` — relocation detection (`is_remote_requiring_reloc()`)
+  - `agent/salary.py` — salary parsing + EUR conversion (`extract_max_salary_eur()`)
   - `agent/models.py` — RawJob Pydantic model (source-agnostic scraper output)
   - `agent/merger.py` — merge duplicate RawJobs from multiple scrapers (source-group field priority)
   - `agent/preseed.py` — maps structured RawJob fields to parser schema (pre-seeds before LLM call)
@@ -74,7 +80,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `agent/schemas/` — JSON output contracts (parsed_job, scored_job, digest_context, gap_history_entry)
   - `agent/patterns/` — interface contracts per module
   - `agent/docs/decisions/` — ADRs (001–007)
-- Tests: `tests/` (backend, 562 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 400 tests)
+- Tests: `tests/` (backend, 683 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 517 tests)
   - `agent/tests/fixtures.py` — shared BASELINE_PROFILE fixture (fixed dict, not from juan.yaml)
   - `agent/tests/test_notifier_v2.py` — v2 rag_score compat in _build_context (P15 fix)
   - `agent/tests/test_ranked_jobs_v2.py` — hybrid score in ranked_jobs + print_summary mode label (P16/P18 fix)
@@ -84,6 +90,8 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `tests/test_profile_e2e.py` — 12 E2E regression tests: all write paths, CV replace additive, C5 regression (Phase 18)
   - `web/src/components/CVReplaceSummary.tsx` — read-only diff view after CV replace (Phase 18)
   - `api/profile_merge.py` — merge_profiles() + compute_diff() pure functions (Phase 18)
+- Shared: `shared/`
+  - `shared/scoring_core.py` — single source of truth for scoring logic (domain data, grade mapping, eligibility penalty, heuristic score); imported by both `api/` and `agent/`
 - DB: `data/jobseeker.db` (gitignored)
 - Static build: `web/dist/` (gitignored)
 - Scripts: `scripts/seed_dev.py` — dev database seeder, `scripts/backfill_embeddings.py` — one-time skill embedding backfill
@@ -522,7 +530,7 @@ Phase 20b — Email Digest API Architecture (complete: 2026-03-01)
 - `_yaml_to_flat_profile()` / `_apply_flat_to_yaml()` (Phase 18): extracted helpers in `api/routes/onboard.py` to eliminate 3x duplicated YAML→flat normalization. `_yaml_to_flat_profile(raw)` normalizes nested YAML (user/target blocks) to flat dict used by merge and scoring. `_apply_flat_to_yaml(raw, flat)` writes flat dict back into ruamel CommentedMap preserving comments. Used by `get_profile()`, `update_profile()`, and `replace_cv()`.
 - `exclude_companies` location (Phase 18 / C5 root cause): `_build_profile_yaml()` writes it at YAML root level, not under `user` block. All read paths use `raw.get("exclude_companies")`. Not `raw["user"].get("exclude_companies")`. This was the root cause of C5 — GET returned empty list, prefs gen ignored user exclusions.
 - CVReplaceSummary component (Phase 18): replaces full ProfileEditor-in-review-mode pattern. Shows read-only diff: new skills (green, "NEW" badge) + existing skills (gray); new domains + existing; updated factual fields list; preserved weights note. "Looks good" → redirect to /profile.
-- Eligibility penalty (Phase 19): `_compute_eligibility_penalty()` returns -20 when job is remote + has restriction + user home not in restriction text. Bypassed for `loc_pref="d"` and pure timezone restrictions (`is_pure_timezone()`). DUAL-COPY: `api/scoring.py` and `agent/main.py`. Location scoring: geo-restricted remote → +8 if eligible, +2 if ineligible (vs +10 unrestricted). country_weights: `remote` sentinel NOT injected when geo-restricted.
+- Eligibility penalty (Phase 19 / Phase R1): `compute_eligibility_penalty()` returns -20 when job is remote + has restriction + user home not in restriction text. Bypassed for `loc_pref="d"` and pure timezone restrictions (`is_pure_timezone()`). Single source of truth: `shared/scoring_core.py`. Location scoring: geo-restricted remote → +8 if eligible, +2 if ineligible (vs +10 unrestricted). country_weights: `remote` sentinel NOT injected when geo-restricted.
 - Tier thresholds (Phase 19): A>60, B>40, C≤40. Previously A≥50, B≥30. Rationale: hybrid scores have wider range (heuristic + up to +40 from grades). Old thresholds made ~40% of jobs tier A; new thresholds restore A/B/C distribution.
 - `eligibility_warning` field (Phase 19): `str | None` — the raw `remote_restriction` text when penalty fires; null otherwise. Returned in list and detail API responses. Frontend: red "Not eligible" badge when set; amber "Relocation" badge for `geo_restricted` without eligibility_warning; nothing otherwise.
 - `is_pure_timezone()` guard (Phase 19): applied to both `_is_geo_restricted_remote` check and `_compute_eligibility_penalty()` in both api/scoring.py and agent/main.py. Timezone-only restrictions (CET, UTC+2, "EMEA hours") are not country barriers — no penalty, full +10 location bonus.

@@ -1,7 +1,7 @@
 """
 Unit tests for Step 1.5:
 _to_dicts() converts list[RawJob] to list[dict] for downstream compatibility.
-Checks that main.py merge phase handles RawJob objects correctly.
+Checks that pipeline.py merge phase handles RawJob objects correctly.
 """
 
 import sys
@@ -24,7 +24,7 @@ class TestToDicts:
     """_to_dicts() converts list[RawJob] → list[dict] for pipeline compatibility."""
 
     def test_returns_list_of_dicts(self):
-        from main import _to_dicts
+        from pipeline import _to_dicts
 
         jobs = [_make_raw_job()]
         result = _to_dicts(jobs)
@@ -32,7 +32,7 @@ class TestToDicts:
         assert isinstance(result[0], dict)
 
     def test_required_fields_present(self):
-        from main import _to_dicts
+        from pipeline import _to_dicts
 
         result = _to_dicts([_make_raw_job()])[0]
         assert result["id"] == "abc123def456"
@@ -41,7 +41,7 @@ class TestToDicts:
 
     def test_is_remote_bool_in_dict(self):
         """is_remote must be a bool in the output dict (prefilter uses it)."""
-        from main import _to_dicts
+        from pipeline import _to_dicts
 
         job = _make_raw_job(remote_type="fulltime")
         result = _to_dicts([job])[0]
@@ -53,7 +53,7 @@ class TestToDicts:
 
     def test_none_fields_preserved(self):
         """Optional fields with None are preserved as None (not omitted)."""
-        from main import _to_dicts
+        from pipeline import _to_dicts
 
         job = _make_raw_job(location=None, description=None)
         result = _to_dicts([job])[0]
@@ -62,7 +62,7 @@ class TestToDicts:
 
     def test_structured_fields_preserved(self):
         """Structured WTTJ fields (locations_structured, experience_min) are in dict."""
-        from main import _to_dicts
+        from pipeline import _to_dicts
 
         job = _make_raw_job(
             source="wttj",
@@ -80,19 +80,19 @@ class TestToDicts:
 
     def test_departments_preserved(self):
         """ATS departments list is preserved."""
-        from main import _to_dicts
+        from pipeline import _to_dicts
 
         job = _make_raw_job(source="greenhouse", departments=["Product"])
         result = _to_dicts([job])[0]
         assert result["departments"] == ["Product"]
 
     def test_empty_list(self):
-        from main import _to_dicts
+        from pipeline import _to_dicts
 
         assert _to_dicts([]) == []
 
     def test_multiple_jobs(self):
-        from main import _to_dicts
+        from pipeline import _to_dicts
 
         jobs = [
             _make_raw_job(id="aaa", title="PM 1"),

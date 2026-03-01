@@ -13,7 +13,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from main import _heuristic_gate
+from scoring import heuristic_gate as _heuristic_gate
 
 
 def _make_profile(domains: dict, threshold: int = 10, skills: list = None):

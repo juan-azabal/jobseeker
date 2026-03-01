@@ -47,7 +47,7 @@ def _load_latest_jobs():
 def _ranked_list(jobs):
     """Return jobs in digest order (same as main.py's ranked_jobs)."""
     # Import here to avoid circular deps; main.py has no side-effects at import
-    from main import ranked_jobs
+    from display import ranked_jobs
 
     tier_a, tier_b, tier_c = ranked_jobs(jobs)
     return tier_a + tier_b + tier_c

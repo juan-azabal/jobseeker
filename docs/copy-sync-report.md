@@ -1,13 +1,26 @@
 # File Copy Consistency Report
 
-Generated: 2026-02-27
+Updated: 2026-03-01 (Phase R1 — scoring core extracted to shared/)
 
-## Known dual-copy pairs
+## Eliminated dual-copy pairs (Phase R1)
 
-These files are intentionally duplicated between `api/` and `agent/`.
-If one changes, both must be updated.
+These functions were previously duplicated and are now in `shared/scoring_core.py`.
+Both `api/scoring.py` and `agent/main.py` import from shared — no sync needed.
+
+| Function/Data | Previously in | Now in |
+|---|---|---|
+| `DOMAIN_KEYWORDS` | `api/scoring.py`, `agent/main.py` | `shared/scoring_core.py` |
+| `DOMAIN_ALIASES` | `api/scoring.py`, `agent/main.py` | `shared/scoring_core.py` |
+| `infer_domain()` | `api/scoring.py`, `agent/main.py` | `shared/scoring_core.py` |
+| `grade_to_points()` / `_grade_to_points()` | `api/grade_mapping.py`, `agent/main.py` | `shared/scoring_core.py` |
+| `is_pure_timezone()` | `api/geo.py`, `agent/main.py` | `shared/scoring_core.py` |
+| `compute_eligibility_penalty()` | `api/scoring.py`, `agent/main.py` | `shared/scoring_core.py` |
+| `heuristic_score()` (core) | `api/scoring.py`, `agent/main.py` | `shared/scoring_core.py` |
+| `_CITY_TO_COUNTRY` | `api/scoring.py`, `agent/main.py` | `shared/scoring_core.py` |
 
 ---
+
+## Remaining dual-copy pairs
 
 ### `agent/geo.py` ↔ `api/geo.py`
 
@@ -20,21 +33,12 @@ Differences found:
 
 Functional code (all functions, logic, constants): identical. ✅
 
+Note: `is_pure_timezone()` in geo.py is now superseded by `shared.scoring_core.is_pure_timezone()`.
+The geo.py copies remain for non-scoring callers (reloc detection, prefilter).
+
 ---
 
 ### `agent/prompts/onboard-extraction.md` ↔ `api/prompts/onboard-extraction.md`
-
-**Status: Identical.** ✅
-
----
-
-### `_DOMAIN_KEYWORDS` in `agent/main.py` ↔ `api/scoring.py`
-
-**Status: Identical.** ✅
-
----
-
-### `_DOMAIN_ALIASES` in `agent/main.py` ↔ `api/scoring.py`
 
 **Status: Identical.** ✅
 
@@ -50,4 +54,6 @@ Functional equivalence maintained by convention, not byte comparison.
 
 ## Summary
 
-All critical dual-copy pairs are in sync as of 2026-02-27.
+Phase R1 (2026-03-01): Eliminated 8 dual-copy scoring functions/data structures.
+Single source of truth is now `shared/scoring_core.py`.
+Remaining dual copies: geo.py (non-scoring callers) + onboard prompts + onboard utils.

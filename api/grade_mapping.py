@@ -1,22 +1,9 @@
-"""Grade-to-points conversion for hybrid scoring.
+"""Grade-to-points mapping — re-exports from shared/scoring_core.py.
 
-LLM grades (A/B/C) map to fixed point values used by hybrid_score().
-Default of 10 (midpoint) is used for unscored jobs.
+Single source of truth is shared/scoring_core.GRADE_POINTS and grade_to_points().
+This module exists for backward compatibility with existing import sites.
 """
 
-GRADE_POINTS: dict[str, int] = {"A": 20, "B": 12, "C": 5}
+from shared.scoring_core import GRADE_POINTS, grade_to_points
 
-
-def grade_to_points(grade: str | None, default: int = 10) -> int:
-    """Convert a categorical grade (A/B/C) to integer points.
-
-    Args:
-        grade: Grade string ("A", "B", or "C"). Case-insensitive.
-        default: Points to return when grade is None or unrecognised.
-
-    Returns:
-        Integer point value.
-    """
-    if grade is None:
-        return default
-    return GRADE_POINTS.get(grade.upper(), default)
+__all__ = ["GRADE_POINTS", "grade_to_points"]
