@@ -19,6 +19,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from api.logging_config import configure_logging
 from api.db.init import init_db
 from api import analytics
+from api.middleware.staging import StagingGateMiddleware
 from api.routes.health import router as health_router
 from api.routes.jobs import router as jobs_router
 from api.routes.auth import router as auth_router
@@ -42,7 +43,8 @@ app = FastAPI(title="JobSeeker")
 # Middleware ordering (first added = outermost per Starlette/FastAPI behaviour):
 # 1. SessionMiddleware — reads oauth_state cookie
 # 2. CorrelationIdMiddleware — generates UUID per request, sets X-Request-ID header
-# 3. structlog_middleware — binds correlation_id + user_id to contextvars, logs request
+# 3. StagingGateMiddleware — blocks non-admin users in ENVIRONMENT=staging
+# 4. structlog_middleware — binds correlation_id + user_id to contextvars, logs request
 
 app.add_middleware(
     SessionMiddleware,
@@ -51,6 +53,7 @@ app.add_middleware(
 )
 
 app.add_middleware(CorrelationIdMiddleware)
+app.add_middleware(StagingGateMiddleware)
 
 
 @app.middleware("http")
