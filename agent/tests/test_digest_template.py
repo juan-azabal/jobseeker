@@ -27,10 +27,10 @@ def _make_tier_a_job(job_id: str, title: str = "Head of Product", company: str =
         "requires_reloc": False,
         "salary_display": "~€120K",
         "score": 82,
-        "strength": "Led cross-functional teams",
-        "gap": "No fintech experience",
+        "tier": "A",
         "url": f"https://ext.com/{job_id}",
         "platform_link": f"{PLATFORM_URL}/jobs/{job_id}",
+        "eligibility_warning": None,
     }
 
 
@@ -43,10 +43,10 @@ def _make_tier_b_job(job_id: str) -> dict:
         "requires_reloc": False,
         "salary_display": "",
         "score": 50,
-        "strength": "",
-        "gap": "",
+        "tier": "B",
         "url": f"https://ext.com/{job_id}",
         "platform_link": f"{PLATFORM_URL}/jobs/{job_id}",
+        "eligibility_warning": None,
     }
 
 
@@ -59,10 +59,10 @@ def _make_tier_c_job(job_id: str) -> dict:
         "requires_reloc": True,
         "salary_display": "",
         "score": 35,
-        "strength": "",
-        "gap": "",
+        "tier": "C",
         "url": f"https://ext.com/{job_id}",
         "platform_link": f"{PLATFORM_URL}/jobs/{job_id}",
+        "eligibility_warning": None,
     }
 
 
@@ -184,6 +184,12 @@ class TestAbsence:
         """<title> must not contain 'JobAgent'."""
         html = _render()
         assert "<title>JobAgent" not in html
+
+    def test_no_strength_or_gap_in_rendered_output(self):
+        """Rendered HTML must not contain raw Jinja2 strength/gap variable tags."""
+        html = _render()
+        assert "{{ job.strength }}" not in html
+        assert "{{ job.gap }}" not in html
 
 
 class TestTemplateRendersWithoutError:
