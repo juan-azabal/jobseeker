@@ -14,7 +14,7 @@ import os
 # Allow importing agent modules from the agent/ directory
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from main import _load_heuristic_config, _heuristic_score
+from scoring import load_heuristic_config as _load_heuristic_config, heuristic_score as _heuristic_score
 from scorer import _build_scoring_prompt
 from tests.fixtures import BASELINE_PROFILE
 

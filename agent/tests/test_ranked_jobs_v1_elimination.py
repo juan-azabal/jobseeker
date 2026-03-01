@@ -41,16 +41,15 @@ class TestRankedJobsV1Elimination:
 
     def setup_method(self):
         """Load heuristic config with a minimal profile."""
-        import main as m
-
-        m._PROFILE_SKILLS = ["python", "sql"]
-        m._DOMAIN_SCORES = {"data": 15}
-        m._SENIORITY_SCORES = {"principal": 15, "senior": 10, "staff": 15}
-        m._HOME_LOCATIONS = ["barcelona"]
-        m._HOME_REGIONS = ["eu", "europe"]
+        import scoring as s
+        s._PROFILE_SKILLS = ["python", "sql"]
+        s._DOMAIN_SCORES = {"data": 15}
+        s._SENIORITY_SCORES = {"principal": 15, "senior": 10, "staff": 15}
+        s._HOME_LOCATIONS = ["barcelona"]
+        s._HOME_REGIONS = ["eu", "europe"]
         from geo import build_region_pattern
-
-        m._HOME_REGION_RE = build_region_pattern(m._HOME_REGIONS)
+        s._HOME_REGION_RE = build_region_pattern(s._HOME_REGIONS)
+        s._COUNTRY_WEIGHTS = {}
 
     def test_v1_stored_score_not_used_directly(self):
         """Job with v1 rag_score (has 'score' key) must NOT return that stored score."""

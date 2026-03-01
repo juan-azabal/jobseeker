@@ -9,8 +9,11 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import main
+import scoring
 
-_PATCH_MAIN = {
+# Patch scoring module globals (where heuristic_score reads them)
+# and main module for _COUNTRY_WEIGHTS which is also read via _scoring_mod
+_PATCH_SCORING = {
     "_DOMAIN_SCORES": {"saas": 10, "data": 15},
     "_SENIORITY_SCORES": {"principal": 15, "senior": 8},
     "_PROFILE_SKILLS": ["analytics"],
@@ -46,7 +49,7 @@ class TestRankedJobsV2:
     def test_no_rag_uses_heuristic(self):
         """Job with no rag_score → _display_score = _fit_score."""
         job = _make_job(rag_score=None)
-        with patch.multiple("main", **_PATCH_MAIN):
+        with patch.multiple("scoring", **_PATCH_SCORING):
             tier_a, tier_b, tier_c = main.ranked_jobs([job])
         all_jobs = tier_a + tier_b + tier_c
         assert len(all_jobs) == 1
@@ -57,7 +60,7 @@ class TestRankedJobsV2:
     def test_v1_rag_falls_back_to_heuristic(self):
         """v1 rag_score (has 'score' key) → _display_score = _fit_score (not stored 78)."""
         job = _make_job(rag_score={"score": 78, "tier": "A"})
-        with patch.multiple("main", **_PATCH_MAIN):
+        with patch.multiple("scoring", **_PATCH_SCORING):
             tier_a, tier_b, tier_c = main.ranked_jobs([job])
         all_jobs = tier_a + tier_b + tier_c
         # v1 stored score is no longer used; falls back to heuristic
@@ -67,7 +70,7 @@ class TestRankedJobsV2:
     def test_v2_rag_computes_hybrid_score(self):
         """v2 rag_score → _display_score = _fit_score + grade_to_points(tech) + grade_to_points(prof)."""
         job = _make_job(rag_score={"technical_depth": "A", "profile_evidence": "B"})
-        with patch.multiple("main", **_PATCH_MAIN):
+        with patch.multiple("scoring", **_PATCH_SCORING):
             tier_a, tier_b, tier_c = main.ranked_jobs([job])
         all_jobs = tier_a + tier_b + tier_c
         # fit=35, A=20, B=12 → hybrid = 67
@@ -77,7 +80,7 @@ class TestRankedJobsV2:
         """v2 job with C+C grades scores lower than neutral (10+10 = 20 vs default 10+10)."""
         job_v2_cc = _make_job("j1", rag_score={"technical_depth": "C", "profile_evidence": "C"})
         job_no_rag = _make_job("j2", rag_score=None)
-        with patch.multiple("main", **_PATCH_MAIN):
+        with patch.multiple("scoring", **_PATCH_SCORING):
             main.ranked_jobs([job_v2_cc, job_no_rag])
         # C+C: 35+5+5=45 vs no-rag: 35
         assert job_v2_cc["_display_score"] > job_no_rag["_display_score"]
@@ -85,7 +88,7 @@ class TestRankedJobsV2:
     def test_v2_rag_a_a_scores_in_tier_a(self):
         """v2 job with A+A grades lands in tier_a (score ≥ 50)."""
         job = _make_job(rag_score={"technical_depth": "A", "profile_evidence": "A"})
-        with patch.multiple("main", **_PATCH_MAIN):
+        with patch.multiple("scoring", **_PATCH_SCORING):
             tier_a, tier_b, tier_c = main.ranked_jobs([job])
         # 35+20+20=75
         assert len(tier_a) == 1
@@ -96,7 +99,7 @@ class TestRankedJobsV2:
         job = _make_job(rag_score={"technical_depth": "A", "profile_evidence": "A"})
         # Override fit score to something high
         with patch.multiple(
-            "main", **{**_PATCH_MAIN, "_DOMAIN_SCORES": {"saas": 15}, "_SENIORITY_SCORES": {"principal": 15}}
+            "scoring", **{**_PATCH_SCORING, "_DOMAIN_SCORES": {"saas": 15}, "_SENIORITY_SCORES": {"principal": 15}}
         ):
             main.ranked_jobs([job])
         # 35+20+20=75 with normal scores; clamping tested here conceptually
@@ -108,21 +111,21 @@ class TestPrintSummaryModeLabel:
 
     def test_mode_heuristic_when_no_rag(self, capsys):
         job = _make_job(rag_score=None)
-        with patch.multiple("main", **_PATCH_MAIN):
+        with patch.multiple("scoring", **_PATCH_SCORING):
             main.print_summary([job])
         captured = capsys.readouterr()
         assert "heuristic fit" in captured.out
 
     def test_mode_rag_score_for_v1(self, capsys):
         job = _make_job(rag_score={"score": 70, "tier": "A"})
-        with patch.multiple("main", **_PATCH_MAIN):
+        with patch.multiple("scoring", **_PATCH_SCORING):
             main.print_summary([job])
         captured = capsys.readouterr()
         assert "RAG score" in captured.out
 
     def test_mode_hybrid_for_v2(self, capsys):
         job = _make_job(rag_score={"technical_depth": "A", "profile_evidence": "B"})
-        with patch.multiple("main", **_PATCH_MAIN):
+        with patch.multiple("scoring", **_PATCH_SCORING):
             main.print_summary([job])
         captured = capsys.readouterr()
         assert "hybrid score" in captured.out
@@ -131,7 +134,7 @@ class TestPrintSummaryModeLabel:
         """If any v2 job present, mode is 'hybrid score'."""
         job_v1 = _make_job("j1", rag_score={"score": 60})
         job_v2 = _make_job("j2", rag_score={"technical_depth": "B", "profile_evidence": "B"})
-        with patch.multiple("main", **_PATCH_MAIN):
+        with patch.multiple("scoring", **_PATCH_SCORING):
             main.print_summary([job_v1, job_v2])
         captured = capsys.readouterr()
         assert "hybrid score" in captured.out

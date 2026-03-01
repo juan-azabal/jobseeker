@@ -14,14 +14,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from user_config import load_profile
 from geo import derive_home_regions, UNIVERSAL_TERMS
-from main import (
-    _load_heuristic_config,
-    _is_reloc,
-    _is_remote_requiring_reloc,
-    _heuristic_score,
+from scoring import (
+    load_heuristic_config as _load_heuristic_config,
+    heuristic_score as _heuristic_score,
     _HOME_LOCATIONS,
     _HOME_REGIONS,
 )
+from main import _is_reloc, _is_remote_requiring_reloc
 
 
 def _setup_juan():

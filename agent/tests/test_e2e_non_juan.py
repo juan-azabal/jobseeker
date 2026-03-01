@@ -17,7 +17,7 @@ import yaml
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from scorer import _build_scoring_prompt
-from main import _load_heuristic_config, _heuristic_score
+from scoring import load_heuristic_config as _load_heuristic_config, heuristic_score as _heuristic_score
 from prefilter import prefilter_jobs
 import scorer
 
@@ -219,7 +219,7 @@ class TestHeuristicScoringForDE:
 
     def test_no_juan_specific_values_in_scoring(self):
         """Ensure _HOME_LOCATIONS was set to DE profile's, not Juan's."""
-        from main import _HOME_LOCATIONS
+        from scoring import _HOME_LOCATIONS
 
         assert "barcelona" not in _HOME_LOCATIONS
         assert "new york" in _HOME_LOCATIONS or "us" in _HOME_LOCATIONS
