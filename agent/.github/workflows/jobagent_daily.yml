@@ -12,7 +12,7 @@ on:
 jobs:
   digest:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
     permissions:
       contents: write  # needed to push seen_ids back to repo
     steps:
@@ -33,17 +33,14 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          RAILWAY_URL: ${{ secrets.RAILWAY_URL }}
+          INGEST_API_KEY: ${{ secrets.INGEST_API_KEY }}
         run: |
-          for profile_file in config/profiles/*.yaml; do
-            profile_id=$(basename "$profile_file" .yaml)
-            active=$(python scripts/check_active.py "$profile_file")
-            if [ "$active" = "false" ]; then
-              echo "=== Skipping inactive profile: $profile_id ==="
-              continue
-            fi
-            echo "=== Running JobAgent for profile: $profile_id ==="
-            python main.py --notify --profile "$profile_id"
-          done
+          profile_flag=""
+          if [ -n "${{ github.event.inputs.profile }}" ]; then
+            profile_flag="--profile ${{ github.event.inputs.profile }}"
+          fi
+          python main.py --notify $profile_flag
 
       - name: Persist seen jobs
         run: |
