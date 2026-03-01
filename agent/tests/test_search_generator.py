@@ -2,7 +2,7 @@
 
 import pytest
 
-from search_generator import generate_queries, COUNTRY_INDEED_MAP, LINKEDIN_DELAY_SECS
+from search_generator import generate_queries, generate_unified_queries, COUNTRY_INDEED_MAP, LINKEDIN_DELAY_SECS
 
 
 def _profile(search_titles=None, home_locations=None):
@@ -118,3 +118,71 @@ class TestGenerateQueries:
         result = generate_queries(_profile(search_titles=["PM"], home_locations=["madrid", "españa"]))
         indeed = [q for q in result if q["site"] == "indeed"][0]
         assert indeed["country_indeed"] == "Spain"
+
+
+class TestGenerateUnifiedQueries:
+    def _juan(self):
+        return _profile(
+            search_titles=["Senior Product Manager", "Product Manager"],
+            home_locations=["barcelona", "spain"],
+        )
+
+    def _noura(self):
+        return _profile(
+            search_titles=["Senior Product Manager", "Product Manager", "Product Owner"],
+            home_locations=["barcelona", "spain"],
+        )
+
+    def test_empty_profiles_list(self):
+        result = generate_unified_queries([])
+        assert result == []
+
+    def test_single_profile_matches_generate_queries(self):
+        profile = _profile(search_titles=["Product Manager"], home_locations=["barcelona", "spain"])
+        unified = generate_unified_queries([("juan", profile)])
+        direct = generate_queries(profile)
+        assert unified == direct
+
+    def test_shared_title_same_location_deduped(self):
+        juan = self._juan()
+        noura = self._noura()
+        result = generate_unified_queries([("juan", juan), ("noura", noura)])
+        # "Senior Product Manager" + barcelona appears once per site, not twice
+        senior_indeed = [q for q in result if q["term"] == "Senior Product Manager" and q["site"] == "indeed"]
+        assert len(senior_indeed) == 1
+        senior_li = [q for q in result if q["term"] == "Senior Product Manager" and q["site"] == "linkedin"]
+        assert len(senior_li) == 1
+
+    def test_noura_unique_title_not_deduped(self):
+        juan = self._juan()
+        noura = self._noura()
+        result = generate_unified_queries([("juan", juan), ("noura", noura)])
+        owner = [q for q in result if q["term"] == "Product Owner"]
+        # Product Owner is only in noura's profile, should appear once per site
+        assert len(owner) == 2
+        sites = {q["site"] for q in owner}
+        assert sites == {"indeed", "linkedin"}
+
+    def test_different_cities_not_deduped(self):
+        bcn = _profile(search_titles=["Product Manager"], home_locations=["barcelona", "spain"])
+        madrid = _profile(search_titles=["Product Manager"], home_locations=["madrid", "spain"])
+        result = generate_unified_queries([("u1", bcn), ("u2", madrid)])
+        indeed = [q for q in result if q["site"] == "indeed"]
+        assert len(indeed) == 2
+
+    def test_indeed_before_linkedin_ordering(self):
+        juan = self._juan()
+        noura = self._noura()
+        result = generate_unified_queries([("juan", juan), ("noura", noura)])
+        indeed_indices = [i for i, q in enumerate(result) if q["site"] == "indeed"]
+        linkedin_indices = [i for i, q in enumerate(result) if q["site"] == "linkedin"]
+        assert indeed_indices and linkedin_indices
+        assert max(indeed_indices) < min(linkedin_indices)
+
+    def test_total_count_juan_plus_noura(self):
+        """Juan has 2 titles, Noura adds 1 unique title (Product Owner).
+        3 unique titles × 2 sites = 6 queries."""
+        juan = self._juan()
+        noura = self._noura()
+        result = generate_unified_queries([("juan", juan), ("noura", noura)])
+        assert len(result) == 6
