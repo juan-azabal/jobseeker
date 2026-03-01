@@ -47,6 +47,8 @@ jobs:
         run: pip install -r agent/requirements.txt
 
       - name: Run agent tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: cd agent && python -m pytest tests/ -x -q --tb=short -m "not smoke"
 
   deploy:
