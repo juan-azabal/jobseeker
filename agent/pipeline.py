@@ -17,7 +17,6 @@ import structlog
 
 from models import RawJob
 from merger import merge_jobs
-from scraper import run_scraper
 from ats_scraper import run_watchlist_scraper
 from wttj_scraper import run_wttj_scraper
 from prefilter import prefilter_jobs
