@@ -1,4 +1,3 @@
-# DEPRECATED: search queries now driven by search_titles in profile YAML. This file is not read.
 searches:
 - term: Principal Product Manager data
   location: Spain
@@ -25,27 +24,24 @@ searches:
   location: Spain
   sites:
   - linkedin
-  - glassdoor
   results_wanted: 15
   hours_old: 72
 - term: Principal Product Manager data
   location: ''
   sites:
   - linkedin
-  - glassdoor
   results_wanted: 10
   hours_old: 72
 - term: Staff Product Manager remote
   location: Spain
   sites:
   - linkedin
-  - glassdoor
   results_wanted: 15
   hours_old: 72
 - term: Principal Product Manager snowplow
   location: Spain
   sites:
   - linkedin
-  - glassdoor
   results_wanted: 15
   hours_old: 72
+is_remote: true
