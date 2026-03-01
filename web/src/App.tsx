@@ -118,6 +118,15 @@ function HamburgerMenu() {
   );
 }
 
+function StagingBanner() {
+  if (import.meta.env.VITE_ENVIRONMENT !== 'staging') return null;
+  return (
+    <div className="flex items-center justify-center gap-2 border-b border-amber-500/30 bg-amber-500/15 px-4 py-2">
+      <span className="text-xs font-medium text-amber-400">⚠ Staging environment — data from production</span>
+    </div>
+  );
+}
+
 function ImpersonationBanner() {
   const { user, stopImpersonating } = useAuth();
   const navigate = useNavigate();
@@ -162,6 +171,7 @@ function AppRoutes() {
         </Link>
         <HamburgerMenu />
       </header>
+      <StagingBanner />
       <ImpersonationBanner />
       <Routes>
         <Route path="/onboard" element={<OnboardPage onComplete={() => window.location.replace('/jobs?welcome=1')} />} />
