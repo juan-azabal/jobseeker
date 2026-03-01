@@ -12,15 +12,29 @@ import pytz
 import structlog
 
 from shared.scoring_data import (
-    DOMAIN_ALIASES,  # noqa: F401 — re-exported for api/scoring.py
+    DOMAIN_ALIASES,
     DOMAIN_KEYWORDS,
     GRADE_POINTS,
-    VALID_DOMAINS,  # noqa: F401 — re-exported for api/scoring.py
+    VALID_DOMAINS,
     _CITY_TO_COUNTRY,
     _LANG_SIGNALS,
     _NULL_FLAG,
     _REGION_ALIASES,
 )
+
+__all__ = [
+    # Re-exported data constants (consumed by api/scoring.py + agent/)
+    "DOMAIN_ALIASES",
+    "DOMAIN_KEYWORDS",
+    "GRADE_POINTS",
+    "VALID_DOMAINS",
+    # Public functions
+    "compute_eligibility_penalty",
+    "grade_to_points",
+    "heuristic_score",
+    "infer_domain",
+    "is_pure_timezone",
+]
 
 logger = structlog.get_logger(__name__)
 
