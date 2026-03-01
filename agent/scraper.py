@@ -5,11 +5,13 @@ Returns list[RawJob] — standardised intermediate representation.
 
 import math
 import re
+import time
 import yaml
 import hashlib
 from jobspy import scrape_jobs
 
 from models import RawJob
+from search_generator import LINKEDIN_DELAY_SECS
 
 
 def _sanitize_str(val) -> str:
@@ -207,6 +209,92 @@ def run_scraper(config_path="config/searches.yaml") -> list[RawJob]:
     jobs_list = list(all_jobs.values())
     print(f"\nTotal unique jobs scraped: {len(jobs_list)}")
     return jobs_list
+
+
+def _build_kwargs(query: dict) -> dict:
+    """Map a query dict to scrape_jobs() keyword arguments."""
+    kwargs: dict = {
+        "site_name": query["site"],
+        "search_term": query["term"],
+        "location": query["location"],
+        "results_wanted": query["results_wanted"],
+        "hours_old": query["hours_old"],
+        "description_format": query.get("description_format", "markdown"),
+    }
+    if "is_remote" in query and query["is_remote"] is not None:
+        kwargs["is_remote"] = query["is_remote"]
+    if query["site"] == "indeed" and "country_indeed" in query:
+        kwargs["country_indeed"] = query["country_indeed"]
+    if query["site"] == "linkedin" and query.get("linkedin_fetch_description"):
+        kwargs["linkedin_fetch_description"] = True
+    return kwargs
+
+
+def run_scraper_from_queries(queries: list[dict]) -> list[RawJob]:
+    """Scrape jobs from pre-built query dicts. Returns deduplicated list[RawJob].
+
+    Applies LINKEDIN_DELAY_SECS sleep after each LinkedIn query (rate-limit safety).
+    Indeed queries run without delay.
+    """
+    if not queries:
+        return []
+
+    all_jobs: dict[str, RawJob] = {}
+
+    for query in queries:
+        site = query["site"]
+        term = query["term"]
+        location = query.get("location", "")
+
+        print(f"\nSearching: '{term}' in {location or 'anywhere'} [{site}]...")
+        try:
+            results = scrape_jobs(**_build_kwargs(query))
+            for _, row in results.iterrows():
+                title = _sanitize_str(row.get("title", ""))
+                company = _sanitize_str(row.get("company", ""))
+                if not title or not company:
+                    continue
+                job_id = make_job_id(title, company)
+                if job_id not in all_jobs:
+                    source = _sanitize_str(row.get("site", "")) or "unknown"
+                    all_jobs[job_id] = RawJob(
+                        id=job_id,
+                        title=title,
+                        company=company,
+                        source=source,
+                        job_url=_or_none(row.get("job_url")),
+                        location=_or_none(row.get("location")),
+                        description=_or_none(row.get("description")),
+                        job_type=_or_none(row.get("job_type")),
+                        date_posted=_or_none(row.get("date_posted")),
+                        search_term_used=term or None,
+                        remote_type=_to_remote_type(row.get("is_remote")),
+                        min_amount=_float_or_none(row.get("min_amount")),
+                        max_amount=_float_or_none(row.get("max_amount")),
+                        currency=_or_none(row.get("currency")),
+                        interval=_or_none(row.get("interval")),
+                        salary_source=_or_none(row.get("salary_source")),
+                        company_url=_or_none(row.get("company_url")),
+                        company_industry=_or_none(row.get("company_industry")),
+                        company_employees_label=_or_none(row.get("company_num_employees")),
+                        company_revenue_label=_or_none(row.get("company_revenue")),
+                        company_logo=_or_none(row.get("company_logo")),
+                        job_level=_or_none(row.get("job_level")),
+                        job_function=_or_none(row.get("job_function")),
+                        emails=(
+                            [e.strip() for e in row["emails"].split(",") if e.strip()]
+                            if row.get("emails")
+                            else None
+                        ),
+                    )
+            print(f"   Found {len(results)} results ({len(all_jobs)} unique total)")
+        except Exception as e:
+            print(f"   Error: {e}")
+
+        if site == "linkedin":
+            time.sleep(LINKEDIN_DELAY_SECS)
+
+    return list(all_jobs.values())
 
 
 if __name__ == "__main__":
