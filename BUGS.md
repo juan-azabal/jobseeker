@@ -6,6 +6,30 @@
 
 ## Deferred Edge Cases
 
+### DE-5 — LinkedIn rate limiting: delay may need tuning
+**Source**: Auto-search Phase 1
+**Description**: `LINKEDIN_DELAY_SECS = 2` is a conservative initial value. At scale (many profiles + many titles), consecutive LinkedIn queries may still hit 429s. The constant lives in `search_generator.py` and can be increased without code changes if 429s appear in logs.
+**Impact**: Low — 429s cause that query's results to be silently dropped; other queries succeed.
+**Path to fix**: Increase `LINKEDIN_DELAY_SECS`; or add per-query retry with exponential backoff in `run_scraper_from_queries()`.
+
+### DE-6 — Google Jobs scraping dropped
+**Source**: Auto-search Phase 1
+**Description**: Google Jobs scraping via JobSpy consistently returns 0 results (GitHub Issue #302). Removed from the query set. LinkedIn + Indeed only.
+**Impact**: None currently — Google results were already unreliable.
+**Path to fix**: Re-evaluate when JobSpy fixes Issue #302. Add `"google"` site back to `generate_queries()`.
+
+### DE-7 — `country_indeed` coverage: 9 countries only
+**Source**: Auto-search Phase 1
+**Description**: `COUNTRY_INDEED_MAP` covers Spain, France, Germany, UK, USA, Netherlands, Portugal, Italy, and their Spanish variants. Profiles with other home countries fall back to "Spain".
+**Impact**: Low — current active profiles are Spain/France. Wrong `country_indeed` causes Indeed to return no results for that query (silently empty).
+**Path to fix**: Expand `COUNTRY_INDEED_MAP` when onboarding users from uncovered countries.
+
+### DE-8 — search_titles user education gap
+**Source**: Auto-search Phase 2
+**Description**: Onboard generates 1–2 initial `search_titles` from role_type + level. Users who want broader coverage (e.g. "Head of Product", "VP Product") must add titles manually. No UI surface in ProfilePage yet.
+**Impact**: Medium — users unaware of this feature may see narrower results than possible.
+**Path to fix**: Phase N — expose `search_titles` as editable list in ProfilePage alongside domains/skills.
+
 ### DE-1 — Eligibility penalty: parser-derived restriction field
 **Source**: Phase 19 (19.1.1)
 **Description**: `remote_restriction` is extracted by the LLM parser from job descriptions. If the parser fails to detect a country restriction (hallucination, unusual phrasing, or very long JD), the penalty won't fire.
