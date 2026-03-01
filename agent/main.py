@@ -16,9 +16,6 @@ from logging_setup import configure_logging
 from user_config import load_profile, list_profiles, is_profile_active, resolve_profile_paths
 from scoring import load_heuristic_config as _load_heuristic_config
 
-# Re-exported for test-suite backward compatibility (test_ranked_jobs_v2, test_ranked_jobs_v1_elimination)
-from display import ranked_jobs, print_summary  # noqa: F401
-
 from pipeline import run_pipeline, PipelineOptions
 
 configure_logging()

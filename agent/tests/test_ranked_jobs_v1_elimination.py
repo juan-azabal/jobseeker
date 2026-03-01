@@ -53,10 +53,10 @@ class TestRankedJobsV1Elimination:
 
     def test_v1_stored_score_not_used_directly(self):
         """Job with v1 rag_score (has 'score' key) must NOT return that stored score."""
-        import main as m
+        from display import ranked_jobs as _ranked_jobs
 
         job = _make_job("job-v1", rag_score={"score": 99, "tier": "A"})
-        tier_a, tier_b, tier_c = m.ranked_jobs([job])
+        tier_a, tier_b, tier_c = _ranked_jobs([job])
         all_jobs = tier_a + tier_b + tier_c
 
         # Find our job
@@ -70,10 +70,10 @@ class TestRankedJobsV1Elimination:
 
     def test_v2_job_uses_hybrid_score(self):
         """v2 job uses heuristic + grade points (not a stored numeric score)."""
-        import main as m
+        from display import ranked_jobs as _ranked_jobs
 
         job = _make_job("job-v2", rag_score={"technical_depth": "A", "profile_evidence": "B"})
-        tier_a, tier_b, tier_c = m.ranked_jobs([job])
+        tier_a, tier_b, tier_c = _ranked_jobs([job])
         all_jobs = tier_a + tier_b + tier_c
 
         matched = [j for j in all_jobs if j.get("id") == "job-v2"]
@@ -88,10 +88,10 @@ class TestRankedJobsV1Elimination:
 
     def test_no_rag_uses_heuristic(self):
         """Job with no rag_score uses heuristic fit score only."""
-        import main as m
+        from display import ranked_jobs as _ranked_jobs
 
         job = _make_job("job-unscored", rag_score=None)
-        tier_a, tier_b, tier_c = m.ranked_jobs([job])
+        tier_a, tier_b, tier_c = _ranked_jobs([job])
         all_jobs = tier_a + tier_b + tier_c
 
         matched = [j for j in all_jobs if j.get("id") == "job-unscored"]
