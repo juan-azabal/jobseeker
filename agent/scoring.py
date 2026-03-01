@@ -69,8 +69,8 @@ def heuristic_score(job: dict) -> int:
 
     # Agent-specific skill scoring — simple overlap, not semantic (matches * 4, cap 30)
     all_text = " ".join(
-        [s.lower() for s in p.get("must_have_skills", [])]
-        + [s.lower() for s in p.get("nice_to_have_skills", [])]
+        [s.lower() for s in (p.get("truly_required") or p.get("must_have_skills") or [])]
+        + [s.lower() for s in (p.get("preferred_skills") or p.get("nice_to_have_skills") or [])]
         + [s.lower() for s in p.get("technical_stack", [])]
         + [p.get("responsibilities_summary", "").lower()]
     )
@@ -150,7 +150,8 @@ def heuristic_gate(jobs: list, profile: dict) -> tuple[list, list]:
         # ── Skill overlap (0–20, 5 pts/match, cap 4) ──────────────────────
         job_skills = [
             s.lower().replace("-", " ")
-            for s in (parsed.get("must_have_skills") or []) + (parsed.get("nice_to_have_skills") or [])
+            for s in (parsed.get("truly_required") or parsed.get("must_have_skills") or [])
+            + (parsed.get("preferred_skills") or parsed.get("nice_to_have_skills") or [])
         ]
         matches = sum(1 for js in job_skills if any(ps in js or js in ps for ps in profile_skills))
         score += min(20, matches * 5)

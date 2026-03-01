@@ -90,7 +90,7 @@ def _flatten_job(job, home_locations=None, home_regions=None) -> dict:
     if rag_strengths:
         strength = rag_strengths[0].get("claim", "")
     if not strength:
-        skills = parsed.get("must_have_skills") or []
+        skills = parsed.get("truly_required") or parsed.get("must_have_skills") or []
         strength = skills[0] if skills else ""
 
     # Gap: first RAG gap, or empty
