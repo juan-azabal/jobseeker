@@ -29,6 +29,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `api/main.py` — FastAPI app
   - `api/routes/` — one file per resource (auth, jobs, onboard, ingest, admin, digest)
   - `api/middleware/auth.py` — session auth + admin guards (`get_current_user`, `get_current_admin`)
+  - `api/middleware/staging.py` — blocks non-admin requests in ENVIRONMENT=staging (returns 403)
   - `api/db/` — SQLite init, migrations (001–016), queries
   - `api/ingest.py` — pipeline output → SQLite
   - `api/scoring.py` — per-user heuristic scoring (ported from agent)
@@ -40,6 +41,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `api/cv/` — CV generation pipeline (plan, prompt, llm, validator, docx_builder, ats_audit)
   - `api/analytics.py` — PostHog Python client (init, capture, identify_user, capture_exception)
   - `api/logging_config.py` — structlog configuration (JSON in CI, ConsoleRenderer locally)
+  - `api/db/snapshot.py` — async `download_prod_snapshot()`: streams SQLite backup from prod, validates magic bytes, atomic replace
 - Frontend: `web/`
   - `web/src/components/` — FilterBar, JobCard, ProfileEditor, ScoreBreakdown, FileUpload, UserMenu, DomainSelector, WaitlistForm, MockDashboard, MockJobDetail, MockCVButton
   - `web/src/pages/` — Landing, Login, Onboard, Jobs, JobDetail, Profile, Admin
@@ -115,6 +117,12 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 | `GH_ACTIONS_TOKEN` | GitHub PAT (contents:write + actions:write) | — |
 | `GH_REPO` | GitHub repo `owner/repo` for workflow dispatch | — |
 | `GH_REF` | Git branch for workflow dispatch | `main` |
+| `ENVIRONMENT` | Runtime environment (`production`\|`staging`) | `production` |
+| `PROD_API_URL` | Production base URL for staging DB snapshot | — |
+| `DB_EXPORT_API_KEY` | Shared secret for `/api/admin/db-export` | — |
+| `LLM_MODEL_PARSING` | Override parsing model for cheap staging inference | `gpt-4o-mini` |
+| `LLM_MODEL_SCORING` | Override scoring model for cheap staging inference | `gpt-4o-mini` |
+| `VITE_ENVIRONMENT` | Frontend env string (`staging` shows banner) | — |
 
 ### CV Generation (api/cv/)
 | Variable | Description | Default |
@@ -420,12 +428,26 @@ Scoring data extraction (complete: 2026-03-01)
 - Scoring data extraction: pure data constants in shared/scoring_data.py, logic in shared/scoring_core.py (~370 lines). Re-exports preserve all import paths.
 - GATE: 692 backend tests + 429 agent tests passing (1 pre-existing scorer failure); scoring_core.py ~370 lines; no import path broken.
 
+Phase Staging — Staging Environment (complete: 2026-03-01)
+- Config: `ENVIRONMENT`, `PROD_API_URL`, `DB_EXPORT_API_KEY`, `LLM_MODEL_PARSING`, `LLM_MODEL_SCORING` in `api/config.py`
+- Middleware: `api/middleware/staging.py` — `StagingGateMiddleware` returns 403 for non-admin users when `ENVIRONMENT=staging`
+- Export: `GET /api/admin/db-export` (X-API-Key auth) — streams live SQLite database as download
+- Import: `POST /api/admin/db-import` (admin auth) — downloads prod snapshot, validates SQLite magic, atomic replace
+- Snapshot: `api/db/snapshot.py` — shared `download_prod_snapshot()` used by both import endpoint and startup
+- Auto-seed: startup downloads prod DB when `ENVIRONMENT=staging` + DB file missing + both secrets set
+- Frontend: `StagingBanner` in `App.tsx` (amber, shows when `VITE_ENVIRONMENT=staging`)
+- Admin UI: staging-only "Refresh from production" button in `AdminPage.tsx` (amber section, POST `/api/admin/db-import`)
+- Tests: `tests/test_db_export.py` (4), `tests/test_db_import.py` (5), `tests/test_startup_autoseed.py` (5) — 717 backend tests total
+
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
 - Phase R — Refactor & Test Coverage
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
+- Staging gate middleware (Phase Staging): `StagingGateMiddleware` is registered after `CorrelationIdMiddleware` so the correlation ID is already set when 403 is returned. Non-admin users on staging see 403 on every request. Admin users and health check routes pass through. `/api/health` is whitelisted (no auth check).
+- Staging DB snapshot (Phase Staging): `download_prod_snapshot()` re-raises `httpx.TimeoutException` so the admin route can return 502 (upstream unreachable) vs 400 (bad response). Startup auto-seed catches all exceptions so a failed download never aborts startup.
+- DB export authentication (Phase Staging): uses `X-API-Key` header (same `DB_EXPORT_API_KEY` as `INGEST_API_KEY` pattern) rather than admin session cookie — the staging service needs to call it without a browser session.
 - Dockerfile must copy shared/ (2026-03-01 incident): Railway uses the repo Dockerfile, not Nixpacks. When Phase R added `shared/scoring_core.py`, the Dockerfile only copied `api/` and `agent/` → `ModuleNotFoundError: No module named 'shared'` on every startup. Fix: `COPY shared/ ./shared/` in Stage 2. Diagnosis via `railway logs --deployment <id>`.
 - Railway V2 startCommand does NOT shell-expand variables (2026-03-01 incident): `startCommand = "uvicorn ... --port $PORT"` in railway.toml passes `$PORT` literally → uvicorn error "invalid value for '--port': '$PORT'". The Dockerfile CMD calls `startup.sh` which uses `exec uvicorn ... --port "${PORT:-8000}"` (bash expands it correctly). Never add startCommand back to railway.toml.
 - pyproject.toml must NOT have [project] section (2026-03-01 incident): Nixpacks would have tried `pip install .` but the container uses Dockerfile, not Nixpacks. Keeping only `[tool.ruff]` config in pyproject.toml is correct. PYTHONPATH=${{ github.workspace }} in GHA handles CI import resolution for `shared/`.
