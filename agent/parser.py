@@ -134,7 +134,7 @@ Job Description:
                 {"role": "user", "content": user_content},
             ],
             temperature=0,
-            max_tokens=1000,
+            max_tokens=1500,
         )
 
         raw = response.choices[0].message.content.strip()
@@ -145,6 +145,20 @@ Job Description:
         raw = raw.strip()
 
         parsed = json.loads(raw)
+
+        # Normalize renamed fields for backward compat with old LLM outputs.
+        # v1.5 renames: must_have_skills → truly_required, nice_to_have_skills → preferred_skills.
+        if "must_have_skills" in parsed and "truly_required" not in parsed:
+            parsed["truly_required"] = parsed["must_have_skills"]
+        if "nice_to_have_skills" in parsed and "preferred_skills" not in parsed:
+            parsed["preferred_skills"] = parsed["nice_to_have_skills"]
+
+        # Default new v1.5 fields if LLM omits them.
+        parsed.setdefault("role_in_plain_english", None)
+        parsed.setdefault("company_context", None)
+        parsed.setdefault("verbatim_for_cv", [])
+        parsed.setdefault("truly_required", parsed.get("must_have_skills") or [])
+        parsed.setdefault("preferred_skills", parsed.get("nice_to_have_skills") or [])
 
         # Apply factual pre-seed overrides (structured data wins for factual fields).
         # Log divergences for analysis.
