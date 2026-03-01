@@ -205,7 +205,7 @@ def _sync_to_railway(jobs: list, profile_id: str, railway_url: str, ingest_key: 
         return True
     except httpx.TimeoutException as exc:
         logger.warning("railway_sync_timeout", profile_id=profile_id, error=str(exc))
-        print(f"⚠  Railway sync timeout — email digest may have stale data")
+        print("⚠  Railway sync timeout — email digest may have stale data")
         return False
     except Exception as exc:
         logger.warning("railway_sync_failed", profile_id=profile_id, error=str(exc))

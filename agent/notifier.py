@@ -66,7 +66,7 @@ def fetch_digest(railway_url: str, profile_id: str, ingest_key: str) -> dict | N
             return resp.json()
         except httpx.TimeoutException as exc:
             if attempt == 0:
-                print(f"⚠  Digest fetch timeout (attempt 1), retrying in 5s…")
+                print("⚠  Digest fetch timeout (attempt 1), retrying in 5s…")
                 time.sleep(5)
             else:
                 print(f"⚠  Digest fetch timeout after retry: {exc}")

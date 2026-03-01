@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from api.db.queries import get_jobs, get_user_id_by_profile_id
 from api.routes.ingest import _verify_ingest_key
 from api.routes.jobs import _load_user_geo, _score_and_tier_jobs
-from api.scoring import compute_tier, load_profile_data
+from api.scoring import load_profile_data
 
 logger = structlog.get_logger(__name__)
 
