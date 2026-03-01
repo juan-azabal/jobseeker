@@ -403,8 +403,18 @@ def _send_digest(
     )
 
 
-def run_pipeline(profile_id: str, profile: dict, paths: dict, opts: PipelineOptions) -> None:
-    """Run the full agent pipeline for one user profile."""
+def run_pipeline(
+    profile_id: str,
+    profile: dict,
+    paths: dict,
+    opts: PipelineOptions,
+    pre_scraped_jobs: list[dict] | None = None,
+) -> None:
+    """Run the full agent pipeline for one user profile.
+
+    pre_scraped_jobs: when provided (unified scraping mode), skip _scrape_all()
+                      and use the supplied job list directly.
+    """
     from geo import derive_target_countries  # noqa: PLC0415
 
     start_time = time.time()
@@ -428,7 +438,12 @@ def run_pipeline(profile_id: str, profile: dict, paths: dict, opts: PipelineOpti
         print("(--notify: email digest will be sent)")
     print("=" * 70)
 
-    jobs, geo_rejected = _scrape_all(profile, paths, target_countries)
+    if pre_scraped_jobs is not None:
+        jobs = pre_scraped_jobs
+        geo_rejected = 0
+        print(f"\n(Using pre-scraped pool: {len(jobs)} jobs)")
+    else:
+        jobs, geo_rejected = _scrape_all(profile, paths, target_countries)
     if not jobs:
         return _early_exit(profile_id, opts.mode, start_time, "no_jobs")
 

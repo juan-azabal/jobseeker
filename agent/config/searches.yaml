@@ -1,3 +1,4 @@
+# DEPRECATED: search queries now driven by search_titles in profile YAML. This file is not read.
 # Search configuration
 
 searches:
@@ -59,4 +60,3 @@ searches:
     results_wanted: 10
     hours_old: 168
 
-is_remote: true
