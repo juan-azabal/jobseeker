@@ -12,10 +12,8 @@ import pytz
 import structlog
 
 from shared.scoring_data import (
-    DOMAIN_ALIASES,
     DOMAIN_KEYWORDS,
     GRADE_POINTS,
-    VALID_DOMAINS,
     _CITY_TO_COUNTRY,
     _LANG_SIGNALS,
     _NULL_FLAG,
