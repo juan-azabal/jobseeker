@@ -409,3 +409,112 @@ class TestExcludeCompaniesRoundTrip:
         # exclude_companies preserved from existing
         assert "BigCorp" in merged.get("exclude_companies", [])
         assert "SlowCo" in merged.get("exclude_companies", [])
+
+
+YAML_WITH_SEARCH_TITLES = (
+    FULL_PROFILE_YAML
+    + """target:
+  search_titles:
+    - "Senior Product Manager"
+    - "Product Owner"
+"""
+)
+
+
+class TestSearchTitlesRoundTrip:
+    """search_titles: GET returns list, PATCH persists to YAML."""
+
+    def _yaml_with_titles(self):
+        return FULL_PROFILE_YAML.replace(
+            "  company_type_weights:\n    startup: 10",
+            '  company_type_weights:\n    startup: 10\n  search_titles:\n    - "Senior Product Manager"\n    - "Product Owner"',
+        )
+
+    def test_get_returns_search_titles(self, tmp_path, monkeypatch):
+        client, _, _ = _make_client(
+            tmp_path,
+            monkeypatch,
+            yaml_content=self._yaml_with_titles(),
+            google_id="g_st1",
+            session_token="tok_st1",
+            profile_id="st1_user",
+        )
+        resp = client.get("/api/onboard/profile")
+        assert resp.status_code == 200
+        titles = resp.json()["profile"].get("search_titles", [])
+        assert "Senior Product Manager" in titles
+        assert "Product Owner" in titles
+
+    def test_get_returns_empty_list_when_missing(self, tmp_path, monkeypatch):
+        client, _, _ = _make_client(
+            tmp_path,
+            monkeypatch,
+            google_id="g_st2",
+            session_token="tok_st2",
+            profile_id="st2_user",
+        )
+        resp = client.get("/api/onboard/profile")
+        assert resp.status_code == 200
+        assert resp.json()["profile"].get("search_titles") == []
+
+    def test_patch_search_titles_persists(self, tmp_path, monkeypatch):
+        client, jobagent_dir, profile_id = _make_client(
+            tmp_path,
+            monkeypatch,
+            google_id="g_st3",
+            session_token="tok_st3",
+            profile_id="st3_user",
+        )
+        resp = client.patch(
+            "/api/onboard/profile",
+            json={
+                "name": "E2E User",
+                "home_locations": ["spain"],
+                "domains": {"saas": 15},
+                "seniority_weights": {"senior": 15},
+                "country_weights": {},
+                "company_type_weights": {},
+                "skills": ["python"],
+                "search_titles": ["Senior PM", "Staff PM"],
+            },
+        )
+        assert resp.status_code == 200
+
+        # Verify via GET
+        resp2 = client.get("/api/onboard/profile")
+        titles = resp2.json()["profile"].get("search_titles", [])
+        assert "Senior PM" in titles
+        assert "Staff PM" in titles
+
+        # Verify YAML on disk
+        yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}.yaml")
+        with open(yaml_path) as f:
+            raw = yaml.safe_load(f)
+        assert raw["target"]["search_titles"] == ["Senior PM", "Staff PM"]
+
+    def test_patch_empty_search_titles_writes_empty_list(self, tmp_path, monkeypatch):
+        client, jobagent_dir, profile_id = _make_client(
+            tmp_path,
+            monkeypatch,
+            yaml_content=self._yaml_with_titles(),
+            google_id="g_st4",
+            session_token="tok_st4",
+            profile_id="st4_user",
+        )
+        resp = client.patch(
+            "/api/onboard/profile",
+            json={
+                "name": "E2E User",
+                "home_locations": ["spain"],
+                "domains": {"saas": 15},
+                "seniority_weights": {"senior": 15},
+                "country_weights": {},
+                "company_type_weights": {},
+                "skills": ["python"],
+                "search_titles": [],
+            },
+        )
+        assert resp.status_code == 200
+
+        resp2 = client.get("/api/onboard/profile")
+        assert resp2.json()["profile"].get("search_titles") == []

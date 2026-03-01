@@ -52,25 +52,29 @@ def generate_queries(profile: dict) -> list[dict]:
     indeed_queries = []
     linkedin_queries = []
     for title in titles:
-        indeed_queries.append({
-            "term": title,
-            "location": city,
-            "site": "indeed",
-            "results_wanted": 25,
-            "hours_old": 72,
-            "country_indeed": country_indeed,
-            "description_format": "markdown",
-        })
-        linkedin_queries.append({
-            "term": title,
-            "location": city,
-            "site": "linkedin",
-            "results_wanted": 15,
-            "hours_old": 72,
-            "is_remote": False,
-            "linkedin_fetch_description": True,
-            "description_format": "markdown",
-        })
+        indeed_queries.append(
+            {
+                "term": title,
+                "location": city,
+                "site": "indeed",
+                "results_wanted": 25,
+                "hours_old": 72,
+                "country_indeed": country_indeed,
+                "description_format": "markdown",
+            }
+        )
+        linkedin_queries.append(
+            {
+                "term": title,
+                "location": city,
+                "site": "linkedin",
+                "results_wanted": 15,
+                "hours_old": 72,
+                "is_remote": False,
+                "linkedin_fetch_description": True,
+                "description_format": "markdown",
+            }
+        )
     return indeed_queries + linkedin_queries
 
 

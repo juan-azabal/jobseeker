@@ -10,31 +10,67 @@ from models import RawJob
 def _empty_df():
     return pd.DataFrame(
         columns=[
-            "title", "company", "site", "job_url", "location", "description",
-            "job_type", "date_posted", "is_remote", "salary_source", "interval",
-            "min_amount", "max_amount", "currency", "job_level", "job_function",
-            "emails", "company_industry", "company_url", "company_logo",
-            "company_num_employees", "company_revenue",
+            "title",
+            "company",
+            "site",
+            "job_url",
+            "location",
+            "description",
+            "job_type",
+            "date_posted",
+            "is_remote",
+            "salary_source",
+            "interval",
+            "min_amount",
+            "max_amount",
+            "currency",
+            "job_level",
+            "job_function",
+            "emails",
+            "company_industry",
+            "company_url",
+            "company_logo",
+            "company_num_employees",
+            "company_revenue",
         ]
     )
 
 
 def _make_df(title="Senior PM", company="Acme", site="indeed"):
-    return pd.DataFrame([{
-        "title": title, "company": company, "site": site,
-        "job_url": "https://example.com/1", "location": "Barcelona",
-        "description": "Great job", "job_type": "fulltime", "date_posted": "2024-01-01",
-        "is_remote": False, "salary_source": None, "interval": None,
-        "min_amount": None, "max_amount": None, "currency": None,
-        "job_level": None, "job_function": None, "emails": None,
-        "company_industry": None, "company_url": None, "company_logo": None,
-        "company_num_employees": None, "company_revenue": None,
-    }])
+    return pd.DataFrame(
+        [
+            {
+                "title": title,
+                "company": company,
+                "site": site,
+                "job_url": "https://example.com/1",
+                "location": "Barcelona",
+                "description": "Great job",
+                "job_type": "fulltime",
+                "date_posted": "2024-01-01",
+                "is_remote": False,
+                "salary_source": None,
+                "interval": None,
+                "min_amount": None,
+                "max_amount": None,
+                "currency": None,
+                "job_level": None,
+                "job_function": None,
+                "emails": None,
+                "company_industry": None,
+                "company_url": None,
+                "company_logo": None,
+                "company_num_employees": None,
+                "company_revenue": None,
+            }
+        ]
+    )
 
 
 class TestRunScraperFromQueries:
     def test_empty_list_returns_empty(self):
         from scraper import run_scraper_from_queries
+
         result = run_scraper_from_queries([])
         assert result == []
 
@@ -42,9 +78,13 @@ class TestRunScraperFromQueries:
         from scraper import run_scraper_from_queries
 
         query = {
-            "term": "Product Manager", "location": "barcelona", "site": "indeed",
-            "results_wanted": 25, "hours_old": 72,
-            "country_indeed": "Spain", "description_format": "markdown",
+            "term": "Product Manager",
+            "location": "barcelona",
+            "site": "indeed",
+            "results_wanted": 25,
+            "hours_old": 72,
+            "country_indeed": "Spain",
+            "description_format": "markdown",
         }
         with patch("scraper.scrape_jobs", return_value=_make_df(site="indeed")):
             result = run_scraper_from_queries([query])
@@ -56,9 +96,13 @@ class TestRunScraperFromQueries:
         from scraper import run_scraper_from_queries
 
         query = {
-            "term": "Product Manager", "location": "barcelona", "site": "indeed",
-            "results_wanted": 25, "hours_old": 72,
-            "country_indeed": "Spain", "description_format": "markdown",
+            "term": "Product Manager",
+            "location": "barcelona",
+            "site": "indeed",
+            "results_wanted": 25,
+            "hours_old": 72,
+            "country_indeed": "Spain",
+            "description_format": "markdown",
         }
         with patch("scraper.scrape_jobs", return_value=_empty_df()) as mock_scrape:
             run_scraper_from_queries([query])
@@ -78,13 +122,16 @@ class TestRunScraperFromQueries:
         from scraper import run_scraper_from_queries
 
         query = {
-            "term": "Product Manager", "location": "barcelona", "site": "linkedin",
-            "results_wanted": 15, "hours_old": 72,
-            "is_remote": False, "linkedin_fetch_description": True,
+            "term": "Product Manager",
+            "location": "barcelona",
+            "site": "linkedin",
+            "results_wanted": 15,
+            "hours_old": 72,
+            "is_remote": False,
+            "linkedin_fetch_description": True,
             "description_format": "markdown",
         }
-        with patch("scraper.scrape_jobs", return_value=_empty_df()) as mock_scrape, \
-             patch("scraper.time") as mock_time:
+        with patch("scraper.scrape_jobs", return_value=_empty_df()) as mock_scrape, patch("scraper.time") as mock_time:
             run_scraper_from_queries([query])
         call_kwargs = mock_scrape.call_args[1]
         assert call_kwargs["site_name"] == "linkedin"
@@ -100,13 +147,16 @@ class TestRunScraperFromQueries:
         from search_generator import LINKEDIN_DELAY_SECS
 
         query = {
-            "term": "PM", "location": "barcelona", "site": "linkedin",
-            "results_wanted": 15, "hours_old": 72,
-            "is_remote": False, "linkedin_fetch_description": True,
+            "term": "PM",
+            "location": "barcelona",
+            "site": "linkedin",
+            "results_wanted": 15,
+            "hours_old": 72,
+            "is_remote": False,
+            "linkedin_fetch_description": True,
             "description_format": "markdown",
         }
-        with patch("scraper.scrape_jobs", return_value=_empty_df()), \
-             patch("scraper.time") as mock_time:
+        with patch("scraper.scrape_jobs", return_value=_empty_df()), patch("scraper.time") as mock_time:
             run_scraper_from_queries([query])
         mock_time.sleep.assert_called_once_with(LINKEDIN_DELAY_SECS)
 
@@ -115,12 +165,15 @@ class TestRunScraperFromQueries:
         from scraper import run_scraper_from_queries
 
         query = {
-            "term": "PM", "location": "barcelona", "site": "indeed",
-            "results_wanted": 25, "hours_old": 72,
-            "country_indeed": "Spain", "description_format": "markdown",
+            "term": "PM",
+            "location": "barcelona",
+            "site": "indeed",
+            "results_wanted": 25,
+            "hours_old": 72,
+            "country_indeed": "Spain",
+            "description_format": "markdown",
         }
-        with patch("scraper.scrape_jobs", return_value=_empty_df()), \
-             patch("scraper.time") as mock_time:
+        with patch("scraper.scrape_jobs", return_value=_empty_df()), patch("scraper.time") as mock_time:
             run_scraper_from_queries([query])
         mock_time.sleep.assert_not_called()
 
@@ -129,12 +182,24 @@ class TestRunScraperFromQueries:
         from scraper import run_scraper_from_queries
 
         queries = [
-            {"term": "PM", "location": "barcelona", "site": "indeed",
-             "results_wanted": 25, "hours_old": 72, "country_indeed": "Spain",
-             "description_format": "markdown"},
-            {"term": "Product Manager", "location": "barcelona", "site": "indeed",
-             "results_wanted": 25, "hours_old": 72, "country_indeed": "Spain",
-             "description_format": "markdown"},
+            {
+                "term": "PM",
+                "location": "barcelona",
+                "site": "indeed",
+                "results_wanted": 25,
+                "hours_old": 72,
+                "country_indeed": "Spain",
+                "description_format": "markdown",
+            },
+            {
+                "term": "Product Manager",
+                "location": "barcelona",
+                "site": "indeed",
+                "results_wanted": 25,
+                "hours_old": 72,
+                "country_indeed": "Spain",
+                "description_format": "markdown",
+            },
         ]
         # Both return same title+company → should deduplicate
         with patch("scraper.scrape_jobs", return_value=_make_df()):
@@ -147,14 +212,27 @@ class TestRunScraperFromQueries:
         from search_generator import LINKEDIN_DELAY_SECS
 
         queries = [
-            {"term": "PM", "location": "barcelona", "site": "linkedin",
-             "results_wanted": 15, "hours_old": 72, "is_remote": False,
-             "linkedin_fetch_description": True, "description_format": "markdown"},
-            {"term": "Senior PM", "location": "barcelona", "site": "linkedin",
-             "results_wanted": 15, "hours_old": 72, "is_remote": False,
-             "linkedin_fetch_description": True, "description_format": "markdown"},
+            {
+                "term": "PM",
+                "location": "barcelona",
+                "site": "linkedin",
+                "results_wanted": 15,
+                "hours_old": 72,
+                "is_remote": False,
+                "linkedin_fetch_description": True,
+                "description_format": "markdown",
+            },
+            {
+                "term": "Senior PM",
+                "location": "barcelona",
+                "site": "linkedin",
+                "results_wanted": 15,
+                "hours_old": 72,
+                "is_remote": False,
+                "linkedin_fetch_description": True,
+                "description_format": "markdown",
+            },
         ]
-        with patch("scraper.scrape_jobs", return_value=_empty_df()), \
-             patch("scraper.time") as mock_time:
+        with patch("scraper.scrape_jobs", return_value=_empty_df()), patch("scraper.time") as mock_time:
             run_scraper_from_queries(queries)
         assert mock_time.sleep.call_count == 2

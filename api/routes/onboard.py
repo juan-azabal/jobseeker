@@ -615,6 +615,10 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
         sw = body.profile.get("seniority_weights") or _derive_seniority_weights(body.profile)
         if sw:
             profile_data.setdefault("target", {})["seniority_weights"] = sw
+        # Inject search_titles from the profile editor
+        st = body.profile.get("search_titles") or []
+        if st:
+            profile_data.setdefault("target", {})["search_titles"] = st
         profile_yaml = yaml.dump(profile_data, default_flow_style=False, allow_unicode=True, sort_keys=False)
         logger.info(
             "Generated per-user searches for %s (%d searches)",
@@ -805,6 +809,7 @@ def _yaml_to_flat_profile(raw: dict) -> dict:
         "location_preference": user_block.get("location_preference", "b"),
         "country_weights": dict(target_block.get("country_weights") or {}),
         "company_type_weights": dict(target_block.get("company_type_weights") or {}),
+        "search_titles": list(target_block.get("search_titles") or []),
     }
 
 
@@ -843,6 +848,10 @@ def _apply_flat_to_yaml(raw: Any, flat: dict) -> None:
     raw["target"]["company_type_weights"] = CommentedMap(flat.get("company_type_weights") or {})
 
     raw["skills"] = CommentedSeq(flat.get("skills") or [])
+
+    search_titles = flat.get("search_titles")
+    if search_titles is not None:
+        raw["target"]["search_titles"] = CommentedSeq(search_titles)
 
     # exclude_companies at YAML root (not under user block)
     exclude = list(flat.get("exclude_companies") or [])
@@ -901,6 +910,7 @@ class UpdateProfileRequest(BaseModel):
     role_type: str = ""
     role_function: str = ""
     track: str = "ic"
+    search_titles: list[str] = []
 
 
 @router.patch("/profile")
@@ -947,6 +957,7 @@ async def update_profile(body: UpdateProfileRequest, user: dict = Depends(get_cu
         "role_function": body.role_function,
         "track": body.track,
         "exclude_companies": list(raw.get("exclude_companies") or []),
+        "search_titles": body.search_titles,
     }
     _apply_flat_to_yaml(raw, flat)
 

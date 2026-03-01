@@ -19,6 +19,7 @@ interface Profile {
   country_weights?: Record<string, number>;
   company_type_weights?: Record<string, number>;
   skills: string[];
+  search_titles: string[];
   exclude_companies: string[];
   salary_min?: number;
   location_preference?: string;

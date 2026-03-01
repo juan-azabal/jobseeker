@@ -282,9 +282,7 @@ def run_scraper_from_queries(queries: list[dict]) -> list[RawJob]:
                         job_level=_or_none(row.get("job_level")),
                         job_function=_or_none(row.get("job_function")),
                         emails=(
-                            [e.strip() for e in row["emails"].split(",") if e.strip()]
-                            if row.get("emails")
-                            else None
+                            [e.strip() for e in row["emails"].split(",") if e.strip()] if row.get("emails") else None
                         ),
                     )
             print(f"   Found {len(results)} results ({len(all_jobs)} unique total)")
