@@ -1,11 +1,15 @@
 import os
+import sqlite3
+import tempfile
 from pathlib import Path
 
 import httpx
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile, File
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from api import config
 from api.db.queries import (
     get_all_users,
     reset_user_onboarding,
@@ -21,6 +25,10 @@ from api.middleware.auth import get_current_admin, SESSION_COOKIE
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+def _db_path() -> str:
+    return os.environ.get("DB_PATH", "data/jobseeker.db")
 
 
 class TriggerRequest(BaseModel):
@@ -514,3 +522,54 @@ async def upload_cv_references(
         logger.info("CV reference file uploaded", filename=upload.filename, size=len(content), admin=admin["email"])
 
     return {"saved": saved, "rejected": rejected, "refs_dir": str(refs_dir)}
+
+
+# ── DB snapshot endpoints (staging ↔ prod transfer) ──────────────────────────
+
+
+@router.get("/db-export")
+def db_export(request: Request):
+    """Stream a SQLite backup of the live database to the caller.
+
+    Authentication: X-API-Key header validated against config.DB_EXPORT_API_KEY.
+    Does NOT require user auth — this is a machine-to-machine endpoint used by
+    staging on startup to seed its own database.
+
+    Fail-closed: if DB_EXPORT_API_KEY is empty the endpoint always returns 403.
+    """
+    provided_key = request.headers.get("X-API-Key", "")
+    expected_key = config.DB_EXPORT_API_KEY
+    if not expected_key or provided_key != expected_key:
+        logger.warning("DB export: rejected request", has_key=bool(provided_key))
+        raise HTTPException(status_code=403, detail="Invalid or missing API key")
+
+    source_path = _db_path()
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    backup_path = tmp.name
+
+    try:
+        src = sqlite3.connect(source_path)
+        dst = sqlite3.connect(backup_path)
+        src.backup(dst)
+        dst.close()
+        src.close()
+    except Exception as exc:
+        logger.error("DB export: backup failed", error=str(exc))
+        Path(backup_path).unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail="DB backup failed") from exc
+
+    def _stream_and_cleanup():
+        try:
+            with open(backup_path, "rb") as f:
+                while chunk := f.read(65536):
+                    yield chunk
+        finally:
+            Path(backup_path).unlink(missing_ok=True)
+
+    logger.info("DB export: streaming backup", source=source_path)
+    return StreamingResponse(
+        _stream_and_cleanup(),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": "attachment; filename=jobseeker.db"},
+    )
