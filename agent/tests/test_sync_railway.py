@@ -1,4 +1,4 @@
-"""Tests for _sync_to_railway() helper in agent/main.py.
+"""Tests for _sync_to_railway() helper in agent/pipeline.py.
 
 Verifies:
 - Successful POST → logs success, returns True.
@@ -16,7 +16,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import main as agent_main
+import pipeline as agent_main
 
 SAMPLE_JOBS = [
     {"job_id": "j1", "title": "PM", "company": "Acme", "rag_score": {"score": 72, "tier": "A"}},
