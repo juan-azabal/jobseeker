@@ -15,6 +15,8 @@ import sys
 import time
 from datetime import datetime
 
+import httpx
+
 import structlog
 
 from logging_setup import configure_logging
@@ -174,6 +176,41 @@ def _heuristic_gate(jobs: list, profile: dict) -> tuple[list, list]:
         (to_score if score >= threshold else skipped).append(job)
 
     return to_score, skipped
+
+
+def _sync_to_railway(jobs: list, profile_id: str, railway_url: str, ingest_key: str) -> bool:
+    """POST jobs to /api/ingest on Railway so the digest endpoint has today's data.
+
+    Called as Step 10b, before the email digest (Step 11), to ensure Railway DB
+    is populated before GET /api/digest/{profile_id} is called.
+
+    Returns True on success, False on any failure (caller continues regardless).
+    """
+    url = railway_url.rstrip("/")
+    if url.startswith("http://"):
+        url = "https://" + url[len("http://") :]
+    endpoint = f"{url}/api/ingest"
+    payload = {"jobs": jobs, "profile_id": profile_id}
+
+    try:
+        resp = httpx.post(
+            endpoint,
+            json=payload,
+            headers={"X-Ingest-Key": ingest_key},
+            timeout=30.0,
+        )
+        resp.raise_for_status()
+        logger.info("railway_sync_ok", profile_id=profile_id, jobs=len(jobs), status=resp.status_code)
+        print(f"   Railway sync: {len(jobs)} jobs → {resp.status_code}")
+        return True
+    except httpx.TimeoutException as exc:
+        logger.warning("railway_sync_timeout", profile_id=profile_id, error=str(exc))
+        print("⚠  Railway sync timeout — email digest may have stale data")
+        return False
+    except Exception as exc:
+        logger.warning("railway_sync_failed", profile_id=profile_id, error=str(exc))
+        print(f"⚠  Railway sync failed ({exc}) — email digest may have stale data")
+        return False
 
 
 def _append_seen_ids(jobs, path=SEEN_IDS_PATH):
@@ -858,6 +895,7 @@ def _heuristic_score(job):
 
     # Location (0-10) — 19.1.3: graduated scoring for geo-restricted remote
     from geo import is_pure_timezone as _is_pure_tz
+
     loc_type = p.get("location_type", "unknown")
     job_loc = (job.get("location") or "").lower()
     remote_restriction = (p.get("remote_restriction") or "").strip()
@@ -876,12 +914,9 @@ def _heuristic_score(job):
                 home_countries_check.add(_CITY_TO_COUNTRY.get(_loc, _loc))
                 home_countries_check.add(_loc)
             # Mirrors api/scoring.py eligibility check: home country OR any home region
-            _user_eligible = (
-                any(c in restriction_lower for c in home_countries_check if c)
-                or (bool(_HOME_REGIONS) and (
-                    "europe" in restriction_lower
-                    or any(r.lower() in restriction_lower for r in _HOME_REGIONS)
-                ))
+            _user_eligible = any(c in restriction_lower for c in home_countries_check if c) or (
+                bool(_HOME_REGIONS)
+                and ("europe" in restriction_lower or any(r.lower() in restriction_lower for r in _HOME_REGIONS))
             )
             score += 8 if _user_eligible else 2  # 19.1.3
         else:
@@ -1655,6 +1690,13 @@ def main():
     if rejected:
         save_results(rejected, folder="output/rejected", profile_id=profile_id)
 
+    # Step 10b: Sync to Railway before email so GET /api/digest/{profile_id} has today's data.
+    # The GHA workflow curl POST /api/ingest is an idempotent backup (ON CONFLICT no-ops).
+    _railway_url = os.environ.get("RAILWAY_URL", "")
+    _ingest_key = os.environ.get("INGEST_API_KEY", "")
+    if _railway_url and _ingest_key:
+        _sync_to_railway(all_parsed, profile_id, _railway_url, _ingest_key)
+
     # Mark jobs as seen immediately after saving results.
     # Actual persistence to git only happens in GHA *after* successful Railway sync,
     # so if sync fails the seen_ids file is not pushed and jobs will reappear next run.
@@ -1731,10 +1773,23 @@ def main():
                 "n_watchlist": n_watchlist,
                 "date": datetime.now().strftime("%d %b %Y"),
             }
-            email_sent = send_digest(all_parsed, prefilter_stats, run_meta, profile=profile)
+            _email_railway_url = os.environ.get("RAILWAY_URL", "")
+            _email_ingest_key = os.environ.get("INGEST_API_KEY", "")
+            if _email_railway_url and _email_ingest_key:
+                email_sent = send_digest(
+                    railway_url=_email_railway_url,
+                    profile_id=profile_id,
+                    ingest_key=_email_ingest_key,
+                    rejected_stats=prefilter_stats,
+                    run_meta=run_meta,
+                    profile=profile,
+                )
+            else:
+                print("⚠  RAILWAY_URL or INGEST_API_KEY not set — skipping email digest")
+                email_sent = False
             if not email_sent:
-                logger.warning("email_skipped", reason="seen_ids_already_updated")
-                print("⚠  Email not sent (seen_ids already updated — sync will persist them)")
+                logger.warning("email_skipped", reason="api_unavailable_or_no_jobs")
+                print("⚠  Email not sent")
         except Exception as e:
             logger.error("email_error", error=str(e), exc_info=True)
             print(f"⚠  Email notify error (pipeline succeeded): {e}")

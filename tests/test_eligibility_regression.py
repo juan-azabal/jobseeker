@@ -47,7 +47,7 @@ _HOME_REGIONS_BCN = ["eu", "eu only", "eu-based", "europe", "european", "emea", 
 
 _PROFILE_MINIMAL_FLAT = {
     "domains": {},
-    "seniority": {},          # all seniorities = 0
+    "seniority": {},  # all seniorities = 0
     "skills": [],
     "location_preference": "a",
     "home_locations": ["barcelona", "spain"],
@@ -63,7 +63,7 @@ _PROFILE_MINIMAL_AGENT = {
     },
     "target": {
         "domains": {},
-        "seniority_weights": {"senior": 0},   # explicit 0 avoids compute_seniority_weights fallback
+        "seniority_weights": {"senior": 0},  # explicit 0 avoids compute_seniority_weights fallback
         "country_weights": {},
     },
     "skills": [],
@@ -114,6 +114,7 @@ def _make_parsed(restriction: str | None, loc_type: str = "remote") -> dict:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _api(profile_flat: dict, parsed: dict) -> int:
     return _api_heuristic(profile_flat, parsed, _JOB_REMOTE, is_reloc=False)
 
@@ -122,6 +123,7 @@ def _agent(profile_agent: dict, parsed: dict) -> int:
     sys.path.insert(0, _AGENT_DIR)
     try:
         import main as agent_main
+
         agent_main._load_heuristic_config(copy.deepcopy(profile_agent))
         job = {"title": "Senior PM", "company": "AcmeCo", "location": "Remote", "parsed": parsed}
         return agent_main._heuristic_score(job)

@@ -26,7 +26,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 ## Structure
 - Backend: `api/`
   - `api/main.py` — FastAPI app
-  - `api/routes/` — one file per resource (auth, jobs, onboard, ingest, admin)
+  - `api/routes/` — one file per resource (auth, jobs, onboard, ingest, admin, digest)
   - `api/middleware/auth.py` — session auth + admin guards (`get_current_user`, `get_current_admin`)
   - `api/db/` — SQLite init, migrations (001–016), queries
   - `api/ingest.py` — pipeline output → SQLite
@@ -297,6 +297,10 @@ Phase 20 — Email Digest Overhaul (complete: 2026-02-28)
 - APP_BASE_URL env var for platform URL in digest (default: Railway production URL)
 - _build_headline() updated to include score: "{company} · {loc_type} · {score}"
 - GATE 20: 517 agent tests passing (1 pre-existing scorer failure); test_digest_template.py with 21 regression tests
+  - agent/tests/test_digest_template.py — 22 template regression tests (Phase 20 + 20b)
+  - tests/test_digest_endpoint.py — 7 API endpoint tests (Phase 20b)
+  - tests/test_digest_parity.py — 2 score/tier parity tests (Phase 20b)
+  - agent/tests/test_sync_railway.py — 5 tests for _sync_to_railway() (Phase 20b)
 
 ### Current
 Ingestion Overhaul — complete (2026-02-26)
@@ -389,6 +393,15 @@ Phase 15 — Geo Filtering (complete: 2026-02-27)
 - 15.9: End-to-end wiring — main.py derives target_countries via derive_target_countries(home_locations); passes to ATS scraper, WTTJ scraper, prefilter_jobs(); 8 integration tests (TestEndToEndGeoFiltering); 458 agent tests passing (1 pre-existing scorer failure)
 - GATE 15.9 (closed): all gate conditions verified; _is_us_only + _is_non_target_onsite removed; all filters profile-aware; PostHog events per-job + aggregate
 
+Phase 20b — Email Digest API Architecture (complete: 2026-03-01)
+- GET /api/digest/{profile_id}: new endpoint in api/routes/digest.py (X-Ingest-Key auth, same scoring as list_jobs)
+- Step 10b: _sync_to_railway() in agent/main.py POSTs to /api/ingest before email (wakes Railway, ensures today's data)
+- notifier.py rewritten: fetch_digest() + _flatten_api_job() + _format_salary() + _build_context_from_api(); zero scoring logic
+- Eliminated: dual scoring, tier threshold divergence (was 50/30 vs 60/40), _is_reloc(), all from-main-import, _sort_key()
+- Removed strength/gap from template: list API doesn't return; old values were inconsistent with RAG output
+- API parity: 2 parity tests verify score/tier identical between digest and web list_jobs(period='today')
+- GATE 20b: 659 backend tests + 523 agent tests passing (1 pre-existing scorer failure)
+
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
 - Phase R — Refactor & Test Coverage
@@ -400,6 +413,11 @@ Phase 15 — Geo Filtering (complete: 2026-02-27)
 - Digest dark mode (Phase 20): template is dark-first (zinc-950 bg). Added color-scheme meta + @media prefers-color-scheme for Apple Mail/iOS. Gmail strips <style> but renders inline styles correctly. Outlook renders table layout with inline styles.
 - Digest rollback (Phase 20): v1 template preserved as email_digest_v1.html.j2. DIGEST_TEMPLATE env var selects template filename. Default: email_digest.html.j2 (v2). Toggle: set DIGEST_TEMPLATE=email_digest_v1.html.j2 for instant rollback.
 - No unsubscribe link (Phase 20): deferred until notification preferences exist in /profile. A dead link erodes trust more than no link.
+- Email digest architecture (Phase 20b): agent does POST /api/ingest (Step 10b), then GET /api/digest/{profile_id} (Step 11). Same code path as list_jobs(period="today"). If API unreachable, email skipped. No local fallback (reintroduces drift). Trade-off: email depends on Railway uptime. Acceptable.
+- Strength/gap removed from email (Phase 20b): list API doesn't return. Old values were inconsistent with RAG output anyway. Clean removal.
+- httpx over requests (Phase 20b): httpx already in requirements.txt root (0.28.1). requests only in agent/requirements.txt. Avoids implicit transitive dependency.
+- Digest rollback v2 (Phase 20b): v1 template is reference-only. It requires variables (strength, gap, local scores) that the new notifier doesn't produce. Full rollback = git revert of all 20b commits. DIGEST_TEMPLATE env var no longer provides true rollback.
+- first_seen filter limitation (Phase 20b): jobs discovered by user A yesterday and re-ingested today for user B have first_seen=yesterday → excluded from "today" digest in both email and web. Consistent but functionally incomplete. Fix: consider last_seen or ingested_at filter.
 - Repo cleanup (2026-02-27): Plan files moved to Planes/ (gitignored). Merged worktrees pruned (amazing-austin, competent-neumann, suspicious-jones, trusting-montalcini). Dead code removed: UserMenu.tsx component, update_user_profile_id() function in queries.py. Ruff clean. File copy consistency audited (see docs/copy-sync-report.md) — all dual copies in sync.
 - Geo filtering architecture (Phase 15): three-layer detection chain. L1=resolve_location_country() on structured location field (highest confidence). L2=geonamescache city mention in description near context words ("based in", "office in" etc). L3=US visa/auth language ("e-verify", "remote within the us", "must be authorized to work in the u.s"). Conservative: unresolved location + no signals → pass. Remote fulltime always passes regardless of location. "nan" added to sentinel pass-through list (geonamescache resolves it to "CN" via city name match).
 - Geo filter layer tracking (Phase 15): _is_non_target_geo() returns 3-tuple (rejected, country, filter_layer). filter_layer: "prefilter_location" | "prefilter_description" | "prefilter_signal" | None. Stored as job["_geo_layer"] for PostHog tracking. PostHog events: geo_filter_applied (per-job) + geo_filter_run_stats (aggregate per pipeline run).

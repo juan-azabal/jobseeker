@@ -5,6 +5,7 @@ Verifies that:
 - Jobs with scored_v2=1 still use hybrid_score with grades (v2 unchanged)
 - Jobs with no ujs still use _score_single_job (unscored unchanged)
 """
+
 import json
 import sqlite3
 import tempfile
@@ -17,6 +18,7 @@ import pytest
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 def _make_db() -> str:
     """Create a minimal in-memory-like SQLite DB with required tables."""
@@ -139,6 +141,7 @@ def _insert_ujs_v2(db_path: str, user_id: int, job_id: str, tech_grade: str, pro
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestV1Elimination:
     """v1 stored scores must not be returned directly — all jobs re-scored."""
 
@@ -160,25 +163,21 @@ class TestV1Elimination:
             "parsed": json.dumps(_PARSED_DATA),
             "domain": "data",
             "role_function": None,
-            "ujs_score": 85,        # v1: stored score
+            "ujs_score": 85,  # v1: stored score
             "ujs_tier": "A",
             "ujs_scored": 1,
             "ujs_technical_grade": None,
             "ujs_profile_grade": None,
-            "ujs_scored_v2": 0,     # NOT v2
+            "ujs_scored_v2": 0,  # NOT v2
             "remote_restriction": "Netherlands only",
         }
 
         with patch("api.routes.jobs._db_path", return_value=db_path):
             with patch("api.routes.jobs.get_all_domain_overrides", return_value={}):
-                results = _score_and_tier_jobs(
-                    [job], _PROFILE_DATA, ["barcelona"], ["EU"], user_id=1
-                )
+                results = _score_and_tier_jobs([job], _PROFILE_DATA, ["barcelona"], ["EU"], user_id=1)
 
         # Score must NOT be 85 (the stored v1 value)
-        assert results[0]["score"] != 85, (
-            f"v1 stored score 85 should not be used directly; got {results[0]['score']}"
-        )
+        assert results[0]["score"] != 85, f"v1 stored score 85 should not be used directly; got {results[0]['score']}"
 
     def test_v2_job_uses_hybrid_score(self):
         """v2 job (scored_v2=1) uses hybrid_score with grades (v2 unchanged)."""
@@ -204,15 +203,13 @@ class TestV1Elimination:
             "ujs_scored": 1,
             "ujs_technical_grade": "A",
             "ujs_profile_grade": "B",
-            "ujs_scored_v2": 1,      # v2!
+            "ujs_scored_v2": 1,  # v2!
             "remote_restriction": None,
         }
 
         with patch("api.routes.jobs._db_path", return_value=db_path):
             with patch("api.routes.jobs.get_all_domain_overrides", return_value={}):
-                results = _score_and_tier_jobs(
-                    [job], _PROFILE_DATA, ["barcelona"], ["EU"], user_id=1
-                )
+                results = _score_and_tier_jobs([job], _PROFILE_DATA, ["barcelona"], ["EU"], user_id=1)
 
         expected = hybrid_score(
             _PROFILE_DATA,
@@ -223,9 +220,7 @@ class TestV1Elimination:
             profile_grade="B",
             db_path=db_path,
         )
-        assert results[0]["score"] == expected, (
-            f"v2 job should use hybrid_score({expected}), got {results[0]['score']}"
-        )
+        assert results[0]["score"] == expected, f"v2 job should use hybrid_score({expected}), got {results[0]['score']}"
 
     def test_unscored_job_uses_heuristic(self):
         """Job with no ujs at all uses _score_single_job (heuristic path)."""
@@ -255,9 +250,7 @@ class TestV1Elimination:
 
         with patch("api.routes.jobs._db_path", return_value=db_path):
             with patch("api.routes.jobs.get_all_domain_overrides", return_value={}):
-                results = _score_and_tier_jobs(
-                    [job], _PROFILE_DATA, ["barcelona"], ["EU"], user_id=1
-                )
+                results = _score_and_tier_jobs([job], _PROFILE_DATA, ["barcelona"], ["EU"], user_id=1)
 
         score = results[0]["score"]
         assert isinstance(score, int)

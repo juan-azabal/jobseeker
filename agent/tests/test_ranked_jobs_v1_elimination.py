@@ -3,6 +3,7 @@
 Verifies that ranked_jobs() and _auto_skip_reloc() do NOT use stored v1
 scores directly — they must always compute from _heuristic_score() + grades.
 """
+
 import sys
 import os
 
@@ -41,12 +42,14 @@ class TestRankedJobsV1Elimination:
     def setup_method(self):
         """Load heuristic config with a minimal profile."""
         import main as m
+
         m._PROFILE_SKILLS = ["python", "sql"]
         m._DOMAIN_SCORES = {"data": 15}
         m._SENIORITY_SCORES = {"principal": 15, "senior": 10, "staff": 15}
         m._HOME_LOCATIONS = ["barcelona"]
         m._HOME_REGIONS = ["eu", "europe"]
         from geo import build_region_pattern
+
         m._HOME_REGION_RE = build_region_pattern(m._HOME_REGIONS)
 
     def test_v1_stored_score_not_used_directly(self):

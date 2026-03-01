@@ -21,7 +21,7 @@
   Gmail strips <style> but renders inline styles correctly.
 
   TIERS (progressive density reduction):
-  - A (fit > 60): 4px border #3f3f46, full card, strength/gap, 26px score
+  - A (fit > 60): 4px border #3f3f46, full card, 26px score
   - B (fit 40-60): 2px border #3f3f46, compact row, 18px score
   - C (fit <= 40): no border, single line, muted, inline score
 
@@ -103,10 +103,6 @@
         </td>
       </tr>
       </table>
-      <p style="margin:10px 0 0; font-size:13px; color:#d4d4d8; line-height:1.7;">
-        <strong>+</strong> {{ job.strength }}<br>
-        <span style="color:#71717a;"><strong>–</strong> {{ job.gap }}</span>
-      </p>
       <p style="margin:10px 0 0;">
         <a href="{{ job.platform_link }}" style="font-size:13px; font-weight:700; color:#8b5cf6; text-decoration:none;">Ver en JobSeeker →</a>
         &nbsp;&nbsp;

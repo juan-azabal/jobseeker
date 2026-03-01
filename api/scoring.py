@@ -1007,6 +1007,7 @@ def heuristic_score(
 
     # Determine geo-restriction status once for location + country_weights blocks
     from api.geo import is_pure_timezone as _is_pure_tz
+
     remote_restriction = (parsed.get("remote_restriction") or "").strip()
     _is_geo_restricted_remote = (
         loc_type == "remote"
@@ -1024,7 +1025,9 @@ def heuristic_score(
             home_countries_check.add(_loc)
         if any(c in restriction_lower for c in home_countries_check if c):
             _user_eligible = True
-        elif home_regions and ("europe" in restriction_lower or any(r.lower() in restriction_lower for r in home_regions)):
+        elif home_regions and (
+            "europe" in restriction_lower or any(r.lower() in restriction_lower for r in home_regions)
+        ):
             _user_eligible = True
 
     if loc_pref == "a":
