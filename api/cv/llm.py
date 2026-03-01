@@ -2,7 +2,7 @@
 
 Provider-agnostic interface configured via environment variables:
   CV_LLM_PROVIDER  — anthropic (default) | openai
-  CV_LLM_MODEL     — optional model override
+  LLM_MODEL_CV     — optional model override (reads via api.config; replaces CV_LLM_MODEL)
   ANTHROPIC_API_KEY — required when provider=anthropic
   OPENAI_API_KEY    — required when provider=openai
 
@@ -15,6 +15,8 @@ import os
 import re
 
 import structlog
+
+from api import config
 
 logger = structlog.get_logger(__name__)
 
@@ -69,7 +71,7 @@ def generate_cv(
         RuntimeError: If the required API key env var is missing.
     """
     provider = os.environ.get("CV_LLM_PROVIDER", "anthropic").lower()
-    model_override = os.environ.get("CV_LLM_MODEL", "").strip()
+    model_override = config.LLM_MODEL_CV.strip()
 
     if provider == "anthropic":
         raw = _call_anthropic(system_prompt, user_prompt, model_override, distinct_id)
