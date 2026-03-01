@@ -34,6 +34,10 @@ prefilter:
   - GetApp
   - Software Advice
   - G2
+  - Gartner Digital Markets
+  - Softonic
+  - Marfeel
+  - LaVanguardia
   location:
     accept_remote: true
     accept_hybrid: true
