@@ -80,7 +80,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `agent/schemas/` — JSON output contracts (parsed_job, scored_job, digest_context, gap_history_entry)
   - `agent/patterns/` — interface contracts per module
   - `agent/docs/decisions/` — ADRs (001–007)
-- Tests: `tests/` (backend, 683 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 517 tests)
+- Tests: `tests/` (backend, 692 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 523 tests)
   - `agent/tests/fixtures.py` — shared BASELINE_PROFILE fixture (fixed dict, not from juan.yaml)
   - `agent/tests/test_notifier_v2.py` — v2 rag_score compat in _build_context (P15 fix)
   - `agent/tests/test_ranked_jobs_v2.py` — hybrid score in ranked_jobs + print_summary mode label (P16/P18 fix)
@@ -403,16 +403,24 @@ Phase 15 — Geo Filtering (complete: 2026-02-27)
 
 Phase 20b — Email Digest API Architecture (complete: 2026-03-01)
 - GET /api/digest/{profile_id}: new endpoint in api/routes/digest.py (X-Ingest-Key auth, same scoring as list_jobs)
-- Step 10b: _sync_to_railway() in agent/main.py POSTs to /api/ingest before email (wakes Railway, ensures today's data)
+- Step 10b: _sync_to_railway() in agent/pipeline.py POSTs to /api/ingest before email (wakes Railway, ensures today's data)
 - notifier.py rewritten: fetch_digest() + _flatten_api_job() + _format_salary() + _build_context_from_api(); zero scoring logic
 - Eliminated: dual scoring, tier threshold divergence (was 50/30 vs 60/40), _is_reloc(), all from-main-import, _sort_key()
 - Removed strength/gap from template: list API doesn't return; old values were inconsistent with RAG output
 - API parity: 2 parity tests verify score/tier identical between digest and web list_jobs(period='today')
 - GATE 20b: 659 backend tests + 523 agent tests passing (1 pre-existing scorer failure)
 
+Phase R — Refactor & Module Split (in progress, PR #31)
+- R1: `shared/scoring_core.py` extracted — single source of truth for DOMAIN_KEYWORDS, DOMAIN_ALIASES, infer_domain(), grade_to_points(), is_pure_timezone(), compute_eligibility_penalty(), heuristic_score(); eliminates 4 dual-copy pairs across api/ and agent/
+- R2 (agent split): agent/main.py 642→72 lines; logic extracted to pipeline.py (480L), scoring.py (176L), display.py (207L), reloc.py (90L), salary.py (99L)
+- R3 (api trim): api/scoring.py 407→398 lines; unused re-exports removed, VALID_DOMAINS kept as explicit re-export
+- CI fix: PYTHONPATH=${{ github.workspace }} added to agent-tests job so shared/ is importable from cd agent && pytest
+- GATE R: 692 backend + 523 agent passing (1 pre-existing scorer failure)
+- Pending (see docs/phase-r2-plan.md): shared/scoring_core.py still 876L (limit 400); agent/pipeline.py 480L (limit 400); heuristic_score() ~97 code lines (limit 50)
+
 ### Pending
+- Phase R2 — Split shared/scoring_core.py + trim pipeline.py (see docs/phase-r2-plan.md)
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
-- Phase R — Refactor & Test Coverage
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
@@ -535,6 +543,11 @@ Phase 20b — Email Digest API Architecture (complete: 2026-03-01)
 - `eligibility_warning` field (Phase 19): `str | None` — the raw `remote_restriction` text when penalty fires; null otherwise. Returned in list and detail API responses. Frontend: red "Not eligible" badge when set; amber "Relocation" badge for `geo_restricted` without eligibility_warning; nothing otherwise.
 - `is_pure_timezone()` guard (Phase 19): applied to both `_is_geo_restricted_remote` check and `_compute_eligibility_penalty()` in both api/scoring.py and agent/main.py. Timezone-only restrictions (CET, UTC+2, "EMEA hours") are not country barriers — no penalty, full +10 location bonus.
 - Cross-system parity (Phase 19): Two bugs found by regression test `tests/test_eligibility_regression.py`: (1) API `_compute_eligibility_penalty` and `_is_geo_restricted_remote` lacked `is_pure_timezone()` check; (2) agent location block used only `"europe" in restriction` but not full `_HOME_REGIONS` list for eligibility. Both fixed in 19.5.3.
+
+- Phase R — shared/ package strategy (2026-03-01): `shared/` is a plain namespace package (empty `__init__.py`, no setup.py/pyproject.toml). Backend CI runs from root so Python finds it natively. Agent CI runs `cd agent && pytest` so requires `PYTHONPATH=${{ github.workspace }}` in ci.yml. No installable package needed until a third consumer (e.g. scripts/) needs to import from it.
+- Phase R — VALID_DOMAINS re-export (2026-03-01): `api/routes/jobs.py` imports `VALID_DOMAINS` from `api.scoring`. When removing unused imports from `api/scoring.py`, used `VALID_DOMAINS as VALID_DOMAINS` (the `X as X` pattern) so ruff recognises it as an intentional re-export rather than F401. Alternative would be importing directly from `shared.scoring_core` in jobs.py, but that increases coupling across layers.
+- Phase R — shared/scoring_core.py size (2026-03-01): file is 876 lines, exceeding the 400-line limit. DOMAIN_KEYWORDS alone is 303 lines of data. Split deferred to Phase R2 (plan in docs/phase-r2-plan.md) — requires explicit approval per CLAUDE.md. Three-way split: `shared/_data.py` (constants) + `shared/_geo.py` (eligibility logic) + `shared/_heuristic.py` (scoring logic) + `shared/scoring_core.py` as thin re-export facade.
+- Phase R — agent/pipeline.py size (2026-03-01): 480 lines (limit 400). `run_pipeline()` is 70 lines (limit 50). `heuristic_score()` in shared is ~97 code lines (limit 50). Both require sub-function extraction in Phase R2. Plan in docs/phase-r2-plan.md.
 
 ### Known Bugs
 
