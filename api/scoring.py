@@ -13,10 +13,7 @@ from api.skill_matcher import SkillMatch, match_skills
 from shared.scoring_core import (
     DOMAIN_KEYWORDS,
     DOMAIN_ALIASES,
-    VALID_DOMAINS,
-    GRADE_POINTS,
     grade_to_points,
-    is_pure_timezone,
     infer_domain,
     compute_eligibility_penalty,
     heuristic_score as _shared_heuristic_score,
