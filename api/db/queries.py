@@ -30,6 +30,9 @@ def upsert_job(db_path: str, job: dict[str, Any]) -> None:
         "city": None,
         "remote_type": None,
         "sources": None,
+        "role_in_plain_english": None,
+        "company_stage": None,
+        "company_tone": None,
     }
     job = {**defaults, **job}
     con = _connect(db_path)
@@ -40,32 +43,37 @@ def upsert_job(db_path: str, job: dict[str, Any]) -> None:
            parsed, role_function, first_seen, last_seen, ingested_at,
            company_url, company_logo, company_industry, company_size,
            job_level, salary_min, salary_max, salary_currency, salary_interval,
-           salary_source, country, city, remote_type, sources)
+           salary_source, country, city, remote_type, sources,
+           role_in_plain_english, company_stage, company_tone)
         VALUES
           (:job_id, :title, :company, :location, :url, :location_type, :domain,
            :parsed, :role_function, :first_seen, :last_seen, :ingested_at,
            :company_url, :company_logo, :company_industry, :company_size,
            :job_level, :salary_min, :salary_max, :salary_currency, :salary_interval,
-           :salary_source, :country, :city, :remote_type, :sources)
+           :salary_source, :country, :city, :remote_type, :sources,
+           :role_in_plain_english, :company_stage, :company_tone)
         ON CONFLICT(job_id) DO UPDATE SET
-          last_seen        = excluded.last_seen,
-          ingested_at      = excluded.ingested_at,
-          parsed           = excluded.parsed,
-          role_function    = excluded.role_function,
-          company_url      = COALESCE(excluded.company_url,      jobs.company_url),
-          company_logo     = COALESCE(excluded.company_logo,     jobs.company_logo),
-          company_industry = COALESCE(excluded.company_industry, jobs.company_industry),
-          company_size     = COALESCE(excluded.company_size,     jobs.company_size),
-          job_level        = COALESCE(excluded.job_level,        jobs.job_level),
-          salary_min       = COALESCE(excluded.salary_min,       jobs.salary_min),
-          salary_max       = COALESCE(excluded.salary_max,       jobs.salary_max),
-          salary_currency  = COALESCE(excluded.salary_currency,  jobs.salary_currency),
-          salary_interval  = COALESCE(excluded.salary_interval,  jobs.salary_interval),
-          salary_source    = COALESCE(excluded.salary_source,    jobs.salary_source),
-          country          = COALESCE(excluded.country,          jobs.country),
-          city             = COALESCE(excluded.city,             jobs.city),
-          remote_type      = COALESCE(excluded.remote_type,      jobs.remote_type),
-          sources          = excluded.sources
+          last_seen             = excluded.last_seen,
+          ingested_at           = excluded.ingested_at,
+          parsed                = excluded.parsed,
+          role_function         = excluded.role_function,
+          company_url           = COALESCE(excluded.company_url,           jobs.company_url),
+          company_logo          = COALESCE(excluded.company_logo,          jobs.company_logo),
+          company_industry      = COALESCE(excluded.company_industry,      jobs.company_industry),
+          company_size          = COALESCE(excluded.company_size,          jobs.company_size),
+          job_level             = COALESCE(excluded.job_level,             jobs.job_level),
+          salary_min            = COALESCE(excluded.salary_min,            jobs.salary_min),
+          salary_max            = COALESCE(excluded.salary_max,            jobs.salary_max),
+          salary_currency       = COALESCE(excluded.salary_currency,       jobs.salary_currency),
+          salary_interval       = COALESCE(excluded.salary_interval,       jobs.salary_interval),
+          salary_source         = COALESCE(excluded.salary_source,         jobs.salary_source),
+          country               = COALESCE(excluded.country,               jobs.country),
+          city                  = COALESCE(excluded.city,                  jobs.city),
+          remote_type           = COALESCE(excluded.remote_type,           jobs.remote_type),
+          sources               = excluded.sources,
+          role_in_plain_english = COALESCE(excluded.role_in_plain_english, jobs.role_in_plain_english),
+          company_stage         = COALESCE(excluded.company_stage,         jobs.company_stage),
+          company_tone          = COALESCE(excluded.company_tone,          jobs.company_tone)
         """,
         job,
     )
