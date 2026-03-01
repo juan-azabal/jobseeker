@@ -56,9 +56,7 @@ def _unified_scrape(
     all_raw = run_scraper_from_queries(queries)
     geo_rejected = 0
     try:
-        ats_jobs, ats_geo = run_watchlist_scraper(
-            config_path=watchlist_path, target_countries=target_countries or None
-        )
+        ats_jobs, ats_geo = run_watchlist_scraper(config_path=watchlist_path, target_countries=target_countries or None)
         all_raw.extend(ats_jobs)
         geo_rejected += ats_geo
     except Exception as e:

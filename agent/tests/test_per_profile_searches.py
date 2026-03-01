@@ -39,5 +39,3 @@ class TestSearchConfigLoading:
         for search in per_user["searches"]:
             assert "term" in search
             assert "sites" in search
-
-

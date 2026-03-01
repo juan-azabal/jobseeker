@@ -193,29 +193,37 @@ class TestGenerateQueriesEdgeCases:
 
     def test_empty_string_title_skipped(self):
         """Empty string entries in search_titles produce no queries."""
-        result = generate_queries(_profile(search_titles=["", "Product Manager"], home_locations=["barcelona", "spain"]))
+        result = generate_queries(
+            _profile(search_titles=["", "Product Manager"], home_locations=["barcelona", "spain"])
+        )
         assert all(q["term"] != "" for q in result)
         assert len(result) == 2  # 1 real title × 2 sites
 
     def test_whitespace_only_title_skipped(self):
-        result = generate_queries(_profile(search_titles=["   ", "Product Manager"], home_locations=["barcelona", "spain"]))
+        result = generate_queries(
+            _profile(search_titles=["   ", "Product Manager"], home_locations=["barcelona", "spain"])
+        )
         assert all(q["term"].strip() for q in result)
         assert len(result) == 2
 
     def test_duplicate_titles_within_profile_deduped(self):
         """Identical titles within one profile produce only one pair of queries."""
-        result = generate_queries(_profile(
-            search_titles=["Product Manager", "Product Manager"],
-            home_locations=["barcelona", "spain"],
-        ))
+        result = generate_queries(
+            _profile(
+                search_titles=["Product Manager", "Product Manager"],
+                home_locations=["barcelona", "spain"],
+            )
+        )
         assert len(result) == 2  # 1 unique title × 2 sites
 
     def test_case_insensitive_dedup_within_profile(self):
         """'product manager' and 'Product Manager' are the same title."""
-        result = generate_queries(_profile(
-            search_titles=["Product Manager", "product manager"],
-            home_locations=["barcelona", "spain"],
-        ))
+        result = generate_queries(
+            _profile(
+                search_titles=["Product Manager", "product manager"],
+                home_locations=["barcelona", "spain"],
+            )
+        )
         assert len(result) == 2
 
     def test_only_empty_titles_returns_empty(self):
@@ -224,6 +232,8 @@ class TestGenerateQueriesEdgeCases:
 
     def test_title_stripped_in_output(self):
         """Leading/trailing whitespace stripped from title in query term."""
-        result = generate_queries(_profile(search_titles=["  Product Manager  "], home_locations=["barcelona", "spain"]))
+        result = generate_queries(
+            _profile(search_titles=["  Product Manager  "], home_locations=["barcelona", "spain"])
+        )
         indeed = next(q for q in result if q["site"] == "indeed")
         assert indeed["term"] == "Product Manager"
