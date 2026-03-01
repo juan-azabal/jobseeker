@@ -20,7 +20,7 @@ from scoring import (
     _HOME_LOCATIONS,
     _HOME_REGIONS,
 )
-from main import _is_reloc, _is_remote_requiring_reloc
+from reloc import is_reloc as _is_reloc, is_remote_requiring_reloc as _is_remote_requiring_reloc
 
 
 def _setup_juan():
