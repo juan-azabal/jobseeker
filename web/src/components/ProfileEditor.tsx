@@ -24,6 +24,7 @@ interface Profile {
   country_weights?: Record<string, number>;
   company_type_weights?: Record<string, number>;
   skills: string[];
+  search_titles: string[];
   exclude_companies: string[];
   salary_min?: number;
   location_preference?: string;
@@ -63,6 +64,8 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
   const [roleType, setRoleType] = useState(profile.role_type ?? '');
   const [roleFunction, setRoleFunction] = useState(profile.role_function ?? '');
   const [track, setTrack] = useState(profile.track ?? 'ic');
+  const [searchTitles, setSearchTitles] = useState<string[]>(profile.search_titles ?? []);
+  const [newSearchTitle, setNewSearchTitle] = useState('');
 
   const handleSave = async () => {
     setError(null);
@@ -76,7 +79,7 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cv_markdown: cvMarkdown,
-          profile: { ...profile, name, skills, home_locations: locations, domains, seniority_weights: seniorityWeights, country_weights: countryWeights, company_type_weights: companyTypeWeights, role_type: roleType || undefined, role_function: roleFunction || undefined },
+          profile: { ...profile, name, skills, home_locations: locations, domains, seniority_weights: seniorityWeights, country_weights: countryWeights, company_type_weights: companyTypeWeights, search_titles: searchTitles, role_type: roleType || undefined, role_function: roleFunction || undefined },
           salary_min: salaryMin,
           location_preference: locationPref,
         }),
@@ -94,6 +97,7 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
           country_weights: countryWeights,
           company_type_weights: companyTypeWeights,
           skills,
+          search_titles: searchTitles,
           salary_min: salaryMin,
           location_preference: locationPref,
           ...(roleType ? { role_type: roleType } : {}),
@@ -181,6 +185,17 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
     setNewLocation('');
   };
 
+  const addSearchTitle = () => {
+    const t = newSearchTitle.trim();
+    if (!t) return;
+    if (searchTitles.some((s) => s.toLowerCase() === t.toLowerCase())) return;
+    setSearchTitles([...searchTitles, t]);
+    setNewSearchTitle('');
+  };
+
+  const removeSearchTitle = (title: string) =>
+    setSearchTitles(searchTitles.filter((s) => s !== title));
+
   return (
     <div className="space-y-6">
       {/* Name */}
@@ -234,6 +249,40 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
           <option value="ic">Individual Contributor (IC)</option>
           <option value="management">Management</option>
         </select>
+      </div>
+
+      {/* Search titles */}
+      <div>
+        <label className="block text-zinc-300 text-sm font-medium mb-1">Job titles to search</label>
+        <p className="text-zinc-500 text-xs mb-3">
+          These exact titles are searched on LinkedIn and Indeed every day. Add titles you want to monitor — they don't affect scoring.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {searchTitles.map((t) => (
+            <span
+              key={t}
+              className="bg-zinc-700 text-zinc-200 text-xs px-2 py-1 rounded flex items-center gap-1"
+            >
+              {t}
+              <button className="text-zinc-400 hover:text-white" onClick={() => removeSearchTitle(t)}>×</button>
+            </span>
+          ))}
+        </div>
+        <div className="mt-3 flex gap-2">
+          <input
+            className="flex-1 rounded bg-zinc-800 px-3 py-1.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+            placeholder="e.g. Senior Product Manager"
+            value={newSearchTitle}
+            onChange={(e) => setNewSearchTitle(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addSearchTitle()}
+          />
+          <button
+            onClick={addSearchTitle}
+            className="rounded bg-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-600 hover:text-white"
+          >
+            Add
+          </button>
+        </div>
       </div>
 
       {/* Seniority weights */}
