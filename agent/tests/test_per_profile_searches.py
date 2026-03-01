@@ -39,21 +39,3 @@ class TestSearchConfigLoading:
         for search in per_user["searches"]:
             assert "term" in search
             assert "sites" in search
-
-
-class TestProfileSearchesPath:
-    """Verify the pipeline resolves searches path from profile."""
-
-    def test_juan_profile_has_searches_path(self):
-        from user_config import load_profile
-
-        profile = load_profile("juan")
-        searches_path = profile.get("searches")
-        assert searches_path is not None
-        assert "juan" in searches_path
-
-    def test_profile_without_searches_gets_default(self):
-        """A profile without searches: field falls back to shared."""
-        profile = {"user": {"name": "Test"}, "target": {}, "skills": []}
-        searches_path = profile.get("searches", "config/searches.yaml")
-        assert searches_path == "config/searches.yaml"

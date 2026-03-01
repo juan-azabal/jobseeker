@@ -20,6 +20,10 @@ user:
 target:
   level: director
   track: management
+  search_titles:
+  - Senior Product Manager
+  - Product Manager
+  - Product Owner
   domains:
     data: 15
     ecommerce: 15

@@ -2,10 +2,11 @@
 JobAgent - Phase 2: Scrape -> Pre-filter -> Parse -> RAG Score -> Rank
 
 Usage:
-  python main.py              # normal run (uses cache for already-processed jobs)
+  python main.py              # normal run: scrape all profiles, score all
   python main.py --no-score   # skip RAG scoring, heuristic only (fast)
   python main.py --refresh    # clear cache, reprocess everything from scratch
   python main.py --rescore    # keep parsed data, redo all RAG scores (e.g. after rubric change)
+  python main.py --profile ID # only score profile ID (scraping still uses all active profiles)
 """
 
 import sys
@@ -16,10 +17,62 @@ from logging_setup import configure_logging
 from user_config import load_profile, list_profiles, is_profile_active, resolve_profile_paths
 from scoring import load_heuristic_config as _load_heuristic_config
 
-from pipeline import run_pipeline, PipelineOptions
+from pipeline import run_pipeline, PipelineOptions, _to_dicts, _log_merge_stats
 
 configure_logging()
 logger = structlog.get_logger("agent.main")
+
+
+def _union_target_countries(profiles: list[tuple[str, dict]]) -> list[str]:
+    """Collect the union of target countries across all profiles."""
+    from geo import derive_target_countries  # noqa: PLC0415
+
+    seen: set[str] = set()
+    result: list[str] = []
+    for _pid, profile in profiles:
+        home_locs = profile.get("user", {}).get("home_locations", [])
+        countries = derive_target_countries(home_locs) or profile.get("target", {}).get("wttj_countries") or []
+        for c in countries:
+            if c not in seen:
+                seen.add(c)
+                result.append(c)
+    return result
+
+
+def _unified_scrape(
+    profiles: list[tuple[str, dict]], watchlist_path: str = "config/watchlist.yaml"
+) -> tuple[list[dict], int]:
+    """Scrape jobs once across all profiles. Returns (jobs_as_dicts, geo_rejected_count)."""
+    from search_generator import generate_unified_queries  # noqa: PLC0415
+    from scraper import run_scraper_from_queries  # noqa: PLC0415
+    from ats_scraper import run_watchlist_scraper  # noqa: PLC0415
+    from wttj_scraper import run_wttj_scraper  # noqa: PLC0415
+    from merger import merge_jobs  # noqa: PLC0415
+
+    target_countries = _union_target_countries(profiles)
+    queries = generate_unified_queries(profiles)
+    print(f"\nUnified scraping: {len(queries)} queries across {len(profiles)} profile(s)")
+
+    all_raw = run_scraper_from_queries(queries)
+    geo_rejected = 0
+    try:
+        ats_jobs, ats_geo = run_watchlist_scraper(config_path=watchlist_path, target_countries=target_countries or None)
+        all_raw.extend(ats_jobs)
+        geo_rejected += ats_geo
+    except Exception as e:
+        print(f"\nWatchlist error (continuing without): {e}")
+    try:
+        wttj_countries = target_countries or ["ES"]
+        all_raw.extend(run_wttj_scraper(target_countries=wttj_countries))
+    except Exception as e:
+        print(f"\nWTTJ error (continuing without): {e}")
+
+    raw_jobs = merge_jobs(all_raw)
+    _log_merge_stats(raw_jobs)
+    jobs = _to_dicts(raw_jobs)
+    logger.info("unified_scrape_complete", total_jobs=len(jobs), n_queries=len(queries))
+    print(f"\nCombined: {len(jobs)} total jobs")
+    return jobs, geo_rejected
 
 
 def main():
@@ -29,25 +82,42 @@ def main():
     rescore_only = "--rescore" in args
     send_email = "--notify" in args
 
-    profile_id = None
+    requested_profile = None
     if "--profile" in args:
         idx = args.index("--profile")
         if idx + 1 < len(args):
-            profile_id = args[idx + 1]
-    if not profile_id:
-        available = list_profiles()
-        if not available:
-            print("ERROR: No profiles found in config/profiles/. Create one first.")
-            return
-        profile_id = available[0]
+            requested_profile = args[idx + 1]
 
-    profile = load_profile(profile_id)
-    if not is_profile_active(profile):
-        print(f"Profile '{profile_id}' is inactive (user.active: false) — skipping.")
+    # Load all active profiles (used for unified scraping)
+    all_profile_ids = list_profiles(active_only=True)
+    if not all_profile_ids:
+        print("ERROR: No active profiles found in config/profiles/.")
         return
 
-    _load_heuristic_config(profile)
-    paths = resolve_profile_paths(profile_id, profile)
+    all_profiles: list[tuple[str, dict]] = []
+    for pid in all_profile_ids:
+        try:
+            p = load_profile(pid)
+            if is_profile_active(p):
+                all_profiles.append((pid, p))
+        except Exception as e:
+            print(f"Warning: could not load profile '{pid}': {e}")
+
+    if not all_profiles:
+        print("ERROR: No active profiles could be loaded.")
+        return
+
+    # Determine which profiles to score
+    if requested_profile:
+        profiles_to_score = [(pid, p) for pid, p in all_profiles if pid == requested_profile]
+        if not profiles_to_score:
+            print(f"ERROR: Profile '{requested_profile}' not found or inactive.")
+            return
+    else:
+        profiles_to_score = all_profiles
+
+    # Run unified scraping ONCE across all active profiles
+    pre_scraped_jobs, _geo_rejected = _unified_scrape(all_profiles)
 
     if full_refresh:
         mode = "refresh"
@@ -58,14 +128,18 @@ def main():
     else:
         mode = "full"
 
-    opts = PipelineOptions(
-        mode=mode,
-        skip_scoring=skip_scoring,
-        full_refresh=full_refresh,
-        rescore_only=rescore_only,
-        send_email=send_email,
-    )
-    run_pipeline(profile_id, profile, paths, opts)
+    # Run per-profile pipeline on shared job pool
+    for profile_id, profile in profiles_to_score:
+        _load_heuristic_config(profile)
+        paths = resolve_profile_paths(profile_id, profile)
+        opts = PipelineOptions(
+            mode=mode,
+            skip_scoring=skip_scoring,
+            full_refresh=full_refresh,
+            rescore_only=rescore_only,
+            send_email=send_email,
+        )
+        run_pipeline(profile_id, profile, paths, opts, pre_scraped_jobs=pre_scraped_jobs)
 
 
 if __name__ == "__main__":

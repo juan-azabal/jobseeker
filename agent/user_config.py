@@ -93,13 +93,12 @@ def resolve_profile_paths(profile_id: str, raw: dict) -> dict:
     path derivation — callers should not build paths themselves.
 
     Returns:
-        dict with keys: preferences, searches, watchlist, applied, seen_ids
+        dict with keys: preferences, watchlist, applied, seen_ids
     """
     per_user_prefs = f"config/profiles/{profile_id}-preferences.yaml"
     return {
         "preferences": raw.get("preferences")
         or (per_user_prefs if os.path.exists(per_user_prefs) else "config/preferences.yaml"),
-        "searches": raw.get("searches") or "config/searches.yaml",
         "watchlist": raw.get("watchlist") or "config/watchlist.yaml",
         "applied": raw.get("applied") or f"config/profiles/{profile_id}-applied.yaml",
         "seen_ids": raw.get("seen_ids") or f"config/seen_ids/{profile_id}.txt",
