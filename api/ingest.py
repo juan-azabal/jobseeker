@@ -149,7 +149,13 @@ def _precompute_skill_embeddings(db_path: str, raw_jobs: list[dict]) -> None:
         skills: set[str] = set()
         for raw in raw_jobs:
             parsed = raw.get("parsed") or {}
-            for key in ("must_have_skills", "nice_to_have_skills", "technical_stack"):
+            for key in (
+                "truly_required",
+                "must_have_skills",
+                "preferred_skills",
+                "nice_to_have_skills",
+                "technical_stack",
+            ):
                 for s in parsed.get(key, []) or []:
                     if isinstance(s, str) and s.strip():
                         skills.add(s.strip().lower())

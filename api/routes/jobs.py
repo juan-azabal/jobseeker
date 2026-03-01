@@ -485,8 +485,13 @@ def _compute_skill_matches(row: dict, user: dict) -> dict | None:
         return None
 
     parsed = row.get("parsed") or {}
-    must_have = parsed.get("must_have_skills") or []
-    nice_to_have = list(set((parsed.get("nice_to_have_skills") or []) + (parsed.get("technical_stack") or [])))
+    must_have = parsed.get("truly_required") or parsed.get("must_have_skills") or []
+    nice_to_have = list(
+        set(
+            (parsed.get("preferred_skills") or parsed.get("nice_to_have_skills") or [])
+            + (parsed.get("technical_stack") or [])
+        )
+    )
 
     if not must_have and not nice_to_have:
         return None

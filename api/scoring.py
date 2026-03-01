@@ -276,8 +276,13 @@ def _score_skills(
     Nice-to-have + technical_stack: 3 pts matched, cap 10.
     """
     profile_skills = profile.get("skills", [])
-    must_have_list = parsed.get("must_have_skills") or []
-    nice_list = list(set((parsed.get("nice_to_have_skills") or []) + (parsed.get("technical_stack") or [])))
+    must_have_list = parsed.get("truly_required") or parsed.get("must_have_skills") or []
+    nice_list = list(
+        set(
+            (parsed.get("preferred_skills") or parsed.get("nice_to_have_skills") or [])
+            + (parsed.get("technical_stack") or [])
+        )
+    )
 
     if skill_lookup is not None:
         must_pts = sum(
@@ -301,7 +306,7 @@ def _score_skills(
     else:
         norm_must = [s.lower().replace("-", " ") for s in must_have_list]
         nice_text = " ".join(
-            [s.lower() for s in (parsed.get("nice_to_have_skills") or [])]
+            [s.lower() for s in (parsed.get("preferred_skills") or parsed.get("nice_to_have_skills") or [])]
             + [s.lower() for s in (parsed.get("technical_stack") or [])]
             + [parsed.get("responsibilities_summary", "").lower()]
         ).replace("-", " ")

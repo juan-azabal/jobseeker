@@ -28,7 +28,7 @@ logger = structlog.get_logger(__name__)
 def infer_domain(parsed: dict) -> str:
     """Override 'other' domain using keyword detection.
 
-    Scans responsibilities_summary, must_have_skills, technical_stack for
+    Scans responsibilities_summary, truly_required, technical_stack for
     DOMAIN_KEYWORDS matches. Returns the best-matching domain or 'other'.
     """
     domain = parsed.get("domain", "other")
@@ -38,7 +38,7 @@ def infer_domain(parsed: dict) -> str:
     all_text = " ".join(
         [
             parsed.get("responsibilities_summary", ""),
-            " ".join(parsed.get("must_have_skills") or []),
+            " ".join(parsed.get("truly_required") or parsed.get("must_have_skills") or []),
             " ".join(parsed.get("technical_stack") or []),
         ]
     ).lower()

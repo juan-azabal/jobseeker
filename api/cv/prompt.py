@@ -227,7 +227,7 @@ Never start a bullet with a gerund. Wrong: "- Leading the...". Right: "- Led the
 
 Before writing the CV, output an <analysis> block with:
 1. The Summary angle given the JD context (company type, location, consulting signals).
-2. For each of the top 3–5 must_have_skills in the plan, which specific bullet from
+2. For each of the top 3–5 truly_required skills in the plan, which specific bullet from
    the master CV best proves it.
 3. What differentiates this candidate from typical applicants for this role.
 4. Any gaps from the plan to acknowledge through framing (not invention).
