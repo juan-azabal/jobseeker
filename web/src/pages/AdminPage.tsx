@@ -28,6 +28,8 @@ export default function AdminPage() {
   const [triggerResult, setTriggerResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [backfilling, setBackfilling] = useState(false);
   const [backfillResult, setBackfillResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [reparseScoring, setReparseScoring] = useState(false);
   const [reparseScoringResult, setReparseScoringResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -174,6 +176,24 @@ export default function AdminPage() {
     }
   }
 
+  async function handleDbImport() {
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const r = await fetch('/api/admin/db-import', { method: 'POST' });
+      const data = await r.json();
+      if (r.ok) {
+        setImportResult({ ok: true, message: data.message || 'Database imported from production.' });
+      } else {
+        setImportResult({ ok: false, message: data.detail || 'Import failed' });
+      }
+    } catch {
+      setImportResult({ ok: false, message: 'Network error' });
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function handleReparsePreview() {
     setReparsePreviewing(true);
     setReparsePreviewResult(null);
@@ -289,6 +309,31 @@ export default function AdminPage() {
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
       <h1 className="mb-8 text-xl font-bold text-white">Admin</h1>
+
+      {/* Staging: DB refresh from production */}
+      {import.meta.env.VITE_ENVIRONMENT === 'staging' && (
+        <section className="mb-10 rounded-xl border border-amber-500/30 bg-amber-500/5 p-6">
+          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-amber-400">
+            Staging — Data Refresh
+          </h2>
+          <p className="mb-4 text-sm text-zinc-500">
+            Replace the staging database with a fresh snapshot from production.
+            This will restart the server.
+          </p>
+          <button
+            onClick={handleDbImport}
+            disabled={importing}
+            className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-500 disabled:opacity-50"
+          >
+            {importing ? 'Importing…' : 'Refresh from production'}
+          </button>
+          {importResult && (
+            <p className={`mt-3 text-sm ${importResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+              {importResult.message}
+            </p>
+          )}
+        </section>
+      )}
 
       {/* Pipeline trigger */}
       <section className="mb-10 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
