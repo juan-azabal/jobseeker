@@ -136,6 +136,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 | `DIGEST_TEMPLATE` | Email template filename (rollback toggle) | `email_digest.html.j2` |
 
 ## Deployment
+- **PRs are always squash-merged.** One PR = one commit on main = one Railway deploy. Branch commits are intermediate checkpoints only.
 - **Auto-deploy IS ENABLED on Railway.** Every push to main triggers a Railway build automatically. GHA gate (tests) runs in parallel — Railway doesn't wait for it. Do NOT assume deploy is blocked until GHA passes.
 - GHA `deploy.yml` calls `serviceInstanceRedeploy` after tests pass. This triggers a fresh build from the **latest commit on main**. It is a full rebuild, not just a restart.
 - **NEVER modify `.github/workflows/deploy.yml`** — it uses curl to Railway's GraphQL API. Do NOT replace with `railway up`, deploy hooks, or any other method.
