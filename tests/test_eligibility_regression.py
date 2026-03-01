@@ -124,6 +124,7 @@ def _agent(profile_agent: dict, parsed: dict) -> int:
     try:
         import main as agent_main
         import scoring as _agent_scoring
+
         agent_main._load_heuristic_config(copy.deepcopy(profile_agent))
         job = {"title": "Senior PM", "company": "AcmeCo", "location": "Remote", "parsed": parsed}
         return _agent_scoring.heuristic_score(job)

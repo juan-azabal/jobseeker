@@ -13,6 +13,7 @@ from api.skill_matcher import SkillMatch, match_skills
 from shared.scoring_core import (
     DOMAIN_KEYWORDS,
     DOMAIN_ALIASES,
+    VALID_DOMAINS as VALID_DOMAINS,  # re-exported: api.routes.jobs imports from here
     grade_to_points,
     infer_domain,
     compute_eligibility_penalty,

@@ -42,12 +42,14 @@ class TestRankedJobsV1Elimination:
     def setup_method(self):
         """Load heuristic config with a minimal profile."""
         import scoring as s
+
         s._PROFILE_SKILLS = ["python", "sql"]
         s._DOMAIN_SCORES = {"data": 15}
         s._SENIORITY_SCORES = {"principal": 15, "senior": 10, "staff": 15}
         s._HOME_LOCATIONS = ["barcelona"]
         s._HOME_REGIONS = ["eu", "europe"]
         from geo import build_region_pattern
+
         s._HOME_REGION_RE = build_region_pattern(s._HOME_REGIONS)
         s._COUNTRY_WEIGHTS = {}
 

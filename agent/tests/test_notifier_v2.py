@@ -128,6 +128,7 @@ class TestDigestTemplateToggle:
         """DIGEST_TEMPLATE env var defaults to email_digest.html.j2."""
         import importlib
         import notifier
+
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("DIGEST_TEMPLATE", None)
             importlib.reload(notifier)
@@ -137,6 +138,7 @@ class TestDigestTemplateToggle:
         """DIGEST_TEMPLATE env var overrides the template name."""
         import importlib
         import notifier
+
         with patch.dict(os.environ, {"DIGEST_TEMPLATE": "email_digest_v1.html.j2"}):
             importlib.reload(notifier)
             assert notifier.TEMPLATE_NAME == "email_digest_v1.html.j2"
@@ -154,6 +156,7 @@ class TestFlattenJobPlatformLink:
     def test_platform_link_uses_job_id(self):
         """platform_link = APP_BASE_URL/jobs/{job_id} when job_id present."""
         from notifier import _flatten_job
+
         job = self._job(job_id="abc123hash")
         with patch("notifier._is_reloc", return_value=False):
             with patch.dict(os.environ, {"APP_BASE_URL": "https://example.com"}):
@@ -163,6 +166,7 @@ class TestFlattenJobPlatformLink:
     def test_platform_link_fallback_no_job_id(self):
         """platform_link falls back to job_url when job_id is missing."""
         from notifier import _flatten_job
+
         job = self._job(job_id=None, job_url="https://ext.com/job")
         with patch("notifier._is_reloc", return_value=False):
             result = _flatten_job(job)
@@ -171,6 +175,7 @@ class TestFlattenJobPlatformLink:
     def test_platform_link_fallback_empty_job_id(self):
         """platform_link falls back to job_url when job_id is empty string."""
         from notifier import _flatten_job
+
         job = self._job(job_id="", job_url="https://ext.com/job")
         with patch("notifier._is_reloc", return_value=False):
             result = _flatten_job(job)
@@ -211,6 +216,7 @@ class TestNotifierRebrand:
     def test_subject_contains_jobseeker(self):
         """Email subject must say 'JobSeeker', not 'JobAgent'."""
         import notifier
+
         job = _make_job(rag_score={"score": 65, "tier": "A"})
         with patch.multiple("scoring", **_PATCH_SCORING):
             ctx = _build_context([job], REJECTED_STATS, RUN_META)
@@ -239,6 +245,7 @@ class TestNotifierRebrand:
     def test_build_headline_uses_score(self):
         """_build_headline returns '{company} · {loc_type} · {score}'."""
         from notifier import _build_headline
+
         tier_a = [{"company": "Acme", "location_type": "remote", "score": 82}]
         result = _build_headline(tier_a)
         assert "Acme" in result
@@ -249,6 +256,7 @@ class TestNotifierRebrand:
 def _render_template(extra_context=None):
     """Helper: render the current email_digest.html.j2 with minimal context."""
     from jinja2 import Environment, FileSystemLoader
+
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=False)
     template = env.get_template("email_digest.html.j2")
     ctx = {
@@ -260,17 +268,45 @@ def _render_template(extra_context=None):
         "n_prefiltered": 5,
         "preheader": "1 para aplicar, 1 para revisar",
         "platform_url": "https://example.com",
-        "tier_a": [{"title": "Head of Product", "company": "Acme", "location": "Remote",
-                    "location_type": "remote", "requires_reloc": False, "salary_display": "~€120K",
-                    "score": 82, "strength": "Led data teams", "gap": "No fintech",
-                    "url": "https://ext.com/job1", "platform_link": "https://example.com/jobs/abc"}],
-        "tier_b": [{"title": "PM", "company": "Beta", "location": "Madrid",
-                    "location_type": "hybrid", "requires_reloc": False, "salary_display": "",
-                    "score": 45, "strength": "", "gap": "",
-                    "url": "https://ext.com/job2", "platform_link": "https://example.com/jobs/def"}],
+        "tier_a": [
+            {
+                "title": "Head of Product",
+                "company": "Acme",
+                "location": "Remote",
+                "location_type": "remote",
+                "requires_reloc": False,
+                "salary_display": "~€120K",
+                "score": 82,
+                "strength": "Led data teams",
+                "gap": "No fintech",
+                "url": "https://ext.com/job1",
+                "platform_link": "https://example.com/jobs/abc",
+            }
+        ],
+        "tier_b": [
+            {
+                "title": "PM",
+                "company": "Beta",
+                "location": "Madrid",
+                "location_type": "hybrid",
+                "requires_reloc": False,
+                "salary_display": "",
+                "score": 45,
+                "strength": "",
+                "gap": "",
+                "url": "https://ext.com/job2",
+                "platform_link": "https://example.com/jobs/def",
+            }
+        ],
         "tier_c": [],
-        "rejected_stats": {"total": 10, "passed": 2, "us_only": 3, "no_pm_keyword": 2,
-                           "deal_breaker": 1, "title_excluded": 2},
+        "rejected_stats": {
+            "total": 10,
+            "passed": 2,
+            "us_only": 3,
+            "no_pm_keyword": 2,
+            "deal_breaker": 1,
+            "title_excluded": 2,
+        },
         "run_meta": {"n_searches": 5, "n_watchlist": 3, "duration_s": 120, "cost_usd": 0.12},
     }
     if extra_context:
@@ -284,12 +320,12 @@ class TestTemplateRender20_3a:
     def test_color_scheme_meta_present(self):
         """Template must have color-scheme meta tag."""
         html = _render_template()
-        assert 'color-scheme' in html
+        assert "color-scheme" in html
 
     def test_supported_color_schemes_meta_present(self):
         """Template must have supported-color-schemes meta tag."""
         html = _render_template()
-        assert 'supported-color-schemes' in html
+        assert "supported-color-schemes" in html
 
     def test_title_is_jobseeker(self):
         """<title> must say 'JobSeeker · Digest', not 'JobAgent Digest'."""
@@ -369,12 +405,21 @@ class TestTemplateRender20_3c:
         """Tier C links must use platform_link (not job.url directly)."""
         ctx_override = {
             "tier_b": [],
-            "tier_c": [{"title": "PM", "company": "Gamma", "location": "",
-                        "location_type": "remote", "requires_reloc": False,
-                        "salary_display": "", "score": 30,
-                        "url": "https://ext.com/job3",
-                        "platform_link": "https://example.com/jobs/ghi",
-                        "strength": "", "gap": ""}],
+            "tier_c": [
+                {
+                    "title": "PM",
+                    "company": "Gamma",
+                    "location": "",
+                    "location_type": "remote",
+                    "requires_reloc": False,
+                    "salary_display": "",
+                    "score": 30,
+                    "url": "https://ext.com/job3",
+                    "platform_link": "https://example.com/jobs/ghi",
+                    "strength": "",
+                    "gap": "",
+                }
+            ],
         }
         html = _render_template(ctx_override)
         assert "https://example.com/jobs/ghi" in html

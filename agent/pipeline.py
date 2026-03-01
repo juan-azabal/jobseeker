@@ -145,8 +145,13 @@ def _log_merge_stats(raw_jobs: list[RawJob]) -> None:
     print(f"\n📊 Sources: {', '.join(f'{s}={n}' for s, n in sorted(src_counts.items()))}")
     if multi:
         print(f"   Multi-source merges: {multi} | LinkedIn∩Glassdoor: {ld_gd} ({ld_loc} with location enriched)")
-    logger.info("merge_enrichment_stats", source_counts=src_counts, multi_source=multi,
-                linkedin_glassdoor_overlap=ld_gd, linkedin_glassdoor_enriched=ld_loc)
+    logger.info(
+        "merge_enrichment_stats",
+        source_counts=src_counts,
+        multi_source=multi,
+        linkedin_glassdoor_overlap=ld_gd,
+        linkedin_glassdoor_enriched=ld_loc,
+    )
 
 
 def _run_prefilter(
@@ -167,7 +172,9 @@ def _run_prefilter(
     geo_pf = stats.get("non_target_geo", 0)
     geo_pass = stats.get("passed", 0)
     if geo_rejected_at_scrape or geo_pf:
-        print(f"\n🌍 Geo filter: {geo_rejected_at_scrape} rejected at scrape, {geo_pf} rejected at prefilter → {geo_pass} passed")
+        print(
+            f"\n🌍 Geo filter: {geo_rejected_at_scrape} rejected at scrape, {geo_pf} rejected at prefilter → {geo_pass} passed"
+        )
         for j in [j for j in rejected if "non-target geography" in (j.get("reject_reason") or "")][:5]:
             print(f"   ❌ {j['title']} @ {j['company']} → {j.get('reject_reason', '')}")
     logger.info("geo_filter_stats", total_scraped=len(jobs), geo_rejected_at_prefilter=geo_pf, geo_passed=geo_pass)
@@ -178,20 +185,31 @@ def _emit_geo_events(profile_id: str, rejected: list, stats: dict, geo_rejected_
     """PostHog per-job geo filter events + aggregate stats."""
     geo_rej = [j for j in rejected if "non-target geography" in (j.get("reject_reason") or "")]
     for j in geo_rej:
-        _capture(profile_id, "geo_filter_applied", {
-            "job_id": j.get("id"), "company": j.get("company"), "location": j.get("location"),
-            "detected_country": (j.get("reject_reason") or "").split("geography:")[-1].strip().split(" ")[0],
-            "filter_layer": j.get("_geo_layer"), "source": j.get("source"),
-        })
-    _capture(profile_id, "geo_filter_run_stats", {
-        "total_scraped": stats.get("passed", 0) + len(rejected),
-        "geo_rejected_at_scrape": geo_rejected_at_scrape,
-        "geo_rejected_at_prefilter": stats.get("non_target_geo", 0),
-        "geo_passed": stats.get("passed", 0),
-        "layer_location": sum(1 for j in geo_rej if j.get("_geo_layer") == "prefilter_location"),
-        "layer_description": sum(1 for j in geo_rej if j.get("_geo_layer") == "prefilter_description"),
-        "layer_signal": sum(1 for j in geo_rej if j.get("_geo_layer") == "prefilter_signal"),
-    })
+        _capture(
+            profile_id,
+            "geo_filter_applied",
+            {
+                "job_id": j.get("id"),
+                "company": j.get("company"),
+                "location": j.get("location"),
+                "detected_country": (j.get("reject_reason") or "").split("geography:")[-1].strip().split(" ")[0],
+                "filter_layer": j.get("_geo_layer"),
+                "source": j.get("source"),
+            },
+        )
+    _capture(
+        profile_id,
+        "geo_filter_run_stats",
+        {
+            "total_scraped": stats.get("passed", 0) + len(rejected),
+            "geo_rejected_at_scrape": geo_rejected_at_scrape,
+            "geo_rejected_at_prefilter": stats.get("non_target_geo", 0),
+            "geo_passed": stats.get("passed", 0),
+            "layer_location": sum(1 for j in geo_rej if j.get("_geo_layer") == "prefilter_location"),
+            "layer_description": sum(1 for j in geo_rej if j.get("_geo_layer") == "prefilter_description"),
+            "layer_signal": sum(1 for j in geo_rej if j.get("_geo_layer") == "prefilter_signal"),
+        },
+    )
 
 
 def _load_and_parse(passed: list, cache: dict, full_refresh: bool, rescore_only: bool) -> tuple[list, list, dict, int]:
@@ -282,8 +300,17 @@ def _log_completion(
     tier_a = sum(1 for j in all_parsed if (j.get("rag_score") or {}).get("tier") == "A")
     tier_b = sum(1 for j in all_parsed if (j.get("rag_score") or {}).get("tier") == "B")
     tier_c = sum(1 for j in all_parsed if (j.get("rag_score") or {}).get("tier") == "C")
-    kw = dict(profile_id=profile_id, duration_s=duration_s, cost_usd=cost_usd, total_jobs=len(all_parsed),
-              n_parsed=n_parsed, n_scored=n_scored, tier_a=tier_a, tier_b=tier_b, tier_c=tier_c)
+    kw = dict(
+        profile_id=profile_id,
+        duration_s=duration_s,
+        cost_usd=cost_usd,
+        total_jobs=len(all_parsed),
+        n_parsed=n_parsed,
+        n_scored=n_scored,
+        tier_a=tier_a,
+        tier_b=tier_b,
+        tier_c=tier_c,
+    )
     logger.info("pipeline_complete", **kw)
     _capture(profile_id, "agent_pipeline_complete", {"mode": mode, "status": "success", **kw})
     print(f"\n✅ Done in {duration_s}s. Cache: {cache_stats(cache)}")
@@ -295,7 +322,11 @@ def _log_completion(
 def _early_exit(profile_id: str, mode: str, start_time: float, status: str) -> None:
     """Log and emit pipeline_complete for early-exit scenarios."""
     d = int(time.time() - start_time)
-    msg = "No jobs found. Check your search config." if status == "no_jobs" else "All jobs filtered out. Loosen your preferences."
+    msg = (
+        "No jobs found. Check your search config."
+        if status == "no_jobs"
+        else "All jobs filtered out. Loosen your preferences."
+    )
     print(f"\n{msg}")
     ev = {"profile_id": profile_id, "mode": mode, "duration_s": d, "status": status, "n_parsed": 0, "n_scored": 0}
     logger.info("pipeline_complete", **ev)
@@ -309,7 +340,7 @@ def _sync_to_railway(jobs: list, profile_id: str, railway_url: str, ingest_key: 
     """
     url = railway_url.rstrip("/")
     if url.startswith("http://"):
-        url = "https://" + url[len("http://"):]
+        url = "https://" + url[len("http://") :]
     endpoint = f"{url}/api/ingest"
     try:
         resp = httpx.post(
@@ -332,7 +363,9 @@ def _sync_to_railway(jobs: list, profile_id: str, railway_url: str, ingest_key: 
         return False
 
 
-def _send_digest(profile_id: str, paths: dict, profile: dict, prefilter_stats: dict, duration_s: int, cost_usd: float) -> bool:
+def _send_digest(
+    profile_id: str, paths: dict, profile: dict, prefilter_stats: dict, duration_s: int, cost_usd: float
+) -> bool:
     """Step 11: fetch digest from API and send email. Returns True if sent."""
     import yaml  # noqa: PLC0415
 
@@ -383,7 +416,9 @@ def run_pipeline(profile_id: str, profile: dict, paths: dict, opts: PipelineOpti
     target_countries = derive_target_countries(home_locs) or profile.get("target", {}).get("wttj_countries") or []
 
     logger.info("pipeline_start", profile_id=profile_id, mode=opts.mode, notify=opts.send_email)
-    _capture(profile_id, "agent_pipeline_start", {"profile_id": profile_id, "mode": opts.mode, "notify": opts.send_email})
+    _capture(
+        profile_id, "agent_pipeline_start", {"profile_id": profile_id, "mode": opts.mode, "notify": opts.send_email}
+    )
 
     print(f"JobAgent - Phase 2: Scrape > Pre-filter > Parse > RAG Score > Rank  [{profile_id}]")
     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M')}")
