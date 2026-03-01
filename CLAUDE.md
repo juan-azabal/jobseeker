@@ -59,7 +59,8 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `agent/preseed.py` — maps structured RawJob fields to parser schema (pre-seeds before LLM call)
   - `agent/logging_setup.py` — structlog configuration for the agent
   - `agent/api_cache.py` — cross-user parsed-job cache via Railway DB
-  - `agent/scraper.py` — JobSpy wrapper + `make_job_id()` dedup → returns `list[RawJob]`
+  - `agent/search_generator.py` — `generate_queries(profile)` + `generate_unified_queries(profiles)` — cross-user dedup by (term, location, site)
+  - `agent/scraper.py` — `run_scraper_from_queries(queries)` + `make_job_id()` dedup → returns `list[RawJob]`
   - `agent/ats_scraper.py` — Greenhouse/Lever/Ashby API poller → returns `list[RawJob]`
   - `agent/wttj_scraper.py` — Welcome to the Jungle (Algolia API) → returns `list[RawJob]`
   - `agent/prefilter.py` — keyword filter + US-only detection (no API calls)
@@ -171,7 +172,8 @@ Step 5:  Post-parse validation — structured source wins for factual conflicts
 
 ### Agent Pipeline (12 steps)
 ```
-Step 1a-c: Scrape (JobSpy + ATS watchlist + WTTJ) → RawJob → merge_jobs() → dicts
+Step 0:    generate_unified_queries(all_profiles) — search_titles × location × site, deduped
+Step 1a-c: Scrape (JobSpy via queries + ATS watchlist + WTTJ) → RawJob → merge_jobs() → dicts
 Step 2:    Prefilter (keywords, US-only, deal breakers, seen_ids — no API calls)
 Step 3:    Local cache split (cached vs new jobs)
 Step 3b:   Cross-user DB cache (fetch already-parsed from Railway DB via api_cache.py)
@@ -546,6 +548,10 @@ Scoring data extraction (complete: 2026-03-01)
 - `eligibility_warning` field (Phase 19): `str | None` — the raw `remote_restriction` text when penalty fires; null otherwise. Returned in list and detail API responses. Frontend: red "Not eligible" badge when set; amber "Relocation" badge for `geo_restricted` without eligibility_warning; nothing otherwise.
 - `is_pure_timezone()` guard (Phase 19): applied to both `_is_geo_restricted_remote` check and `_compute_eligibility_penalty()` in both api/scoring.py and agent/main.py. Timezone-only restrictions (CET, UTC+2, "EMEA hours") are not country barriers — no penalty, full +10 location bonus.
 - Cross-system parity (Phase 19): Two bugs found by regression test `tests/test_eligibility_regression.py`: (1) API `_compute_eligibility_penalty` and `_is_geo_restricted_remote` lacked `is_pure_timezone()` check; (2) agent location block used only `"europe" in restriction` but not full `_HOME_REGIONS` list for eligibility. Both fixed in 19.5.3.
+- Auto-search architecture (2026-03-01): `search_titles` in `target:` block is the single source of search intent. `generate_queries(profile)` crosses each title with LinkedIn + Indeed. `generate_unified_queries(profiles)` deduplicates across all active profiles by `(term.lower(), location.lower(), site)`. `main.py` runs unified scraping ONCE, passes `pre_scraped_jobs` to per-profile `run_pipeline()`. `*-searches.yaml` files deprecated (not deleted); `searches:` key removed from profile YAMLs.
+- Auto-search site params (2026-03-01): LinkedIn → `results_wanted=15`, `is_remote=False`, `linkedin_fetch_description=True`; Indeed → `results_wanted=25`, `country_indeed` from profile home_locations[1]. Google dropped (JobSpy Issue #302 — consistently 0 results). `LINKEDIN_DELAY_SECS=2` between consecutive LinkedIn queries.
+- Auto-search + scoring decoupled (2026-03-01): `search_titles` controls WHAT gets scraped. `seniority_weights`/`domains` control scoring. They are independent. Adding "Product Owner" to search_titles does not affect how Product Owner roles score.
+- `onboard.py` generates search_titles (2026-03-01): `_build_search_titles()` derives `["{Level} {role_type}", "{role_type}"]` from extracted fields. Users extend via profile editing.
 
 ### Known Bugs
 

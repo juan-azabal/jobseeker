@@ -136,7 +136,8 @@ jobsearch/
 │   ├── merger.py           # Merge duplicate RawJobs across sources (field-priority rules)
 │   ├── preseed.py          # Map structured fields to parser schema (pre-seeds before LLM call)
 │   ├── api_cache.py        # Cross-user parsed-job cache via Railway DB
-│   ├── scraper.py          # JobSpy (Indeed/Google/LinkedIn/Glassdoor) → list[RawJob]
+│   ├── search_generator.py # generate_queries/generate_unified_queries from search_titles
+│   ├── scraper.py          # run_scraper_from_queries() + make_job_id() → list[RawJob]
 │   ├── ats_scraper.py      # Greenhouse/Lever/Ashby APIs → list[RawJob]
 │   ├── wttj_scraper.py     # Welcome to the Jungle (Algolia) → list[RawJob]
 │   ├── prefilter.py        # Keyword filtering (no API calls)
@@ -197,6 +198,7 @@ jobsearch/
 | 16 | Landing iteration: MockJobDetail, MockCVButton, CV callout, 4-step How it works | ✅ |
 | 17 | Decomposed hybrid scoring: role_function gate, LLM grade rubric (A/B/C), hybrid_score() | ✅ |
 | Ingestion Overhaul | RawJob schema, source-group merge, pre-seed parser, enriched DB (14 fields) + API | ✅ |
+| Auto-search | search_titles in profile drives queries; unified scraping across profiles; LinkedIn + Indeed | ✅ |
 | N | Onboarding UX for new profile fields | 🔜 |
 | R | Refactor & test coverage | 🔜 |
 | F | Ship: Dockerfile, README, deploy | 🔜 |

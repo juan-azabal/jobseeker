@@ -17,7 +17,6 @@ import structlog
 
 from models import RawJob
 from merger import merge_jobs
-from scraper import run_scraper
 from ats_scraper import run_watchlist_scraper
 from wttj_scraper import run_wttj_scraper
 from prefilter import prefilter_jobs
@@ -107,7 +106,7 @@ def save_results(jobs: list, folder: str = "output", profile_id: str | None = No
 
 def _scrape_all(profile: dict, paths: dict, target_countries: list) -> tuple[list, int]:
     """Steps 1a–1.5: run all scrapers, merge, return (jobs_as_dicts, geo_rejected_count)."""
-    all_raw: list[RawJob] = run_scraper(config_path=paths["searches"])
+    all_raw: list[RawJob] = []
     geo_rejected = 0
     try:
         ats_jobs, ats_geo = run_watchlist_scraper(
@@ -375,12 +374,8 @@ def _send_digest(
         print("⚠  RAILWAY_URL or INGEST_API_KEY not set — skipping email digest")
         return False
 
-    n_searches = n_watchlist = 0
-    try:
-        with open(paths["searches"]) as f:
-            n_searches = len((yaml.safe_load(f) or {}).get("searches", []))
-    except Exception:
-        pass
+    n_searches = 0
+    n_watchlist = 0
     try:
         with open(paths["watchlist"]) as f:
             wl = yaml.safe_load(f) or {}

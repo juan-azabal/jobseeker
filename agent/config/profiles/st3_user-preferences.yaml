@@ -1,0 +1,51 @@
+prefilter:
+  deal_breakers:
+  - junior
+  - intern
+  - internship
+  - entry level
+  - entry-level
+  - associate product manager
+  - 0-2 years
+  - 1-3 years
+  title_must_contain_one_of:
+  - product manager
+  - product lead
+  - product owner
+  - principal pm
+  - staff pm
+  - senior pm
+  title_exclude:
+  - business development
+  - crm manager
+  - marketing manager
+  - project manager
+  - program manager
+  - sales
+  - account manager
+  - customer success
+  - deposit product
+  - lending
+  - insurance
+  exclude_companies:
+  - Gartner
+  - Capterra
+  - GetApp
+  - Software Advice
+  - G2
+  - BigCorp
+  - SlowCo
+  location:
+    accept_remote: true
+    accept_hybrid: true
+    accept_onsite_cities:
+    - Spain
+    reject_if_requires_relocation_outside: Spain
+scoring:
+  auto_generate_package: 65
+  manual_review: 50
+  auto_reject: 50
+salary:
+  min_eur: 60000
+  max_eur: 100000
+  currency: EUR

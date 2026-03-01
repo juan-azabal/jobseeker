@@ -100,21 +100,18 @@ class TestResolveProfilePaths:
     def test_explicit_paths_take_precedence(self):
         raw = {
             "preferences": "custom/prefs.yaml",
-            "searches": "custom/searches.yaml",
             "watchlist": "custom/watchlist.yaml",
             "applied": "custom/applied.yaml",
             "seen_ids": "custom/seen.txt",
         }
         paths = resolve_profile_paths("user1", raw)
         assert paths["preferences"] == "custom/prefs.yaml"
-        assert paths["searches"] == "custom/searches.yaml"
         assert paths["watchlist"] == "custom/watchlist.yaml"
         assert paths["applied"] == "custom/applied.yaml"
         assert paths["seen_ids"] == "custom/seen.txt"
 
     def test_defaults_when_no_explicit(self):
         paths = resolve_profile_paths("user1", {})
-        assert paths["searches"] == "config/searches.yaml"
         assert paths["watchlist"] == "config/watchlist.yaml"
         assert paths["applied"] == "config/profiles/user1-applied.yaml"
         assert paths["seen_ids"] == "config/seen_ids/user1.txt"
@@ -123,7 +120,6 @@ class TestResolveProfilePaths:
         paths = resolve_profile_paths("x", {})
         assert set(paths.keys()) == {
             "preferences",
-            "searches",
             "watchlist",
             "applied",
             "seen_ids",

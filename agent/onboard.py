@@ -293,6 +293,19 @@ def _generate_profile_id(name: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _build_search_titles(extracted: dict) -> list[str]:
+    """Generate initial search_titles from role_type + level."""
+    role_type = (extracted.get("role_type") or "").strip()
+    level = (extracted.get("target_level") or "").strip()
+    if not role_type:
+        return []
+    titles = []
+    if level:
+        titles.append(f"{level.capitalize()} {role_type}")
+    titles.append(role_type)
+    return titles
+
+
 def _build_profile_yaml(
     extracted: dict,
     profile_id: str,
@@ -318,6 +331,7 @@ def _build_profile_yaml(
             "track": extracted["track"],
             **({"role_type": extracted["role_type"]} if extracted.get("role_type") else {}),
             **({"role_function": extracted["role_function"]} if extracted.get("role_function") else {}),
+            "search_titles": _build_search_titles(extracted),
             "domains": extracted.get("domains", {}),
         },
         "scoring": {
@@ -332,7 +346,6 @@ def _build_profile_yaml(
         },
         "stories": {},
         "preferences": "config/preferences.yaml",
-        "searches": "config/searches.yaml",
         "watchlist": "config/watchlist.yaml",
         "seen_ids": f"config/seen_ids/{profile_id}.txt",
     }

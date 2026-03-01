@@ -12,8 +12,10 @@ import pytz
 import structlog
 
 from shared.scoring_data import (
+    DOMAIN_ALIASES,  # noqa: F401 — re-exported for api/scoring.py
     DOMAIN_KEYWORDS,
     GRADE_POINTS,
+    VALID_DOMAINS,  # noqa: F401 — re-exported for api/scoring.py
     _CITY_TO_COUNTRY,
     _LANG_SIGNALS,
     _NULL_FLAG,

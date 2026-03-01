@@ -49,9 +49,17 @@ def generate_queries(profile: dict) -> list[dict]:
     country = locations[1] if len(locations) > 1 else "spain"
     country_indeed = COUNTRY_INDEED_MAP.get(country.lower(), "Spain")
 
+    seen_titles: set[str] = set()
     indeed_queries = []
     linkedin_queries = []
     for title in titles:
+        if not title or not title.strip():
+            continue
+        normalized = title.strip().lower()
+        if normalized in seen_titles:
+            continue
+        seen_titles.add(normalized)
+        title = title.strip()
         indeed_queries.append(
             {
                 "term": title,
