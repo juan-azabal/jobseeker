@@ -134,13 +134,16 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 | `DIGEST_TEMPLATE` | Email template filename (rollback toggle) | `email_digest.html.j2` |
 
 ## Deployment
-- **Auto-deploy DISABLED.** Push to main does NOT deploy to Railway automatically.
-- Deploy happens ONLY via GitHub Actions (`.github/workflows/deploy.yml`): backend + agent tests green → Railway GraphQL API `serviceInstanceRedeploy`.
+- **Auto-deploy IS ENABLED on Railway.** Every push to main triggers a Railway build automatically. GHA gate (tests) runs in parallel — Railway doesn't wait for it. Do NOT assume deploy is blocked until GHA passes.
+- GHA `deploy.yml` calls `serviceInstanceRedeploy` after tests pass. This triggers a fresh build from the **latest commit on main**. It is a full rebuild, not just a restart.
 - **NEVER modify `.github/workflows/deploy.yml`** — it uses curl to Railway's GraphQL API. Do NOT replace with `railway up`, deploy hooks, or any other method.
-- NEVER trigger deploys from Railway dashboard, Railway MCP, or manually.
+- Railway uses the **`Dockerfile`** at repo root (not Nixpacks). The Dockerfile must copy ALL source directories needed at runtime — including `shared/`.
+- **`startCommand` in `railway.toml` is executed WITHOUT a shell on Railway V2** — `$PORT` does NOT expand. Use `startup.sh` (already in Dockerfile CMD) which uses `exec uvicorn ... --port "${PORT:-8000}"`.
+- NEVER add `startCommand` back to `railway.toml`. The CMD in Dockerfile calls `startup.sh` which handles PORT correctly.
 - Before pushing to main: run tests locally (`pytest tests/` + `cd agent && pytest tests/`).
 - Commits to main should be logically grouped, not one-per-file.
 - Railway MCP is READ-ONLY: logs and deployment status only.
+- Railway CLI (`railway logs --deployment <id>`) is the fastest way to diagnose failed deployments.
 - GHA secrets: `RAILWAY_TOKEN`, `RAILWAY_SERVICE_ID`, `RAILWAY_ENVIRONMENT_ID`.
 
 ## Conventions
@@ -416,6 +419,9 @@ Phase 20b — Email Digest API Architecture (complete: 2026-03-01)
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
+- Dockerfile must copy shared/ (2026-03-01 incident): Railway uses the repo Dockerfile, not Nixpacks. When Phase R added `shared/scoring_core.py`, the Dockerfile only copied `api/` and `agent/` → `ModuleNotFoundError: No module named 'shared'` on every startup. Fix: `COPY shared/ ./shared/` in Stage 2. Diagnosis via `railway logs --deployment <id>`.
+- Railway V2 startCommand does NOT shell-expand variables (2026-03-01 incident): `startCommand = "uvicorn ... --port $PORT"` in railway.toml passes `$PORT` literally → uvicorn error "invalid value for '--port': '$PORT'". The Dockerfile CMD calls `startup.sh` which uses `exec uvicorn ... --port "${PORT:-8000}"` (bash expands it correctly). Never add startCommand back to railway.toml.
+- pyproject.toml must NOT have [project] section (2026-03-01 incident): Nixpacks would have tried `pip install .` but the container uses Dockerfile, not Nixpacks. Keeping only `[tool.ruff]` config in pyproject.toml is correct. PYTHONPATH=${{ github.workspace }} in GHA handles CI import resolution for `shared/`.
 - Email digest platform links (Phase 20): uses job_id hash directly (same identifier used by DB WHERE job_id=? and frontend /jobs/:jobId). No integer PK lookup needed. APP_BASE_URL env var (default: Railway production URL). Falls back to external job_url if job_id missing.
 - Email digest rebrand (Phase 20): accent color changed from orange (#e97316) to violet (#8b5cf6) to match web app. "JobAgent" retired everywhere (subject, sender From header, template). Platform links preferred over external URLs.
 - Digest dark mode (Phase 20): template is dark-first (zinc-950 bg). Added color-scheme meta + @media prefers-color-scheme for Apple Mail/iOS. Gmail strips <style> but renders inline styles correctly. Outlook renders table layout with inline styles.
