@@ -1,11 +1,6 @@
-"""Per-user heuristic job scoring.
+"""Per-user heuristic job scoring (query-time, no LLM).
 
-Ported from agent/main.py _heuristic_score(). Runs at query time for jobs
-without RAG scores — no LLM calls, instant, free.
-
-Domain data, grade mapping, eligibility penalty, and heuristic_score core
-delegate to shared/scoring_core.py (single source of truth).
-API-specific additions: semantic domain fallback, semantic skill matching.
+Core logic in shared/scoring_core.py. API adds: semantic domain fallback, semantic skill matching.
 """
 
 import os
@@ -34,7 +29,6 @@ _DOMAIN_KEYWORDS = DOMAIN_KEYWORDS
 _DOMAIN_ALIASES = DOMAIN_ALIASES
 _infer_domain = infer_domain
 
-# Seniority levels ordered from most junior to most senior
 _SENIORITY_LEVELS = ["junior", "mid", "senior", "staff", "principal", "director", "vp"]
 _LEVEL_IDX = {lvl: i for i, lvl in enumerate(_SENIORITY_LEVELS)}
 
