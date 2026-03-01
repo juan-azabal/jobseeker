@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from api import config
+from api.db.snapshot import download_prod_snapshot
 from api.db.queries import (
     get_all_users,
     reset_user_onboarding,
@@ -579,3 +580,37 @@ def db_export(request: Request):
         media_type="application/octet-stream",
         headers={"Content-Disposition": "attachment; filename=jobseeker.db"},
     )
+
+
+@router.post("/db-import")
+async def db_import(admin: dict = Depends(get_current_admin)):
+    """Import a production DB snapshot into the staging environment.
+
+    Only available when ENVIRONMENT=staging. Fetches /api/admin/db-export from
+    PROD_API_URL and atomically replaces the live DB.
+
+    Returns 400 in production, 502 on prod unreachable, 400 if response is not SQLite.
+    """
+    if config.ENVIRONMENT != "staging":
+        raise HTTPException(status_code=400, detail="DB import is only available in staging environments")
+
+    if not config.PROD_API_URL or not config.DB_EXPORT_API_KEY:
+        raise HTTPException(
+            status_code=400,
+            detail="PROD_API_URL and DB_EXPORT_API_KEY must be configured",
+        )
+
+    db_path = _db_path()
+    try:
+        success = await download_prod_snapshot(config.PROD_API_URL, config.DB_EXPORT_API_KEY, db_path)
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=502, detail="Production API unreachable: timeout")
+
+    if not success:
+        raise HTTPException(
+            status_code=400,
+            detail="Snapshot download failed: response was not a valid SQLite file",
+        )
+
+    logger.info("DB import from production completed", db_path=db_path, admin=admin["email"])
+    return {"status": "ok", "message": "Database imported from production."}
