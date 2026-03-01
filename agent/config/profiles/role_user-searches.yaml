@@ -1,4 +1,3 @@
-# DEPRECATED: search queries now driven by search_titles in profile YAML. This file is not read.
 searches:
 - term: Head of Product SaaS B2B
   location: Spain
@@ -25,3 +24,4 @@ searches:
   - linkedin
   results_wanted: 15
   hours_old: 72
+is_remote: true
