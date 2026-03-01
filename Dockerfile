@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements-web.txt
 
 COPY api/ ./api/
 COPY agent/ ./agent/
+COPY shared/ ./shared/
 COPY startup.sh ./
 RUN chmod +x startup.sh
 
