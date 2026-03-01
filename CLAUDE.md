@@ -48,7 +48,12 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `web/src/constants/domains.ts` — 30-domain canonical enum, display labels, grouped categories
   - `web/src/analytics.ts` — posthog-js wrapper (initPostHog, identifyUser, resetPostHog)
 - Agent: `agent/`
-  - `agent/main.py` — pipeline orchestrator (scrape → parse → score → notify)
+  - `agent/main.py` — thin CLI wrapper: parse args → load profile → call run_pipeline()
+  - `agent/pipeline.py` — pipeline orchestrator (scrape → parse → score → notify); `run_pipeline()` + `PipelineOptions`
+  - `agent/scoring.py` — heuristic scoring + config loader (wraps shared/scoring_core.py with module globals)
+  - `agent/display.py` — `ranked_jobs()`, `print_summary()` (display/ranking logic)
+  - `agent/reloc.py` — relocation detection (`is_remote_requiring_reloc()`)
+  - `agent/salary.py` — salary parsing + EUR conversion (`extract_max_salary_eur()`)
   - `agent/models.py` — RawJob Pydantic model (source-agnostic scraper output)
   - `agent/merger.py` — merge duplicate RawJobs from multiple scrapers (source-group field priority)
   - `agent/preseed.py` — maps structured RawJob fields to parser schema (pre-seeds before LLM call)
@@ -75,7 +80,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `agent/schemas/` — JSON output contracts (parsed_job, scored_job, digest_context, gap_history_entry)
   - `agent/patterns/` — interface contracts per module
   - `agent/docs/decisions/` — ADRs (001–007)
-- Tests: `tests/` (backend, 562 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 400 tests)
+- Tests: `tests/` (backend, 683 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 517 tests)
   - `agent/tests/fixtures.py` — shared BASELINE_PROFILE fixture (fixed dict, not from juan.yaml)
   - `agent/tests/test_notifier_v2.py` — v2 rag_score compat in _build_context (P15 fix)
   - `agent/tests/test_ranked_jobs_v2.py` — hybrid score in ranked_jobs + print_summary mode label (P16/P18 fix)
