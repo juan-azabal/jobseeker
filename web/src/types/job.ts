@@ -74,6 +74,12 @@ export interface CompanyContext {
   tone?: string;
 }
 
+export interface CompanyContext {
+  stage?: string;
+  what_they_value?: string[];
+  tone?: string;
+}
+
 export interface ParsedJob {
   seniority?: string;
   years_experience_min?: number | null;

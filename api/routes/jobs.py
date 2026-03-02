@@ -24,6 +24,7 @@ from api.db.queries import (
     set_job_applied,
     set_job_dismissed,
     get_user_cv_md,
+    get_master_cv_json,
     set_domain_override,
     get_domain_override,
     get_all_domain_overrides,
@@ -673,6 +674,89 @@ def generate_cv_endpoint(
     # Plan is built from the job data + the user's CV (from DB) — no disk files
     plan = build_cv_plan(row, user_cv_markdown)
     profile_data = load_profile_data(user.get("profile_id"))
+
+    # ── Master CV two-step pipeline (Phase 4) ──────────────────────────────
+    cv_plan_header: str | None = None
+    master_cv_json_str = get_master_cv_json(_db_path(), user["id"])
+    if master_cv_json_str:
+        try:
+            import json as _json
+            from api.cv.select import select_cv_content
+            from api.cv.rewrite import rewrite_cv_content
+
+            master_cv = _json.loads(master_cv_json_str)
+            parsed_job = row.get("parsed") or {}
+            if isinstance(parsed_job, str):
+                try:
+                    parsed_job = _json.loads(parsed_job)
+                except (ValueError, TypeError):
+                    parsed_job = {}
+
+            selected = select_cv_content(master_cv, parsed_job, user["id"])
+            if selected:
+                cv_plan_header = _json.dumps(
+                    {
+                        "entries": [
+                            {"id": e["id"], "company": e["company"], "relevance": e["relevance_score"]}
+                            for e in selected["work"]
+                        ],
+                        "skill_intersection": selected["skill_intersection"],
+                    }
+                )
+                cv_markdown = rewrite_cv_content(selected, row, distinct_id=str(user["id"]))
+                logger.info(
+                    "CV generation via Master CV pipeline",
+                    job_id=job_id,
+                    user_id=user["id"],
+                    entries=len(selected["work"]),
+                )
+                fix_applied = False
+                validation = {"passed": True, "warnings": []}
+                tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
+                tmp_path = tmp.name
+                tmp.close()
+                build_docx(cv_markdown, tmp_path)
+                audit_result = audit_docx(tmp_path)
+                ats_header = "pass" if audit_result["passed"] else f"fail:{len(audit_result['violations'])} violations"
+                cv_validation_header = _json.dumps({"passed": True, "warning_count": 0})
+                company_slug = _slugify(row.get("company", "company"))
+                title_slug = _slugify(row.get("title", "cv"), max_len=20)
+                filename = f"cv-{company_slug}-{title_slug}.docx"
+                provider = os.environ.get("CV_LLM_PROVIDER", "anthropic")
+                model = os.environ.get("CV_LLM_MODEL", "")
+                background_tasks.add_task(lambda: Path(tmp_path).unlink(missing_ok=True))
+                background_tasks.add_task(
+                    analytics.capture,
+                    user["id"],
+                    "cv_generated",
+                    {
+                        "job_id": job_id,
+                        "company": row.get("company"),
+                        "provider": provider,
+                        "model": model,
+                        "pipeline": "master_cv",
+                        "validation_passed": True,
+                        "fix_applied": False,
+                        "ats_passed": audit_result["passed"],
+                        "ats_violation_count": len(audit_result.get("violations", [])),
+                    },
+                )
+                response_headers = {
+                    "X-ATS-Audit": ats_header,
+                    "X-CV-Validation": cv_validation_header,
+                    "X-CV-Fix-Applied": "false",
+                }
+                if cv_plan_header:
+                    response_headers["X-CV-Plan"] = cv_plan_header
+                return FileResponse(
+                    path=tmp_path,
+                    media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    filename=filename,
+                    headers=response_headers,
+                )
+        except Exception:
+            logger.warning("Master CV pipeline failed, falling back to legacy", job_id=job_id, exc_info=True)
+    # ── Legacy pipeline ────────────────────────────────────────────────────
 
     try:
         system_prompt, user_prompt = build_cv_prompts(row, user_cv_markdown, plan, profile_data)

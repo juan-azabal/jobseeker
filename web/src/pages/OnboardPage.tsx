@@ -2,6 +2,32 @@ import { useState } from 'react';
 import FileUpload from '../components/FileUpload';
 import ProfileEditor from '../components/ProfileEditor';
 
+function LinkedInGuidance() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+      <button
+        className="flex w-full items-center justify-between text-left text-sm font-medium text-zinc-300 hover:text-white"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span>💼 Add your LinkedIn PDF</span>
+        <span className="text-zinc-500 text-xs">{open ? '▲ Hide' : '▼ Show steps'}</span>
+      </button>
+      {open && (
+        <ol className="mt-3 space-y-1.5 text-xs text-zinc-400 list-decimal list-inside">
+          <li>Go to your LinkedIn profile page</li>
+          <li>
+            Click <strong className="text-zinc-200">More</strong> →{' '}
+            <strong className="text-zinc-200">Save to PDF</strong>
+          </li>
+          <li>Upload the downloaded PDF here alongside your CV</li>
+        </ol>
+      )}
+    </div>
+  );
+}
+
 interface Props {
   onComplete: () => void;
 }
@@ -12,13 +38,15 @@ export default function OnboardPage({ onComplete }: Props) {
   const [step, setStep] = useState<Step>('upload');
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [profile, setProfile] = useState<Parameters<typeof ProfileEditor>[0]['profile'] | null>(null);
+  const [masterCvJson, setMasterCvJson] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleFile = async (file: File) => {
     setError(null);
-    if (!file.name.toLowerCase().endsWith('.docx')) {
-      setError('Only .docx files are supported. Please export your CV from Word or Google Docs.');
+    const name = file.name.toLowerCase();
+    if (!name.endsWith('.docx') && !name.endsWith('.pdf')) {
+      setError('Only .docx and .pdf files are supported.');
       return;
     }
 
@@ -57,8 +85,9 @@ export default function OnboardPage({ onComplete }: Props) {
       return;
     }
 
-    const profileData = await resp.json();
-    setProfile(profileData);
+    const data = await resp.json();
+    setProfile(data.profile);
+    setMasterCvJson(data.master_cv_json ?? null);
     setStep('review');
   };
 
@@ -72,6 +101,7 @@ export default function OnboardPage({ onComplete }: Props) {
         <ProfileEditor
           profile={profile}
           cvMarkdown={markdown}
+          masterCvJson={masterCvJson}
           onSaved={onComplete}
           isNew
         />
@@ -85,6 +115,7 @@ export default function OnboardPage({ onComplete }: Props) {
       <p className="text-zinc-400 mb-8">Upload your CV to generate a personalised job-matching profile.</p>
 
       {!markdown && step !== 'generating' && <FileUpload onFile={handleFile} />}
+      {!markdown && step !== 'generating' && <LinkedInGuidance />}
 
       {loading && <p className="text-zinc-400 mt-4 text-center">Extracting CV…</p>}
 

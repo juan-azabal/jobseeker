@@ -1,9 +1,11 @@
+import json
 import os
 import yaml
 import pytest
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from api.db.init import init_db
-from api.db.queries import upsert_user, create_session, get_user_by_google_id
+from api.db.queries import upsert_user, create_session, get_user_by_google_id, get_master_cv_json
 from api.main import app
 
 PROFILE = {
@@ -121,3 +123,55 @@ def test_save_profile_unauthenticated():
     c = TestClient(app)
     resp = c.post("/api/onboard/save-profile", json={"cv_markdown": "x", "profile": PROFILE})
     assert resp.status_code == 401
+
+
+_MASTER_CV_STUB = {
+    "version": "1.0",
+    "basics": {"name": "Alice Martin", "email": "alice@example.com"},
+    "work": [
+        {
+            "id": "work_001",
+            "company": "Acme",
+            "position": "Senior PM",
+            "start_date": "2020-01",
+            "end_date": None,
+            "summary": "Led product.",
+            "highlights": ["Shipped feature X"],
+            "skills_used": ["python"],
+        }
+    ],
+    "education": [],
+    "skills": [],
+    "languages": [],
+    "certifications": [],
+    "projects": [],
+}
+
+
+def test_save_profile_persists_master_cv_json(authed_client):
+    """master_cv_json in body must be saved to DB and written to disk (Phase 1.6)."""
+    client, tmp_path, db_path = authed_client
+    jobagent_dir = str(tmp_path / "jobagent")
+    with patch("api.routes.onboard.index_master_cv"):
+        resp = client.post(
+            "/api/onboard/save-profile",
+            json={
+                "cv_markdown": "# Alice",
+                "profile": PROFILE,
+                "master_cv_json": _MASTER_CV_STUB,
+            },
+        )
+    assert resp.status_code == 200
+    profile_id = resp.json()["profile_id"]
+    # DB must have the JSON stored
+    from api.db.queries import get_user_by_google_id as _get_user  # noqa: PLC0415
+
+    user = _get_user(db_path, "g_t")
+    stored = get_master_cv_json(db_path, user["id"])
+    assert stored is not None
+    parsed = json.loads(stored)
+    assert parsed["version"] == "1.0"
+    assert parsed["basics"]["name"] == "Alice Martin"
+    # File must be written to knowledge dir
+    json_path = os.path.join(jobagent_dir, "knowledge", profile_id, "master_cv.json")
+    assert os.path.exists(json_path)

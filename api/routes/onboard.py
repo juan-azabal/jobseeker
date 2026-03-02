@@ -1,8 +1,8 @@
 import base64
+import json
 import os
-import tempfile
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
@@ -20,12 +20,19 @@ from api.db.queries import (
     get_user_cv_md,
     save_user_profile_yaml,
     get_user_profile_yaml,
+    save_master_cv_json,
+    get_master_cv_json,
 )
 from api.onboard_utils import (
     docx_to_markdown as _docx_to_markdown,
     _extract_profile as _onboard_extract_profile,
     _build_profile_yaml as _onboard_build_profile_yaml,
 )
+from api.master_cv_vectorstore import index_master_cv
+from shared.file_extract import extract_text_from_file
+from shared.master_cv_extract import extract_master_cv_json
+from shared.master_cv_derive import derive_profile_from_master_cv
+from shared.master_cv_merge import merge_master_cvs
 
 MAX_CV_BYTES = 5 * 1024 * 1024  # 5 MB
 
@@ -51,13 +58,157 @@ class GenerateProfileRequest(BaseModel):
     cv_markdown: str
 
 
+def _make_openai_client():
+    if os.getenv("POSTHOG_API_KEY"):
+        from posthog.ai.openai import OpenAI  # noqa: PLC0415
+    else:
+        from openai import OpenAI  # noqa: PLC0415
+    return OpenAI()
+
+
 @router.post("/generate-profile", dependencies=[Depends(get_current_user)])
 async def generate_profile(body: GenerateProfileRequest):
-    profile = _extract_profile_from_cv(body.cv_markdown)
-    # Bootstrap seniority_weights from extracted current/target level so the
-    # ProfileEditor can show them as editable sliders from the start.
+    client = _make_openai_client()
+    master_cv = extract_master_cv_json(body.cv_markdown, "cv_upload", client)
+    profile = derive_profile_from_master_cv(master_cv)
     profile.setdefault("seniority_weights", _derive_seniority_weights(profile))
-    return profile
+    return {"profile": profile, "master_cv_json": master_cv}
+
+
+@router.get("/master-cv")
+async def get_master_cv(user: dict = Depends(get_current_user)):
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    raw = get_master_cv_json(db_path, user["id"])
+    if raw is None:
+        raise HTTPException(status_code=404, detail="No Master CV found")
+    return json.loads(raw)
+
+
+@router.post("/add-source")
+async def add_source(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """Merge a new CV file (PDF or DOCX) into the user's existing Master CV JSON."""
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".docx") and not filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only .docx and .pdf files are supported")
+
+    contents = await file.read()
+    if len(contents) > MAX_CV_BYTES:
+        raise HTTPException(status_code=413, detail="File exceeds 5 MB limit")
+
+    try:
+        cv_text = extract_text_from_file(contents, file.filename or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    client = _make_openai_client()
+    incoming = extract_master_cv_json(cv_text, "add_source", client)
+
+    raw = get_master_cv_json(db_path, user["id"])
+    existing = json.loads(raw) if raw and raw != "null" else None
+    merged = merge_master_cvs(existing, incoming) if existing else incoming
+
+    save_master_cv_json(db_path, user["id"], json.dumps(merged))
+    try:
+        index_master_cv(user["id"], merged)
+    except Exception:
+        logger.exception("ChromaDB index failed for user_id=%d (non-fatal)", user["id"])
+
+    profile = derive_profile_from_master_cv(merged)
+    return {"profile": profile, "master_cv": merged}
+
+
+class AddEntryRequest(BaseModel):
+    type: Literal["work", "project"]
+    company: str | None = None
+    position: str | None = None
+    name: str | None = None
+    url: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    summary: str = ""
+    highlights: list[str] = []
+    skills_used: list[str] = []
+    keywords: list[str] = []
+
+
+@router.post("/add-entry")
+async def add_entry(body: AddEntryRequest, user: dict = Depends(get_current_user)):
+    """Merge a manually typed work or project entry into the user's Master CV. Zero LLM."""
+    if body.type == "work" and not body.company:
+        raise HTTPException(status_code=422, detail="company is required for work entries")
+    if body.type == "project" and not body.name:
+        raise HTTPException(status_code=422, detail="name is required for project entries")
+
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+
+    if body.type == "work":
+        entry_id = f"work_{uuid.uuid4().hex[:6]}"
+        incoming = _build_work_shell(body, entry_id)
+    else:
+        entry_id = f"proj_{uuid.uuid4().hex[:6]}"
+        incoming = _build_project_shell(body, entry_id)
+
+    raw = get_master_cv_json(db_path, user["id"])
+    existing = json.loads(raw) if raw and raw != "null" else None
+    merged = merge_master_cvs(existing, incoming) if existing else incoming
+
+    save_master_cv_json(db_path, user["id"], json.dumps(merged))
+    try:
+        index_master_cv(user["id"], merged)
+    except Exception:
+        logger.exception("ChromaDB index failed for user_id=%d (non-fatal)", user["id"])
+
+    return {"master_cv": merged, "entry_id": entry_id}
+
+
+def _build_work_shell(body: AddEntryRequest, entry_id: str) -> dict:
+    return {
+        "version": "1.0",
+        "basics": {},
+        "work": [
+            {
+                "id": entry_id,
+                "company": body.company,
+                "position": body.position or "",
+                "start_date": body.start_date,
+                "end_date": body.end_date,
+                "summary": body.summary,
+                "highlights": body.highlights,
+                "skills_used": body.skills_used,
+                "source": "manual",
+            }
+        ],
+        "education": [],
+        "skills": [],
+        "languages": [],
+        "certifications": [],
+        "projects": [],
+    }
+
+
+def _build_project_shell(body: AddEntryRequest, entry_id: str) -> dict:
+    return {
+        "version": "1.0",
+        "basics": {},
+        "work": [],
+        "education": [],
+        "skills": [],
+        "languages": [],
+        "certifications": [],
+        "projects": [
+            {
+                "id": entry_id,
+                "name": body.name,
+                "url": body.url,
+                "start_date": body.start_date,
+                "end_date": body.end_date,
+                "highlights": body.highlights,
+                "keywords": body.keywords,
+                "source": "manual",
+            }
+        ],
+    }
 
 
 def _build_profile_yaml(profile: dict, profile_id: str, salary_min: int, location_preference: str) -> str:
@@ -553,11 +704,28 @@ def _write_profile_files(
         open(seen_ids_path, "w").close()
 
 
+def _persist_master_cv(db_path: str, user_id: int, profile_id: str, jobagent_dir: str, master_cv: dict | None) -> None:
+    """Save master_cv_json to DB + ChromaDB + disk. No-op if master_cv is None."""
+    if not master_cv:
+        return
+    save_master_cv_json(db_path, user_id, json.dumps(master_cv))
+    try:
+        index_master_cv(user_id, master_cv)
+    except Exception:
+        logger.exception("ChromaDB index failed for user_id=%d (non-fatal)", user_id)
+    knowledge_dir = os.path.join(jobagent_dir, "knowledge", profile_id)
+    os.makedirs(knowledge_dir, exist_ok=True)
+    json_path = os.path.join(knowledge_dir, "master_cv.json")
+    with open(json_path, "w") as f:
+        json.dump(master_cv, f, ensure_ascii=False, indent=2)
+
+
 class SaveProfileRequest(BaseModel):
     cv_markdown: str
     profile: dict[str, Any]
     salary_min: int = 60000
     location_preference: str = "b"
+    master_cv_json: dict[str, Any] | None = None
 
 
 @router.post("/save-profile")
@@ -595,6 +763,7 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
             except Exception:
                 logger.exception("YAML recovery failed for %s — continuing without YAML", profile_id)
 
+        _persist_master_cv(db_path, user["id"], profile_id, jobagent_dir, body.master_cv_json)
         return {"profile_id": profile_id}
 
     # First-time setup: profile_id was assigned at login, just generate YAML + searches.
@@ -641,6 +810,7 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
 
     save_user_cv_md(db_path, user["id"], body.cv_markdown)
     save_user_profile_yaml(db_path, user["id"], profile_yaml)
+    _persist_master_cv(db_path, user["id"], profile_id, jobagent_dir, body.master_cv_json)
 
     # Sync profile to GitHub repo and trigger the scraping pipeline (fire-and-forget)
     try:
@@ -1189,20 +1359,17 @@ async def replace_cv(body: ReplaceCVRequest, user: dict = Depends(get_current_us
 
 @router.post("/upload-cv", dependencies=[Depends(get_current_user)])
 async def upload_cv(file: UploadFile = File(...)):
-    if not file.filename or not file.filename.lower().endswith(".docx"):
-        raise HTTPException(status_code=400, detail="Only .docx files are supported")
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".docx") and not filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only .docx and .pdf files are supported")
 
     contents = await file.read()
     if len(contents) > MAX_CV_BYTES:
         raise HTTPException(status_code=413, detail="File exceeds 5 MB limit")
 
-    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
-        tmp.write(contents)
-        tmp_path = tmp.name
-
     try:
-        markdown = docx_to_markdown(tmp_path)
-    finally:
-        os.unlink(tmp_path)
+        markdown = extract_text_from_file(contents, file.filename or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     return {"markdown": markdown}

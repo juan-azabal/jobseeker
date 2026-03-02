@@ -190,7 +190,7 @@ Key phrases: {", ".join(parsed.get("key_phrases") or [])}"""
 {profile_context}"""
 
 
-def score_job(job, collection, profile: dict, n_chunks=8):
+def score_job(job, collection, profile: dict, n_chunks=8, knowledge_dir: str = ""):
     """
     Score a single parsed job against the knowledge base.
     Returns the job dict enriched with a 'rag_score' field.
@@ -221,6 +221,19 @@ def score_job(job, collection, profile: dict, n_chunks=8):
         return job
 
     user_content = _build_scoring_input(job, chunks)
+
+    if knowledge_dir:
+        cv_path = os.path.join(knowledge_dir, "master_cv.json")
+        if os.path.exists(cv_path):
+            try:
+                with open(cv_path) as f:
+                    master_cv = json.load(f)
+                from shared.master_cv_scoring import build_scoring_context  # noqa: PLC0415
+
+                enriched = build_scoring_context(master_cv, parsed)
+                user_content += f"\n\n## Master CV Evidence\n{enriched}"
+            except Exception:
+                pass  # non-fatal: score without enriched context
 
     if os.environ.get("POSTHOG_API_KEY"):
         try:
@@ -278,7 +291,7 @@ def score_job(job, collection, profile: dict, n_chunks=8):
     return job
 
 
-def score_all(jobs, collection, profile: dict, max_workers=2):
+def score_all(jobs, collection, profile: dict, max_workers=2, knowledge_dir: str = ""):
     """
     Score all parsed jobs concurrently.
     Uses fewer workers than parser to respect rate limits.
@@ -291,7 +304,9 @@ def score_all(jobs, collection, profile: dict, max_workers=2):
     errors = 0
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(score_job, job, collection, profile): job for job in scoreable}
+        futures = {
+            executor.submit(score_job, job, collection, profile, knowledge_dir=knowledge_dir): job for job in scoreable
+        }
         done = 0
         for future in as_completed(futures):
             done += 1

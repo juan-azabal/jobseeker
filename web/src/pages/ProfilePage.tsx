@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router';
 import FileUpload from '../components/FileUpload';
 import ProfileEditor from '../components/ProfileEditor';
 import CVReplaceSummary from '../components/CVReplaceSummary';
+import AddSourceModal from '../components/AddSourceModal';
+import AddEntryModal from '../components/AddEntryModal';
+import type { MasterCv } from '../types/masterCv';
 
 interface Profile {
   name: string;
@@ -51,6 +54,22 @@ export default function ProfilePage() {
   const [saved, setSaved] = useState(false);
   const [mergedResult, setMergedResult] = useState<MergedResult | null>(null);
   const [profileVersion, setProfileVersion] = useState(0);
+  const [masterCv, setMasterCv] = useState<MasterCv | null>(null);
+  const [showAddSource, setShowAddSource] = useState(false);
+  const [showAddEntry, setShowAddEntry] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const loadMasterCv = () => {
+    fetch('/api/onboard/master-cv')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setMasterCv(data))
+      .catch(() => null);
+  };
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const loadProfile = () => {
     fetch('/api/onboard/profile')
@@ -63,6 +82,7 @@ export default function ProfilePage() {
         setCvMarkdown(data.cv_markdown);
         setProfileVersion((v) => v + 1);
         setStep('view');
+        loadMasterCv();
       })
       .catch(() => navigate('/onboard'));
   };
@@ -188,22 +208,87 @@ export default function ProfilePage() {
   // ── View / edit current profile ───────────────────────────────────────────
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
+      {/* Toast */}
+      {(toast || saved) && (
+        <div className="fixed top-4 right-4 z-50 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs font-medium text-emerald-400 shadow-lg">
+          ✓ {toast || 'Saved'}
+        </div>
+      )}
+
       <div className="mb-8 flex items-start justify-between">
         <div>
           <h1 className="text-xl font-bold text-white">My Profile</h1>
           <p className="mt-0.5 text-xs text-zinc-500">Your job-matching preferences</p>
         </div>
-        {saved && (
-          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-400">
-            ✓ Saved
-          </span>
-        )}
       </div>
 
       {profile ? (
         <>
           <ProfileEditor key={profileVersion} profile={profile} cvMarkdown={cvMarkdown} onSaved={handleSaved} />
+
+          {/* ── Master CV section ──────────────────────────────────────── */}
           <div className="mt-8 border-t border-zinc-800 pt-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white">Career history</h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowAddEntry(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-all hover:border-zinc-500 hover:text-zinc-200"
+                >
+                  + Add experience
+                </button>
+                <button
+                  onClick={() => setShowAddSource(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-all hover:border-zinc-500 hover:text-zinc-200"
+                >
+                  📄 Add source
+                </button>
+              </div>
+            </div>
+
+            {masterCv && masterCv.work.length > 0 ? (
+              <div className="space-y-3">
+                {masterCv.work.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-white">{entry.position}</p>
+                        <p className="text-xs text-zinc-400">{entry.company}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-zinc-600">
+                          {entry.start_date} – {entry.end_date ?? 'present'}
+                        </span>
+                        <SourceBadge source={entry.source} />
+                      </div>
+                    </div>
+                    {entry.highlights.length > 0 && (
+                      <ul className="mt-2 space-y-0.5">
+                        {entry.highlights.slice(0, 2).map((h, i) => (
+                          <li key={i} className="text-xs text-zinc-500 before:content-['•'] before:mr-1.5">
+                            {h}
+                          </li>
+                        ))}
+                        {entry.highlights.length > 2 && (
+                          <li className="text-xs text-zinc-600">+{entry.highlights.length - 2} more</li>
+                        )}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-600">
+                No career history yet. Add your experience above.
+              </p>
+            )}
+          </div>
+
+          {/* ── CV actions ─────────────────────────────────────────────── */}
+          <div className="mt-6">
             <button
               onClick={() => setStep('upload')}
               className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-4 py-2 text-sm font-medium text-zinc-400 transition-all hover:border-zinc-500 hover:text-zinc-200"
@@ -216,6 +301,51 @@ export default function ProfilePage() {
       ) : (
         <p className="text-sm text-zinc-500">No profile found.</p>
       )}
+
+      {/* Modals */}
+      {showAddSource && (
+        <AddSourceModal
+          onAdded={() => {
+            setShowAddSource(false);
+            showToast('Source added');
+            loadProfile();
+          }}
+          onClose={() => setShowAddSource(false)}
+        />
+      )}
+      {showAddEntry && (
+        <AddEntryModal
+          existingSkills={profile?.skills ?? []}
+          onAdded={(entryId) => {
+            setShowAddEntry(false);
+            showToast(`Entry ${entryId} added`);
+            loadProfile();
+          }}
+          onClose={() => setShowAddEntry(false)}
+        />
+      )}
     </div>
+  );
+}
+
+function SourceBadge({ source }: { source: string }) {
+  const label: Record<string, string> = {
+    cv_upload: 'CV',
+    linkedin_pdf: 'LinkedIn',
+    manual: 'Manual',
+    merged: 'Merged',
+  };
+  const colors: Record<string, string> = {
+    cv_upload: 'bg-blue-900/30 text-blue-400 border-blue-800/30',
+    linkedin_pdf: 'bg-sky-900/30 text-sky-400 border-sky-800/30',
+    manual: 'bg-violet-900/30 text-violet-400 border-violet-800/30',
+    merged: 'bg-zinc-800 text-zinc-400 border-zinc-700',
+  };
+  return (
+    <span
+      className={`rounded-full border px-2 py-0.5 text-xs font-medium ${colors[source] ?? 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}
+    >
+      {label[source] ?? source}
+    </span>
   );
 }
