@@ -6,9 +6,16 @@ Rules:
 - Highlights: union, exact-duplicate dedup.
 - Skills: union by name, case-insensitive dedup.
 - Work IDs are reassigned sequentially (work_001, work_002, …) after merge.
+
+merge_with_embeddings() additionally handles ambiguous cases where:
+  - Company names differ slightly (heuristic doesn't match), OR
+  - Date overlap is 3–6 months (below heuristic threshold).
+  In those cases it uses an injected embed_fn to compute cosine similarity.
+  Cosine > 0.85 → merge; otherwise keep both.
 """
 
 import re
+from collections.abc import Callable
 from datetime import date
 
 
@@ -165,6 +172,147 @@ def merge_master_cvs(existing: dict, incoming: dict) -> dict:
     merged["work"] = _merge_work(
         existing.get("work") or [],
         incoming.get("work") or [],
+    )
+    merged["education"] = _merge_list_by_field(
+        existing.get("education") or [],
+        incoming.get("education") or [],
+        "institution",
+    )
+    merged["skills"] = _merge_skills(
+        existing.get("skills") or [],
+        incoming.get("skills") or [],
+    )
+    merged["languages"] = _merge_list_by_field(
+        existing.get("languages") or [],
+        incoming.get("languages") or [],
+        "language",
+    )
+    merged["certifications"] = _merge_list_by_field(
+        existing.get("certifications") or [],
+        incoming.get("certifications") or [],
+        "name",
+    )
+    merged["projects"] = _merge_list_by_field(
+        existing.get("projects") or [],
+        incoming.get("projects") or [],
+        "name",
+    )
+    return merged
+
+
+# ---------------------------------------------------------------------------
+# Embedding-based merge (Phase 2.2)
+# ---------------------------------------------------------------------------
+
+_EMBED_SIMILARITY_THRESHOLD = 0.85
+_AMBIGUOUS_OVERLAP_MIN = 3  # months — below this: not ambiguous
+_AMBIGUOUS_OVERLAP_MAX = 6  # months — above this: heuristic handles it
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = sum(x * x for x in a) ** 0.5
+    norm_b = sum(x * x for x in b) ** 0.5
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def _is_ambiguous(entry_a: dict, entry_b: dict) -> bool:
+    """True if two work entries are in the ambiguous zone (3-6 month overlap)."""
+    return _dates_overlap(
+        entry_a.get("start_date"),
+        entry_a.get("end_date"),
+        entry_b.get("start_date"),
+        entry_b.get("end_date"),
+        min_months=_AMBIGUOUS_OVERLAP_MIN,
+    ) and not _dates_overlap(
+        entry_a.get("start_date"),
+        entry_a.get("end_date"),
+        entry_b.get("start_date"),
+        entry_b.get("end_date"),
+        min_months=_AMBIGUOUS_OVERLAP_MAX,
+    )
+
+
+def _work_text(entry: dict) -> str:
+    parts = [
+        entry.get("company", ""),
+        entry.get("position", ""),
+        entry.get("summary", ""),
+    ]
+    return " ".join(p for p in parts if p).strip()
+
+
+def _merge_work_with_embeddings(
+    existing: list[dict],
+    incoming: list[dict],
+    embed_fn: Callable[[str], list[float]],
+) -> list[dict]:
+    result: list[dict] = [dict(e) for e in existing]
+
+    for inc in incoming:
+        inc_company = _normalize_company(inc.get("company", ""))
+        merged = False
+
+        for existing_entry in result:
+            ex_company = _normalize_company(existing_entry.get("company", ""))
+
+            # If heuristic would already merge, delegate to standard path
+            if ex_company == inc_company and _dates_overlap(
+                existing_entry.get("start_date"),
+                existing_entry.get("end_date"),
+                inc.get("start_date"),
+                inc.get("end_date"),
+            ):
+                merged = True  # handled by standard _merge_work call
+                break
+
+            # Ambiguous: check embeddings
+            if _is_ambiguous(existing_entry, inc):
+                sim = _cosine(embed_fn(_work_text(existing_entry)), embed_fn(_work_text(inc)))
+                if sim >= _EMBED_SIMILARITY_THRESHOLD:
+                    # Merge highlights
+                    ex_highlights = list(existing_entry.get("highlights") or [])
+                    for h in inc.get("highlights") or []:
+                        if h not in ex_highlights:
+                            ex_highlights.append(h)
+                    existing_entry["highlights"] = ex_highlights
+                    # Merge skills
+                    ex_skills = list(existing_entry.get("skills_used") or [])
+                    for s in inc.get("skills_used") or []:
+                        if s not in ex_skills:
+                            ex_skills.append(s)
+                    existing_entry["skills_used"] = ex_skills
+                    merged = True
+                    break
+
+        if not merged:
+            result.append(dict(inc))
+
+    for i, entry in enumerate(result, start=1):
+        entry["id"] = f"work_{i:03d}"
+
+    return result
+
+
+def merge_with_embeddings(
+    existing: dict,
+    incoming: dict,
+    embed_fn: Callable[[str], list[float]] | None = None,
+) -> dict:
+    """Merge two Master CV JSON dicts using embeddings for ambiguous work entries.
+
+    Falls back to `merge_master_cvs()` when embed_fn is None.
+    """
+    if embed_fn is None:
+        return merge_master_cvs(existing, incoming)
+
+    merged = dict(existing)
+    merged["work"] = _merge_work_with_embeddings(
+        existing.get("work") or [],
+        incoming.get("work") or [],
+        embed_fn,
     )
     merged["education"] = _merge_list_by_field(
         existing.get("education") or [],

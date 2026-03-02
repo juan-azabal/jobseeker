@@ -168,3 +168,90 @@ def test_empty_existing_uses_incoming():
     merged = merge_master_cvs(empty, _incoming_base())
     assert len(merged["work"]) == 1
     assert merged["work"][0]["company"] == "Acme"
+
+
+# ---------------------------------------------------------------------------
+# merge_with_embeddings — Phase 2.2
+# ---------------------------------------------------------------------------
+
+
+from shared.master_cv_merge import merge_with_embeddings  # noqa: E402
+
+
+def _make_embed_fn(similarity: float):
+    """Returns an embed_fn that produces vectors with the given cosine similarity."""
+    import math  # noqa: PLC0415
+
+    # Two unit vectors whose dot product equals `similarity`
+    v1 = [1.0, 0.0]
+    angle = math.acos(max(-1.0, min(1.0, similarity)))
+    v2 = [math.cos(angle), math.sin(angle)]
+    call_count = [0]
+
+    def embed(text: str) -> list[float]:  # noqa: ARG001
+        call_count[0] += 1
+        return v1 if call_count[0] % 2 == 1 else v2
+
+    return embed
+
+
+def _ambiguous_pair():
+    """Two work entries: same role, different company names, 4-month overlap (ambiguous)."""
+    existing = {
+        **_BASE,
+        "work": [
+            {
+                "id": "work_001",
+                "company": "Acme Ltd",
+                "position": "Senior PM",
+                "start_date": "2020-01",
+                "end_date": "2021-03",
+                "summary": "Led growth product.",
+                "highlights": ["Shipped feature A"],
+                "skills_used": ["python"],
+            }
+        ],
+    }
+    incoming = {
+        **_BASE,
+        "work": [
+            {
+                "id": "work_001",
+                "company": "Acme",  # slightly different name
+                "position": "Senior PM",
+                "start_date": "2020-11",  # 4-month overlap with end 2021-03 → ambiguous
+                "end_date": "2022-01",
+                "summary": "Led growth product.",
+                "highlights": ["Shipped feature B"],
+                "skills_used": ["sql"],
+            }
+        ],
+    }
+    return existing, incoming
+
+
+def test_ambiguous_high_similarity_merges():
+    """Cosine > 0.85 → merge."""
+    existing, incoming = _ambiguous_pair()
+    embed_fn = _make_embed_fn(0.95)  # above threshold
+    merged = merge_with_embeddings(existing, incoming, embed_fn)
+    assert len(merged["work"]) == 1
+    highlights = merged["work"][0]["highlights"]
+    assert "Shipped feature A" in highlights
+    assert "Shipped feature B" in highlights
+
+
+def test_ambiguous_low_similarity_keeps_both():
+    """Cosine < 0.85 → keep both entries."""
+    existing, incoming = _ambiguous_pair()
+    embed_fn = _make_embed_fn(0.50)  # below threshold
+    merged = merge_with_embeddings(existing, incoming, embed_fn)
+    assert len(merged["work"]) == 2
+
+
+def test_no_embed_fn_falls_back_to_heuristic():
+    """Without embed_fn, behaves like merge_master_cvs."""
+    existing, incoming = _ambiguous_pair()
+    merged = merge_with_embeddings(existing, incoming, embed_fn=None)
+    # Heuristic: date overlap < 6 months → not merged
+    assert len(merged["work"]) == 2
