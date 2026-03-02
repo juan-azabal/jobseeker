@@ -1,25 +1,32 @@
 searches:
-- term: Head of Product SaaS B2B
-  location: Spain
+- term: Principal Product Manager data
+  location: France
   sites:
   - indeed
   - google
   results_wanted: 20
   hours_old: 72
-- term: Head of Product remote
-  location: Spain
+- term: Principal Product Manager ML AI
+  location: France
+  sites:
+  - indeed
+  - google
+  results_wanted: 20
+  hours_old: 72
+- term: Principal Product Manager remote
+  location: France
   sites:
   - linkedin
   results_wanted: 15
   hours_old: 72
-- term: Head of Product SaaS B2B
+- term: Principal Product Manager data
   location: ''
   sites:
   - linkedin
   results_wanted: 10
   hours_old: 72
-- term: Head of Product python
-  location: Spain
+- term: Principal Product Manager python
+  location: France
   sites:
   - linkedin
   results_wanted: 15
