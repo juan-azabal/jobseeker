@@ -1267,6 +1267,7 @@ async def add_skill(body: AddSkillRequest, user: dict = Depends(get_current_user
 class ReplaceCVRequest(BaseModel):
     cv_markdown: str
     extracted_profile: dict
+    master_cv_json: dict[str, Any] | None = None
 
 
 @router.patch("/replace-cv")
@@ -1353,6 +1354,22 @@ async def replace_cv(body: ReplaceCVRequest, user: dict = Depends(get_current_us
             "fields_updated": diff["fields_updated"],
         },
     )
+
+    # Persist master_cv_json: use provided value, or extract from cv_markdown if missing
+    master_cv_to_save = body.master_cv_json
+    if not master_cv_to_save and body.cv_markdown:
+        client = _make_openai_client()
+        incoming = extract_master_cv_json(body.cv_markdown, "cv_upload", client)
+        existing_raw = get_master_cv_json(db_path, user["id"])
+        existing = json.loads(existing_raw) if existing_raw and existing_raw != "null" else None
+        master_cv_to_save = merge_master_cvs(existing, incoming) if existing else incoming
+    elif master_cv_to_save:
+        existing_raw = get_master_cv_json(db_path, user["id"])
+        existing = json.loads(existing_raw) if existing_raw and existing_raw != "null" else None
+        if existing:
+            master_cv_to_save = merge_master_cvs(existing, master_cv_to_save)
+
+    _persist_master_cv(db_path, user["id"], profile_id, jobagent_dir, master_cv_to_save)
 
     return {"merged_profile": merged, "diff": diff}
 
