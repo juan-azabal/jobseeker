@@ -26,6 +26,8 @@ from api.onboard_utils import (
     _build_profile_yaml as _onboard_build_profile_yaml,
 )
 from shared.file_extract import extract_text_from_file
+from shared.master_cv_extract import extract_master_cv_json
+from shared.master_cv_derive import derive_profile_from_master_cv
 
 MAX_CV_BYTES = 5 * 1024 * 1024  # 5 MB
 
@@ -51,13 +53,21 @@ class GenerateProfileRequest(BaseModel):
     cv_markdown: str
 
 
+def _make_openai_client():
+    if os.getenv("POSTHOG_API_KEY"):
+        from posthog.ai.openai import OpenAI  # noqa: PLC0415
+    else:
+        from openai import OpenAI  # noqa: PLC0415
+    return OpenAI()
+
+
 @router.post("/generate-profile", dependencies=[Depends(get_current_user)])
 async def generate_profile(body: GenerateProfileRequest):
-    profile = _extract_profile_from_cv(body.cv_markdown)
-    # Bootstrap seniority_weights from extracted current/target level so the
-    # ProfileEditor can show them as editable sliders from the start.
+    client = _make_openai_client()
+    master_cv = extract_master_cv_json(body.cv_markdown, "cv_upload", client)
+    profile = derive_profile_from_master_cv(master_cv)
     profile.setdefault("seniority_weights", _derive_seniority_weights(profile))
-    return profile
+    return {"profile": profile, "master_cv_json": master_cv}
 
 
 def _build_profile_yaml(profile: dict, profile_id: str, salary_min: int, location_preference: str) -> str:
