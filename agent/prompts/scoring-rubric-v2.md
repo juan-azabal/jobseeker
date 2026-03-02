@@ -1,4 +1,4 @@
-# Scoring Rubric v2.0 — 2026-02-26
+# Scoring Rubric v2.1 — 2026-03-02
 <!-- Source of truth for scorer.py _build_scoring_prompt() (v2). -->
 <!-- scorer.py interpolates profile-specific values at runtime: -->
 <!-- {name}, {role_type}, {core_str}, {target_str}, {geography} -->
@@ -41,8 +41,19 @@ Target: {target_str} {role_type}, {core_str} roles, {geography}.
   ],
   "deal_breakers": ["anything that makes this a hard no — must-have requirements clearly not met"],
   "talking_points": ["1-2 sentence angle to open with in interview or cover letter"],
-  "one_line_verdict": "10-15 word summary of the fit"
+  "one_line_verdict": "10-15 word summary of the fit",
+  "requirement_evidence_map": [
+    {
+      "requirement": "the truly_required skill or key experience_requirement",
+      "best_evidence": "which specific achievement from the profile excerpts proves this",
+      "cv_bullet_hint": "1-sentence suggestion for how to frame this as a CV bullet"
+    }
+  ],
+  "cv_strategy": "3-sentence strategy: which angle to lead with, which company to highlight, how to frame the biggest gap"
 }
+
+requirement_evidence_map: max 5 entries, top requirements only. Omit if no clear evidence mapping is possible.
+cv_strategy: 3 sentences total. Sentence 1: strongest angle. Sentence 2: best company/project to feature. Sentence 3: how to address the biggest gap.
 
 Gap categories: "skill" = lacks technical skill or domain experience. "storytelling" = has relevant experience but not framed for this role. "vendor-specific" = gap is about a specific vendor product, addressable by learning. "seniority" = scope/scale mismatch.
 

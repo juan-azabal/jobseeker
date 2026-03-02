@@ -60,6 +60,7 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None 
         location_type = parsed.get("location_type") or ("remote" if raw.get("is_remote") else "unknown")
         domain = parsed.get("domain")
         role_function = parsed.get("role_function")
+        company_ctx = parsed.get("company_context") or {}
 
         date_posted = _to_date(raw.get("date_posted"))
         existing = get_job_by_id(db_path, job_id)
@@ -94,6 +95,10 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None 
             "city": raw.get("city"),
             "remote_type": raw.get("remote_type"),
             "sources": json.dumps(sources),
+            # Parser v1.5 fields (extracted from parsed JSON blob into real columns)
+            "role_in_plain_english": parsed.get("role_in_plain_english"),
+            "company_stage": company_ctx.get("stage"),
+            "company_tone": company_ctx.get("tone"),
         }
 
         upsert_job(db_path, record)
@@ -149,7 +154,13 @@ def _precompute_skill_embeddings(db_path: str, raw_jobs: list[dict]) -> None:
         skills: set[str] = set()
         for raw in raw_jobs:
             parsed = raw.get("parsed") or {}
-            for key in ("must_have_skills", "nice_to_have_skills", "technical_stack"):
+            for key in (
+                "truly_required",
+                "must_have_skills",
+                "preferred_skills",
+                "nice_to_have_skills",
+                "technical_stack",
+            ):
                 for s in parsed.get(key, []) or []:
                     if isinstance(s, str) and s.strip():
                         skills.add(s.strip().lower())

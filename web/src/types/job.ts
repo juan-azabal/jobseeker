@@ -13,6 +13,14 @@ export interface JobSummary {
   applied_at: string | null;
   geo_restricted: boolean;  // true = remote restriction excludes user's home region
   eligibility_warning?: string | null;
+  // Parser v1.5 fields (conditionally present when non-null)
+  role_in_plain_english?: string;
+  company_stage?: string;
+  company_tone?: string;
+  truly_required?: string[];
+  preferred_skills?: string[];
+  verbatim_for_cv?: string[];
+  company_context?: CompanyContext;
 }
 
 export interface ScoreBreakdown {
@@ -44,6 +52,20 @@ export interface ScoredResult {
   talking_points?: string[];
   stories_to_prepare?: string[];
   one_line_verdict?: string;
+  requirement_evidence_map?: RequirementEvidence[];
+  cv_strategy?: string;
+}
+
+export interface RequirementEvidence {
+  requirement: string;
+  best_evidence: string;
+  cv_bullet_hint: string;
+}
+
+export interface CompanyContext {
+  stage?: string;
+  what_they_value?: string[];
+  tone?: string;
 }
 
 export interface ParsedJob {
@@ -52,13 +74,21 @@ export interface ParsedJob {
   years_experience_max?: number | null;
   location_type?: string;
   locations_mentioned?: string[];
+  // v1.5 field names (new)
+  truly_required?: string[];
+  preferred_skills?: string[];
+  // backward-compat field names (old jobs in DB)
   must_have_skills?: string[];
   nice_to_have_skills?: string[];
   technical_stack?: string[];
   experience_requirements?: string[];
   domain?: string;
   role_function?: string;
+  role_in_plain_english?: string;
+  company_context?: CompanyContext;
+  verbatim_for_cv?: string[];
   responsibilities_summary?: string;
+  description?: string;
   team_size_hints?: string | null;
   salary_mentioned?: string | null;
   remote_restriction?: string | null;

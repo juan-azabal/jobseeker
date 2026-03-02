@@ -70,7 +70,7 @@ def _print_job(i, job):
         if parts:
             print(f"   {' | '.join(parts)}")
     else:
-        must_have = (p.get("must_have_skills") or [])[:3]
+        must_have = (p.get("truly_required") or p.get("must_have_skills") or [])[:3]
         red_flags = p.get("red_flags") or []
         if must_have:
             print(f"   Must have: {', '.join(must_have)}")

@@ -310,6 +310,13 @@ def list_jobs(
         "city",
         "remote_type",
         "sources",
+        "role_in_plain_english",
+        "company_stage",
+        "company_tone",
+        "truly_required",
+        "preferred_skills",
+        "verbatim_for_cv",
+        "company_context",
     )
     for job in jobs:
         job.pop("ujs_score", None)
@@ -319,7 +326,12 @@ def list_jobs(
         job.pop("ujs_profile_grade", None)
         job.pop("ujs_scored_v2", None)
         job.pop("parsed", None)
-        job.pop("_parsed_dict", None)
+        # Extract v1.5 parser fields from parsed blob before discarding it
+        _pd = job.pop("_parsed_dict", None) or {}
+        job["truly_required"] = _pd.get("truly_required") or _pd.get("must_have_skills")
+        job["preferred_skills"] = _pd.get("preferred_skills") or _pd.get("nice_to_have_skills")
+        job["verbatim_for_cv"] = _pd.get("verbatim_for_cv")
+        job["company_context"] = _pd.get("company_context")
         # Parse sources JSON string → list
         if job.get("sources") is not None:
             try:
@@ -434,6 +446,13 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
     # Skill matches: compute semantic match status for each skill
     row["skill_matches"] = _compute_skill_matches(row, user)
 
+    # Extract v1.5 parser fields from parsed blob to top-level for easy access
+    _pd = row.get("parsed") or {}
+    row["truly_required"] = _pd.get("truly_required") or _pd.get("must_have_skills")
+    row["preferred_skills"] = _pd.get("preferred_skills") or _pd.get("nice_to_have_skills")
+    row["verbatim_for_cv"] = _pd.get("verbatim_for_cv")
+    row["company_context"] = _pd.get("company_context")
+
     # Parse sources JSON string → list; omit null enriched fields
     if row.get("sources") is not None:
         try:
@@ -455,6 +474,13 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
         "city",
         "remote_type",
         "sources",
+        "role_in_plain_english",
+        "company_stage",
+        "company_tone",
+        "truly_required",
+        "preferred_skills",
+        "verbatim_for_cv",
+        "company_context",
     )
     for field in _ENRICHED_FIELDS:
         if row.get(field) is None:
@@ -485,8 +511,13 @@ def _compute_skill_matches(row: dict, user: dict) -> dict | None:
         return None
 
     parsed = row.get("parsed") or {}
-    must_have = parsed.get("must_have_skills") or []
-    nice_to_have = list(set((parsed.get("nice_to_have_skills") or []) + (parsed.get("technical_stack") or [])))
+    must_have = parsed.get("truly_required") or parsed.get("must_have_skills") or []
+    nice_to_have = list(
+        set(
+            (parsed.get("preferred_skills") or parsed.get("nice_to_have_skills") or [])
+            + (parsed.get("technical_stack") or [])
+        )
+    )
 
     if not must_have and not nice_to_have:
         return None
@@ -641,9 +672,10 @@ def generate_cv_endpoint(
 
     # Plan is built from the job data + the user's CV (from DB) — no disk files
     plan = build_cv_plan(row, user_cv_markdown)
+    profile_data = load_profile_data(user.get("profile_id"))
 
     try:
-        system_prompt, user_prompt = build_cv_prompts(row, user_cv_markdown, plan)
+        system_prompt, user_prompt = build_cv_prompts(row, user_cv_markdown, plan, profile_data)
     except FileNotFoundError as e:
         logger.error("CV generation failed: missing reference file", job_id=job_id, user_id=user["id"], detail=str(e))
         return JSONResponse(

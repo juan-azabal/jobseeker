@@ -1,8 +1,9 @@
 import os
+import sqlite3
 from pathlib import Path
 from api.db.init import init_db
 from api.db.queries import get_jobs, get_job_by_id, get_user_job_score
-from api.ingest import ingest
+from api.ingest import ingest, ingest_from_list
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -77,3 +78,103 @@ def test_ingest_no_rag_score(tmp_path):
     assert j3 is not None
     ujs = get_user_job_score(db_path, 1, "job003")
     assert ujs is None  # job003 has no rag_score
+
+
+def test_ingest_v15_columns_persisted(tmp_path):
+    """Parser v1.5 fields are extracted from parsed JSON and written to real columns."""
+    db_path = str(tmp_path / "test.db")
+    init_db(db_path)
+    raw = [
+        {
+            "id": "jv15-001",
+            "title": "Head of Product",
+            "company": "Acme",
+            "location": "Remote",
+            "parsed": {
+                "location_type": "remote",
+                "domain": "saas",
+                "role_in_plain_english": "You will own the product roadmap end-to-end.",
+                "company_context": {
+                    "stage": "growth",
+                    "what_they_value": ["speed", "data"],
+                    "tone": "startup_scrappy",
+                },
+            },
+        }
+    ]
+    ingest_from_list(db_path, raw)
+    con = sqlite3.connect(db_path)
+    row = con.execute(
+        "SELECT role_in_plain_english, company_stage, company_tone FROM jobs WHERE job_id = 'jv15-001'"
+    ).fetchone()
+    con.close()
+    assert row is not None
+    assert row[0] == "You will own the product roadmap end-to-end."
+    assert row[1] == "growth"
+    assert row[2] == "startup_scrappy"
+
+
+def test_ingest_v15_columns_null_when_missing(tmp_path):
+    """v1.5 columns default to NULL when parsed blob has no company_context."""
+    db_path = str(tmp_path / "test.db")
+    init_db(db_path)
+    raw = [
+        {
+            "id": "jv15-002",
+            "title": "PM",
+            "company": "Acme",
+            "location": "Remote",
+            "parsed": {"location_type": "remote", "domain": "saas"},
+        }
+    ]
+    ingest_from_list(db_path, raw)
+    con = sqlite3.connect(db_path)
+    row = con.execute(
+        "SELECT role_in_plain_english, company_stage, company_tone FROM jobs WHERE job_id = 'jv15-002'"
+    ).fetchone()
+    con.close()
+    assert row is not None
+    assert row[0] is None
+    assert row[1] is None
+    assert row[2] is None
+
+
+def test_ingest_v15_coalesce_on_update(tmp_path):
+    """Re-ingesting a job without v1.5 fields preserves existing column values."""
+    db_path = str(tmp_path / "test.db")
+    init_db(db_path)
+    # First ingest: has v1.5 fields
+    raw_v1 = [
+        {
+            "id": "jv15-003",
+            "title": "PM",
+            "company": "Acme",
+            "location": "Remote",
+            "parsed": {
+                "location_type": "remote",
+                "role_in_plain_english": "Lead the roadmap.",
+                "company_context": {"stage": "mature", "tone": "corporate_polished"},
+            },
+        }
+    ]
+    ingest_from_list(db_path, raw_v1)
+    # Second ingest: same job without v1.5 fields (simulates old cached job)
+    raw_v2 = [
+        {
+            "id": "jv15-003",
+            "title": "PM",
+            "company": "Acme",
+            "location": "Remote",
+            "parsed": {"location_type": "remote"},
+        }
+    ]
+    ingest_from_list(db_path, raw_v2)
+    con = sqlite3.connect(db_path)
+    row = con.execute(
+        "SELECT role_in_plain_english, company_stage, company_tone FROM jobs WHERE job_id = 'jv15-003'"
+    ).fetchone()
+    con.close()
+    # COALESCE preserves existing values when new values are NULL
+    assert row[0] == "Lead the roadmap."
+    assert row[1] == "mature"
+    assert row[2] == "corporate_polished"

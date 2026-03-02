@@ -95,7 +95,7 @@ def main():
         p = j.get("parsed") or {}
         if not isinstance(p, dict):
             return False
-        mh = p.get("must_have_skills") or []
+        mh = p.get("truly_required") or p.get("must_have_skills") or []
         return any(
             any(w in s.lower() for w in ["year", "degree", "bachelor", "experience", "fluent", "communication"])
             for s in mh
