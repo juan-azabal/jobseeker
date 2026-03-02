@@ -688,6 +688,89 @@ def get_master_cv_json(db_path: str, user_id: int) -> str | None:
     return row["master_cv_json"]
 
 
+# ── CV processing status ───────────────────────────────────────────────────
+
+
+def set_cv_processing_status(
+    db_path: str,
+    user_id: int,
+    status: str | None,
+    result: dict | None = None,
+    error: str | None = None,
+) -> None:
+    """Set cv_processing_status for a user.
+
+    status values: None (clear), "processing", "done", "failed".
+    When status="processing": auto-sets started_at to utcnow.
+    When status=None: clears all three columns.
+    result/error are JSON-encoded into cv_pending_result.
+    """
+    import json as _json  # noqa: PLC0415
+    from datetime import datetime, timezone  # noqa: PLC0415
+
+    if status is None:
+        con = _connect(db_path)
+        con.execute(
+            "UPDATE users SET cv_processing_status=NULL, cv_processing_started_at=NULL, cv_pending_result=NULL WHERE id=?",
+            (user_id,),
+        )
+        con.commit()
+        con.close()
+        return
+
+    started_at = None
+    if status == "processing":
+        started_at = datetime.now(timezone.utc).isoformat()
+
+    pending = None
+    if result is not None:
+        pending = _json.dumps(result)
+    elif error is not None:
+        pending = _json.dumps({"error": error})
+
+    con = _connect(db_path)
+    if started_at is not None:
+        con.execute(
+            "UPDATE users SET cv_processing_status=?, cv_processing_started_at=?, cv_pending_result=? WHERE id=?",
+            (status, started_at, pending, user_id),
+        )
+    else:
+        con.execute(
+            "UPDATE users SET cv_processing_status=?, cv_pending_result=? WHERE id=?",
+            (status, pending, user_id),
+        )
+    con.commit()
+    con.close()
+
+
+def get_cv_processing_status(db_path: str, user_id: int) -> dict:
+    """Return cv processing status dict: {status, started_at, result}.
+
+    result is parsed from JSON if present, else None.
+    """
+    import json as _json  # noqa: PLC0415
+
+    con = _connect(db_path)
+    row = con.execute(
+        "SELECT cv_processing_status, cv_processing_started_at, cv_pending_result FROM users WHERE id=?",
+        (user_id,),
+    ).fetchone()
+    con.close()
+    if row is None:
+        return {"status": None, "started_at": None, "result": None}
+    result = None
+    if row["cv_pending_result"]:
+        try:
+            result = _json.loads(row["cv_pending_result"])
+        except Exception:
+            result = None
+    return {
+        "status": row["cv_processing_status"],
+        "started_at": row["cv_processing_started_at"],
+        "result": result,
+    }
+
+
 # ── Domain correction analytics ───────────────────────────────────────────
 
 
