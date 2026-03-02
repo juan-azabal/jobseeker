@@ -1,6 +1,7 @@
 # === Web App Runtime Dependencies ===
 # Lean subset of requirements.txt for the Docker image.
-# Excludes agent-only packages (chromadb, python-jobspy, pandas, etc.)
+# Excludes agent-only packages (python-jobspy, pandas, etc.)
+# chromadb included: api/master_cv_vectorstore.py imports it at module level
 
 # FastAPI core
 fastapi==0.115.6
@@ -24,9 +25,10 @@ numpy>=1.26
 structlog>=24.0
 asgi-correlation-id>=4.0
 
-# CV builder
+# CV builder + Master CV vectorstore
 python-docx>=1.1.0
 markdownify>=0.13
+chromadb
 
 # Geo (agent/geo.py imported by api/routes/jobs.py + api/cv/plan.py)
 country-converter>=1.3
