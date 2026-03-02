@@ -506,13 +506,34 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
         <div className="space-y-4">
 
           {/* ── Section 1: The Role ─────────────────────────────────── */}
-          {(p?.responsibilities_summary || filteredRequirements.length > 0 || (p?.key_phrases && p.key_phrases.length > 0)) && (
+          {(p?.role_in_plain_english || p?.responsibilities_summary || p?.company_context || filteredRequirements.length > 0 || (p?.key_phrases && p.key_phrases.length > 0)) && (
             <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
               <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
                 The Role
               </h2>
-              {p?.responsibilities_summary && (
-                <p className="text-sm leading-relaxed text-zinc-300">{p.responsibilities_summary}</p>
+              {(p?.role_in_plain_english || p?.responsibilities_summary) && (
+                <p className="text-sm leading-relaxed text-zinc-300">
+                  {p?.role_in_plain_english ?? p?.responsibilities_summary}
+                </p>
+              )}
+              {p?.company_context && (p.company_context.stage || p.company_context.tone || (p.company_context.what_they_value && p.company_context.what_they_value.length > 0)) && (
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  {p.company_context.stage && (
+                    <span className="rounded border border-zinc-700 bg-zinc-800/60 px-2 py-0.5 text-xs text-zinc-400">
+                      {p.company_context.stage}
+                    </span>
+                  )}
+                  {p.company_context.tone && (
+                    <span className="rounded border border-zinc-700 bg-zinc-800/60 px-2 py-0.5 text-xs text-zinc-400">
+                      {p.company_context.tone.replace(/_/g, ' ')}
+                    </span>
+                  )}
+                  {p.company_context.what_they_value && p.company_context.what_they_value.length > 0 && (
+                    <span className="text-xs text-zinc-500">
+                      {p.company_context.what_they_value.join(' · ')}
+                    </span>
+                  )}
+                </div>
               )}
               {p?.key_phrases && p.key_phrases.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
