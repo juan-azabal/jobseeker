@@ -368,11 +368,13 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
       : `${p.years_experience_min}+ yrs`
     : null;
 
-  // Derived: filtered requirements and skills
+  // Derived: filtered requirements and skills (v1.5 names with backward compat)
+  const mustHaveSkills = p?.truly_required ?? p?.must_have_skills ?? [];
+  const niceToHaveSkills = p?.preferred_skills ?? p?.nice_to_have_skills ?? [];
   const filteredRequirements = filterRequirements(p?.experience_requirements ?? [], p?.role_function);
-  const filteredMustHave = filterSkills(p?.must_have_skills ?? [], p?.role_function);
+  const filteredMustHave = filterSkills(mustHaveSkills, p?.role_function);
   const allSkillsLower = new Set(
-    [...(p?.must_have_skills ?? []), ...(p?.nice_to_have_skills ?? [])].map(s => s.toLowerCase())
+    [...mustHaveSkills, ...niceToHaveSkills].map(s => s.toLowerCase())
   );
   const techStackOnly = (p?.technical_stack ?? []).filter(s => !allSkillsLower.has(s.toLowerCase()));
 
@@ -645,13 +647,13 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
           )}
 
           {/* ── Section 3: Skills (all jobs) ───────────────────────── */}
-          {(filteredMustHave.length > 0 || (p?.nice_to_have_skills?.length ?? 0) > 0 || techStackOnly.length > 0) && (
+          {(filteredMustHave.length > 0 || niceToHaveSkills.length > 0 || techStackOnly.length > 0) && (
             <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
               <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
                 Skills
               </h2>
               {filteredMustHave.length > 0 && (
-                <div className={p?.nice_to_have_skills?.length || techStackOnly.length ? 'mb-3' : ''}>
+                <div className={niceToHaveSkills.length > 0 || techStackOnly.length > 0 ? 'mb-3' : ''}>
                   <p className="mb-1.5 text-xs text-zinc-600">Required</p>
                   <div className="flex flex-wrap gap-1.5">
                     {job.skill_matches
@@ -670,9 +672,9 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
                   </div>
                 </div>
               )}
-              {p?.nice_to_have_skills && p.nice_to_have_skills.length > 0 && (
+              {niceToHaveSkills.length > 0 && (
                 <div className={techStackOnly.length > 0 ? 'mb-3' : ''}>
-                  <p className="mb-1.5 text-xs text-zinc-600">Nice to have</p>
+                  <p className="mb-1.5 text-xs text-zinc-600">Preferred</p>
                   <div className="flex flex-wrap gap-1.5">
                     {job.skill_matches
                       ? job.skill_matches.nice_to_have.map((m, i) => (
@@ -683,7 +685,7 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
                             onClick={m.status !== 'matched' ? () => handleAddSkill(m.skill) : undefined}
                           />
                         ))
-                      : p.nice_to_have_skills.map((s, i) => <Chip key={i} label={s} />)
+                      : niceToHaveSkills.map((s, i) => <Chip key={i} label={s} />)
                     }
                   </div>
                 </div>
