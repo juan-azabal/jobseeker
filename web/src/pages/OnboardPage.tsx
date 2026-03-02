@@ -12,13 +12,15 @@ export default function OnboardPage({ onComplete }: Props) {
   const [step, setStep] = useState<Step>('upload');
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [profile, setProfile] = useState<Parameters<typeof ProfileEditor>[0]['profile'] | null>(null);
+  const [masterCvJson, setMasterCvJson] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleFile = async (file: File) => {
     setError(null);
-    if (!file.name.toLowerCase().endsWith('.docx')) {
-      setError('Only .docx files are supported. Please export your CV from Word or Google Docs.');
+    const name = file.name.toLowerCase();
+    if (!name.endsWith('.docx') && !name.endsWith('.pdf')) {
+      setError('Only .docx and .pdf files are supported.');
       return;
     }
 
@@ -57,8 +59,9 @@ export default function OnboardPage({ onComplete }: Props) {
       return;
     }
 
-    const profileData = await resp.json();
-    setProfile(profileData);
+    const data = await resp.json();
+    setProfile(data.profile);
+    setMasterCvJson(data.master_cv_json ?? null);
     setStep('review');
   };
 
@@ -72,6 +75,7 @@ export default function OnboardPage({ onComplete }: Props) {
         <ProfileEditor
           profile={profile}
           cvMarkdown={markdown}
+          masterCvJson={masterCvJson}
           onSaved={onComplete}
           isNew
         />

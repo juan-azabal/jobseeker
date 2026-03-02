@@ -1,4 +1,5 @@
 import base64
+import json
 import os
 import uuid
 from typing import Any
@@ -19,12 +20,14 @@ from api.db.queries import (
     get_user_cv_md,
     save_user_profile_yaml,
     get_user_profile_yaml,
+    save_master_cv_json,
 )
 from api.onboard_utils import (
     docx_to_markdown as _docx_to_markdown,
     _extract_profile as _onboard_extract_profile,
     _build_profile_yaml as _onboard_build_profile_yaml,
 )
+from api.master_cv_vectorstore import index_master_cv
 from shared.file_extract import extract_text_from_file
 from shared.master_cv_extract import extract_master_cv_json
 from shared.master_cv_derive import derive_profile_from_master_cv
@@ -563,11 +566,28 @@ def _write_profile_files(
         open(seen_ids_path, "w").close()
 
 
+def _persist_master_cv(db_path: str, user_id: int, profile_id: str, jobagent_dir: str, master_cv: dict | None) -> None:
+    """Save master_cv_json to DB + ChromaDB + disk. No-op if master_cv is None."""
+    if not master_cv:
+        return
+    save_master_cv_json(db_path, user_id, json.dumps(master_cv))
+    try:
+        index_master_cv(user_id, master_cv)
+    except Exception:
+        logger.exception("ChromaDB index failed for user_id=%d (non-fatal)", user_id)
+    knowledge_dir = os.path.join(jobagent_dir, "knowledge", profile_id)
+    os.makedirs(knowledge_dir, exist_ok=True)
+    json_path = os.path.join(knowledge_dir, "master_cv.json")
+    with open(json_path, "w") as f:
+        json.dump(master_cv, f, ensure_ascii=False, indent=2)
+
+
 class SaveProfileRequest(BaseModel):
     cv_markdown: str
     profile: dict[str, Any]
     salary_min: int = 60000
     location_preference: str = "b"
+    master_cv_json: dict[str, Any] | None = None
 
 
 @router.post("/save-profile")
@@ -605,6 +625,7 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
             except Exception:
                 logger.exception("YAML recovery failed for %s — continuing without YAML", profile_id)
 
+        _persist_master_cv(db_path, user["id"], profile_id, jobagent_dir, body.master_cv_json)
         return {"profile_id": profile_id}
 
     # First-time setup: profile_id was assigned at login, just generate YAML + searches.
@@ -651,6 +672,7 @@ async def save_profile(body: SaveProfileRequest, request: Request, user: dict = 
 
     save_user_cv_md(db_path, user["id"], body.cv_markdown)
     save_user_profile_yaml(db_path, user["id"], profile_yaml)
+    _persist_master_cv(db_path, user["id"], profile_id, jobagent_dir, body.master_cv_json)
 
     # Sync profile to GitHub repo and trigger the scraping pipeline (fire-and-forget)
     try:

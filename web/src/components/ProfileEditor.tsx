@@ -36,12 +36,14 @@ interface Props {
   profile: Profile;
   cvMarkdown: string;
   onSaved: () => void;
+  /** Structured Master CV JSON from generate-profile; passed through to save-profile. */
+  masterCvJson?: Record<string, unknown> | null;
   /** If true, we're reviewing a freshly extracted profile (first-time / CV replace).
    *  The save button calls POST /save-profile instead of PATCH /profile. */
   isNew?: boolean;
 }
 
-export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = false }: Props) {
+export default function ProfileEditor({ profile, cvMarkdown, masterCvJson, onSaved, isNew = false }: Props) {
   const [name, setName] = useState(profile.name);
   const [skills, setSkills] = useState<string[]>(profile.skills);
   const [locations, setLocations] = useState<string[]>(profile.home_locations);
@@ -82,6 +84,7 @@ export default function ProfileEditor({ profile, cvMarkdown, onSaved, isNew = fa
           profile: { ...profile, name, skills, home_locations: locations, domains, seniority_weights: seniorityWeights, country_weights: countryWeights, company_type_weights: companyTypeWeights, search_titles: searchTitles, role_type: roleType || undefined, role_function: roleFunction || undefined },
           salary_min: salaryMin,
           location_preference: locationPref,
+          ...(masterCvJson ? { master_cv_json: masterCvJson } : {}),
         }),
       });
     } else {
