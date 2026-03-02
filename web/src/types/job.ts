@@ -52,6 +52,14 @@ export interface ScoredResult {
   talking_points?: string[];
   stories_to_prepare?: string[];
   one_line_verdict?: string;
+  requirement_evidence_map?: RequirementEvidence[];
+  cv_strategy?: string;
+}
+
+export interface RequirementEvidence {
+  requirement: string;
+  best_evidence: string;
+  cv_bullet_hint: string;
 }
 
 export interface CompanyContext {

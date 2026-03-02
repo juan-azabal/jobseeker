@@ -740,6 +740,26 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
             </section>
           )}
 
+          {/* ── Requirement evidence map (scored v2.1 only) ─────────── */}
+          {scored?.requirement_evidence_map && scored.requirement_evidence_map.length > 0 && (
+            <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                Your fit — by requirement
+              </h2>
+              <ul className="space-y-3">
+                {scored.requirement_evidence_map.map((item, i) => (
+                  <li key={i} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+                    <p className="text-xs font-medium text-zinc-300">{item.requirement}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{item.best_evidence}</p>
+                    {item.cv_bullet_hint && (
+                      <p className="mt-1.5 text-xs italic text-violet-400">→ {item.cv_bullet_hint}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {/* ── Prep zone: Interview Prep (RAG, tier A/B only) ─────── */}
           {isRAG && (job.tier === 'A' || job.tier === 'B') && ((scored.talking_points?.length ?? 0) > 0 || (scored.stories_to_prepare?.length ?? 0) > 0) && (
             <>
@@ -801,6 +821,12 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
 
           {/* ── Actions ───────────────────────────────────────────── */}
           <div className="pt-2">
+            {scored?.cv_strategy && (
+              <div className="mb-4 rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-3">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-violet-400/70">CV strategy</p>
+                <p className="text-sm leading-relaxed text-zinc-300">{scored.cv_strategy}</p>
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-3">
               <button
                 onClick={handleGenerateCV}
