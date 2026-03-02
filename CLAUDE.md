@@ -450,6 +450,7 @@ Master CV JSON — Multi-source career history (complete: 2026-03-02)
 - Phase 5 (UI): `web/src/types/masterCv.ts` (full TS schema), `AddSourceModal` (file + paste → POST /api/onboard/add-source), `AddEntryModal` (work/project, highlights, skills autocomplete → POST /api/onboard/add-entry), `ProfilePage` career history section with source badges, `OnboardPage` LinkedIn guidance card
 - GATE: 841 backend tests + 601 agent (5 skipped) passing
 
+
 Parser Enrichment + CV Pipeline Optimization (complete: 2026-03-02)
 - Phase 1: Parser v1.5 — 4 new fields: `role_in_plain_english`, `company_context` (stage/tone/what_they_value), `verbatim_for_cv`, `truly_required`/`preferred_skills` split; backward compat for `must_have_skills`/`nice_to_have_skills`; schemas/parsed_job.json updated
 - Phase 2: DB migration 020 (role_in_plain_english, company_stage, company_tone columns); ingest + API expose new fields; TypeScript types updated; null-omit pattern
