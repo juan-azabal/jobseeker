@@ -85,21 +85,42 @@ async def get_master_cv(user: dict = Depends(get_current_user)):
 
 
 @router.post("/add-source")
-async def add_source(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    """Merge a new CV file (PDF or DOCX) into the user's existing Master CV JSON."""
+async def add_source(request: Request, user: dict = Depends(get_current_user)):
+    """Merge a new source into the user's existing Master CV JSON.
+
+    Accepts either:
+    - multipart/form-data with a `file` field (PDF or DOCX)
+    - application/json with a `text` field (plain text / paste mode)
+    """
+    content_type = request.headers.get("content-type", "")
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
-    filename = (file.filename or "").lower()
-    if not filename.endswith(".docx") and not filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only .docx and .pdf files are supported")
 
-    contents = await file.read()
-    if len(contents) > MAX_CV_BYTES:
-        raise HTTPException(status_code=413, detail="File exceeds 5 MB limit")
-
-    try:
-        cv_text = extract_text_from_file(contents, file.filename or "")
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    if "application/json" in content_type:
+        body = await request.json()
+        text = body.get("text")
+        if not text:
+            raise HTTPException(status_code=422, detail="text field is required")
+        cv_text = text
+    elif "multipart/form-data" in content_type:
+        form = await request.form()
+        file = form.get("file")
+        if file is None:
+            raise HTTPException(status_code=422, detail="file field is required")
+        filename = (getattr(file, "filename", None) or "").lower()
+        if not filename.endswith(".docx") and not filename.endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="Only .docx and .pdf files are supported")
+        contents = await file.read()
+        if len(contents) > MAX_CV_BYTES:
+            raise HTTPException(status_code=413, detail="File exceeds 5 MB limit")
+        try:
+            cv_text = extract_text_from_file(contents, getattr(file, "filename", "") or "")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail="Content-Type must be application/json or multipart/form-data",
+        )
 
     client = _make_openai_client()
     incoming = extract_master_cv_json(cv_text, "add_source", client)
