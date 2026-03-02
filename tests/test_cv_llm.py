@@ -10,9 +10,11 @@ import importlib
 
 
 def _reload_llm():
-    """Reload llm module to reset singleton clients."""
+    """Reload llm module (and its config dependency) to reset singleton clients."""
+    import api.config as cfg
     import api.cv.llm as llm_module
 
+    importlib.reload(cfg)  # pick up any monkeypatched env vars (LLM_MODEL_CV etc.)
     importlib.reload(llm_module)
     return llm_module
 
@@ -163,10 +165,10 @@ def test_missing_openai_api_key_raises_runtime_error(monkeypatch):
 
 
 def test_cv_llm_model_override_anthropic(monkeypatch):
-    """CV_LLM_MODEL env var overrides default model for anthropic."""
+    """LLM_MODEL_CV env var overrides default model for anthropic."""
     monkeypatch.setenv("CV_LLM_PROVIDER", "anthropic")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    monkeypatch.setenv("CV_LLM_MODEL", "claude-opus-4-5")
+    monkeypatch.setenv("LLM_MODEL_CV", "claude-opus-4-5")
     monkeypatch.delenv("POSTHOG_API_KEY", raising=False)
 
     mock_response = MagicMock()
@@ -184,10 +186,10 @@ def test_cv_llm_model_override_anthropic(monkeypatch):
 
 
 def test_cv_llm_model_override_openai(monkeypatch):
-    """CV_LLM_MODEL env var overrides default model for openai."""
+    """LLM_MODEL_CV env var overrides default model for openai."""
     monkeypatch.setenv("CV_LLM_PROVIDER", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setenv("CV_LLM_MODEL", "gpt-4-turbo")
+    monkeypatch.setenv("LLM_MODEL_CV", "gpt-4-turbo")
     monkeypatch.delenv("POSTHOG_API_KEY", raising=False)
 
     mock_response = MagicMock()

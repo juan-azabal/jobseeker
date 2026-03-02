@@ -12,6 +12,8 @@ from pathlib import Path
 
 import yaml
 
+from api import config
+
 # ---------------------------------------------------------------------------
 # Extraction prompt (loaded once, cached)
 # ---------------------------------------------------------------------------
@@ -157,7 +159,7 @@ def _extract_profile(cv_text: str, client) -> dict:
     for attempt in range(2):
         try:
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=config.LLM_MODEL_PARSING,
                 messages=messages,
                 temperature=0,
                 max_tokens=1500,
