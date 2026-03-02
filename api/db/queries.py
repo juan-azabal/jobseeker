@@ -667,6 +667,30 @@ def update_job_domain(db_path: str, job_id: str, domain: str) -> None:
 # ── Domain correction analytics ───────────────────────────────────────────
 
 
+# ── Master CV JSON ────────────────────────────────────────────────────────
+
+
+def save_master_cv_json(db_path: str, user_id: int, json_str: str) -> None:
+    """Persist Master CV JSON string for a user."""
+    con = _connect(db_path)
+    con.execute("UPDATE users SET master_cv_json = ? WHERE id = ?", (json_str, user_id))
+    con.commit()
+    con.close()
+
+
+def get_master_cv_json(db_path: str, user_id: int) -> str | None:
+    """Return stored Master CV JSON string for a user, or None if absent."""
+    con = _connect(db_path)
+    row = con.execute("SELECT master_cv_json FROM users WHERE id = ?", (user_id,)).fetchone()
+    con.close()
+    if row is None:
+        return None
+    return row["master_cv_json"]
+
+
+# ── Domain correction analytics ───────────────────────────────────────────
+
+
 def get_domain_corrections(db_path: str) -> list[dict]:
     """Aggregate user domain corrections: cases where user override != parsed domain.
 
