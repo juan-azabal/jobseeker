@@ -10,6 +10,7 @@ python-multipart==0.0.20
 anthropic>=0.40.0
 openai==2.21.0
 python-docx>=1.1.0
+pdfplumber>=0.11
 ruamel.yaml>=0.18.0
 country_converter>=0.7
 geonamescache>=1.6
