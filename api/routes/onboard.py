@@ -2,7 +2,7 @@ import base64
 import json
 import os
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
@@ -116,6 +116,99 @@ async def add_source(file: UploadFile = File(...), user: dict = Depends(get_curr
 
     profile = derive_profile_from_master_cv(merged)
     return {"profile": profile, "master_cv": merged}
+
+
+class AddEntryRequest(BaseModel):
+    type: Literal["work", "project"]
+    company: str | None = None
+    position: str | None = None
+    name: str | None = None
+    url: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    summary: str = ""
+    highlights: list[str] = []
+    skills_used: list[str] = []
+    keywords: list[str] = []
+
+
+@router.post("/add-entry")
+async def add_entry(body: AddEntryRequest, user: dict = Depends(get_current_user)):
+    """Merge a manually typed work or project entry into the user's Master CV. Zero LLM."""
+    if body.type == "work" and not body.company:
+        raise HTTPException(status_code=422, detail="company is required for work entries")
+    if body.type == "project" and not body.name:
+        raise HTTPException(status_code=422, detail="name is required for project entries")
+
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+
+    if body.type == "work":
+        entry_id = f"work_{uuid.uuid4().hex[:6]}"
+        incoming = _build_work_shell(body, entry_id)
+    else:
+        entry_id = f"proj_{uuid.uuid4().hex[:6]}"
+        incoming = _build_project_shell(body, entry_id)
+
+    raw = get_master_cv_json(db_path, user["id"])
+    existing = json.loads(raw) if raw and raw != "null" else None
+    merged = merge_master_cvs(existing, incoming) if existing else incoming
+
+    save_master_cv_json(db_path, user["id"], json.dumps(merged))
+    try:
+        index_master_cv(user["id"], merged)
+    except Exception:
+        logger.exception("ChromaDB index failed for user_id=%d (non-fatal)", user["id"])
+
+    return {"master_cv": merged, "entry_id": entry_id}
+
+
+def _build_work_shell(body: AddEntryRequest, entry_id: str) -> dict:
+    return {
+        "version": "1.0",
+        "basics": {},
+        "work": [
+            {
+                "id": entry_id,
+                "company": body.company,
+                "position": body.position or "",
+                "start_date": body.start_date,
+                "end_date": body.end_date,
+                "summary": body.summary,
+                "highlights": body.highlights,
+                "skills_used": body.skills_used,
+                "source": "manual",
+            }
+        ],
+        "education": [],
+        "skills": [],
+        "languages": [],
+        "certifications": [],
+        "projects": [],
+    }
+
+
+def _build_project_shell(body: AddEntryRequest, entry_id: str) -> dict:
+    return {
+        "version": "1.0",
+        "basics": {},
+        "work": [],
+        "education": [],
+        "skills": [],
+        "languages": [],
+        "certifications": [],
+        "projects": [
+            {
+                "id": entry_id,
+                "name": body.name,
+                "url": body.url,
+                "start_date": body.start_date,
+                "end_date": body.end_date,
+                "highlights": body.highlights,
+                "keywords": body.keywords,
+                "source": "manual",
+            }
+        ],
+    }
 
 
 def _build_profile_yaml(profile: dict, profile_id: str, salary_min: int, location_preference: str) -> str:
