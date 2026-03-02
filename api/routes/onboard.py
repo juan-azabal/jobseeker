@@ -1,6 +1,5 @@
 import base64
 import os
-import tempfile
 import uuid
 from typing import Any
 
@@ -26,6 +25,7 @@ from api.onboard_utils import (
     _extract_profile as _onboard_extract_profile,
     _build_profile_yaml as _onboard_build_profile_yaml,
 )
+from shared.file_extract import extract_text_from_file
 
 MAX_CV_BYTES = 5 * 1024 * 1024  # 5 MB
 
@@ -1189,20 +1189,17 @@ async def replace_cv(body: ReplaceCVRequest, user: dict = Depends(get_current_us
 
 @router.post("/upload-cv", dependencies=[Depends(get_current_user)])
 async def upload_cv(file: UploadFile = File(...)):
-    if not file.filename or not file.filename.lower().endswith(".docx"):
-        raise HTTPException(status_code=400, detail="Only .docx files are supported")
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".docx") and not filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only .docx and .pdf files are supported")
 
     contents = await file.read()
     if len(contents) > MAX_CV_BYTES:
         raise HTTPException(status_code=413, detail="File exceeds 5 MB limit")
 
-    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
-        tmp.write(contents)
-        tmp_path = tmp.name
-
     try:
-        markdown = docx_to_markdown(tmp_path)
-    finally:
-        os.unlink(tmp_path)
+        markdown = extract_text_from_file(contents, file.filename or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     return {"markdown": markdown}

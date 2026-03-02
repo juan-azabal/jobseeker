@@ -28,15 +28,14 @@ def authed_client(tmp_path, monkeypatch):
     return c
 
 
-def test_upload_cv_200(authed_client, tmp_path):
-    docx_content = b"PK\x03\x04"  # minimal docx-like bytes
-    with patch("api.routes.onboard.docx_to_markdown", return_value="# Alice\n\nSenior PM"):
+def test_upload_cv_docx_200(authed_client):
+    with patch("api.routes.onboard.extract_text_from_file", return_value="# Alice\n\nSenior PM"):
         resp = authed_client.post(
             "/api/onboard/upload-cv",
             files={
                 "file": (
                     "cv.docx",
-                    io.BytesIO(docx_content),
+                    io.BytesIO(b"PK\x03\x04"),
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 )
             },
@@ -47,10 +46,20 @@ def test_upload_cv_200(authed_client, tmp_path):
     assert "Alice" in data["markdown"]
 
 
-def test_upload_cv_pdf_400(authed_client):
+def test_upload_cv_pdf_200(authed_client):
+    with patch("api.routes.onboard.extract_text_from_file", return_value="Jane Doe PM"):
+        resp = authed_client.post(
+            "/api/onboard/upload-cv",
+            files={"file": ("cv.pdf", io.BytesIO(b"%PDF"), "application/pdf")},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["markdown"] == "Jane Doe PM"
+
+
+def test_upload_cv_txt_400(authed_client):
     resp = authed_client.post(
         "/api/onboard/upload-cv",
-        files={"file": ("cv.pdf", io.BytesIO(b"%PDF"), "application/pdf")},
+        files={"file": ("cv.txt", io.BytesIO(b"plain text"), "text/plain")},
     )
     assert resp.status_code == 400
 
