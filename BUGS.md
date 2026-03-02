@@ -30,6 +30,18 @@
 **Impact**: Medium — users unaware of this feature may see narrower results than possible.
 **Path to fix**: Phase N — expose `search_titles` as editable list in ProfilePage alongside domains/skills.
 
+### DE-9 — Parser v1.5 fields only on freshly parsed jobs
+**Source**: Parser Enrichment Phase (2026-03-02)
+**Description**: `role_in_plain_english`, `company_context`, `verbatim_for_cv`, `truly_required`, `preferred_skills` are only populated for jobs parsed after the parser v1.5 prompt was deployed. Older cached jobs fall back to `responsibilities_summary`, `must_have_skills`, `nice_to_have_skills` (null otherwise). UI handles this gracefully via optional chaining and backward-compat fallbacks.
+**Impact**: Low — UI degrades gracefully. Feature becomes fully effective after reparse.
+**Path to fix**: Run `agent/scripts/reparse_rescore.py` for active jobs. Newly scraped jobs get v1.5 automatically.
+
+### DE-10 — Scorer v2.1 enrichments only on newly scored jobs
+**Source**: Parser Enrichment Phase (2026-03-02)
+**Description**: `requirement_evidence_map` and `cv_strategy` are only returned by scorer rubric v2.1 (deployed 2026-03-02). Jobs scored before this date won't have these fields. UI renders these sections conditionally (`scored?.requirement_evidence_map`, `scored?.cv_strategy`) so older jobs show nothing.
+**Impact**: Low — UI degrades gracefully. Becomes fully effective after rescore.
+**Path to fix**: Re-score active jobs via `reparse_rescore.py`.
+
 ### DE-1 — Eligibility penalty: parser-derived restriction field
 **Source**: Phase 19 (19.1.1)
 **Description**: `remote_restriction` is extracted by the LLM parser from job descriptions. If the parser fails to detect a country restriction (hallucination, unusual phrasing, or very long JD), the penalty won't fire.

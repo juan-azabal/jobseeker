@@ -420,12 +420,23 @@ Scoring data extraction (complete: 2026-03-01)
 - Scoring data extraction: pure data constants in shared/scoring_data.py, logic in shared/scoring_core.py (~370 lines). Re-exports preserve all import paths.
 - GATE: 692 backend tests + 429 agent tests passing (1 pre-existing scorer failure); scoring_core.py ~370 lines; no import path broken.
 
+Parser Enrichment + CV Pipeline Optimization (complete: 2026-03-02)
+- Phase 1: Parser v1.5 — 4 new fields: `role_in_plain_english`, `company_context` (stage/tone/what_they_value), `verbatim_for_cv`, `truly_required`/`preferred_skills` split; backward compat for `must_have_skills`/`nice_to_have_skills`; schemas/parsed_job.json updated
+- Phase 2: DB migration 020 (role_in_plain_english, company_stage, company_tone columns); ingest + API expose new fields; TypeScript types updated; null-omit pattern
+- Phase 3: CV gen refactored — plan-aware prompt uses parsed distillation (~450 tokens) instead of raw JD (~3-5K tokens); profile target context injected; plan.py uses v1.5 field names; A/B validation script
+- Phase 4: JobDetailPage self-sufficient — role_in_plain_english + company_context badges; split Required/Preferred skills; "Keywords to match" with CV presence check; raw JD collapsed
+- Phase 5: Scorer rubric v2.1 — `requirement_evidence_map` (5 entries max) + `cv_strategy` fields; plan.py consumes scorer enrichments; UI shows "Your fit — by requirement" + CV strategy above Generate CV button
+- GATE: 716 backend tests + 598 agent tests passing; TypeScript clean; no breaking changes for old jobs
+
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
 - Phase R — Refactor & Test Coverage
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
+- Parser enrichment strategy (2026-03-02): parser is single point of leverage — one prompt change cascades to scorer, CV gen, UI without new LLM calls. New fields: `role_in_plain_english` (daily-activity summary), `company_context` (stage/tone/values), `verbatim_for_cv` (exact phrases to mirror in CV), `truly_required`/`preferred_skills` (replaces must_have/nice_to_have). Backward compat: all consumers use `get("truly_required") or get("must_have_skills") or []` pattern so old cached jobs continue to work.
+- CV prompt token reduction (2026-03-02): plan-aware prompt replaced raw JD (~3-5K tokens) with parsed distillation (~450 tokens): role_in_plain_english + truly_required + preferred_skills + verbatim_for_cv + company_context + key_phrases. Reference files (generate-cv.md, ats-rules.md) removed from plan-aware path — content already captured in _OUTPUT_CONTRACT. Token reduction ~40% on the expensive Sonnet call. Legacy path (no plan) unchanged.
+- Scorer v2.1 enrichments (2026-03-02): `requirement_evidence_map` (max 5 entries: requirement→evidence→cv_bullet_hint) + `cv_strategy` (3 sentences). Cost ~200 extra output tokens per score. plan.py uses `_enrich_allocation_from_evidence()` to add cv_hints to bullet_allocation entries when company name appears in evidence text. Graceful: both fields optional — old scores without them work identically.
 - Dockerfile must copy shared/ (2026-03-01 incident): Railway uses the repo Dockerfile, not Nixpacks. When Phase R added `shared/scoring_core.py`, the Dockerfile only copied `api/` and `agent/` → `ModuleNotFoundError: No module named 'shared'` on every startup. Fix: `COPY shared/ ./shared/` in Stage 2. Diagnosis via `railway logs --deployment <id>`.
 - Railway V2 startCommand does NOT shell-expand variables (2026-03-01 incident): `startCommand = "uvicorn ... --port $PORT"` in railway.toml passes `$PORT` literally → uvicorn error "invalid value for '--port': '$PORT'". The Dockerfile CMD calls `startup.sh` which uses `exec uvicorn ... --port "${PORT:-8000}"` (bash expands it correctly). Never add startCommand back to railway.toml.
 - pyproject.toml must NOT have [project] section (2026-03-01 incident): Nixpacks would have tried `pip install .` but the container uses Dockerfile, not Nixpacks. Keeping only `[tool.ruff]` config in pyproject.toml is correct. PYTHONPATH=${{ github.workspace }} in GHA handles CI import resolution for `shared/`.
