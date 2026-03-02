@@ -180,6 +180,7 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
   const [cvError, setCvError] = useState<string | null>(null);
   const [addedSkills, setAddedSkills] = useState<Set<string>>(new Set());
   const [fitFilter, setFitFilter] = useState<'all' | 'gaps' | 'strengths'>('all');
+  const [userCvMd, setUserCvMd] = useState('');
 
   useEffect(() => {
     setLoading(true);
@@ -206,6 +207,13 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
       })
       .finally(() => setLoading(false));
   }, [jobId]);
+
+  useEffect(() => {
+    fetch('/api/onboard/profile')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.cv_markdown) setUserCvMd(data.cv_markdown.toLowerCase()); })
+      .catch(() => {});
+  }, []);
 
   if (loading) {
     return (
@@ -698,6 +706,37 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
                   </div>
                 </div>
               )}
+            </section>
+          )}
+
+          {/* ── Keywords to match ─────────────────────────────────── */}
+          {p?.verbatim_for_cv && p.verbatim_for_cv.length > 0 && (
+            <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                Keywords to match
+              </h2>
+              <div className="flex flex-wrap gap-1.5">
+                {p.verbatim_for_cv.map((phrase, i) => {
+                  const inCv = userCvMd ? userCvMd.includes(phrase.toLowerCase()) : null;
+                  return (
+                    <span
+                      key={i}
+                      className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs ${
+                        inCv === true
+                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                          : inCv === false
+                            ? 'border-zinc-700 bg-violet-500/10 text-violet-300'
+                            : 'border-zinc-700 bg-violet-500/10 text-violet-300'
+                      }`}
+                      title={inCv === true ? 'In your CV' : inCv === false ? 'Missing from CV' : ''}
+                    >
+                      {inCv === true && <span className="text-emerald-500">✓</span>}
+                      {inCv === false && <span className="text-zinc-500">·</span>}
+                      {phrase}
+                    </span>
+                  );
+                })}
+              </div>
             </section>
           )}
 
