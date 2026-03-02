@@ -21,6 +21,7 @@ from api.db.queries import (
     save_user_profile_yaml,
     get_user_profile_yaml,
     save_master_cv_json,
+    get_master_cv_json,
 )
 from api.onboard_utils import (
     docx_to_markdown as _docx_to_markdown,
@@ -71,6 +72,15 @@ async def generate_profile(body: GenerateProfileRequest):
     profile = derive_profile_from_master_cv(master_cv)
     profile.setdefault("seniority_weights", _derive_seniority_weights(profile))
     return {"profile": profile, "master_cv_json": master_cv}
+
+
+@router.get("/master-cv")
+async def get_master_cv(user: dict = Depends(get_current_user)):
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    raw = get_master_cv_json(db_path, user["id"])
+    if raw is None:
+        raise HTTPException(status_code=404, detail="No Master CV found")
+    return json.loads(raw)
 
 
 def _build_profile_yaml(profile: dict, profile_id: str, salary_min: int, location_preference: str) -> str:
