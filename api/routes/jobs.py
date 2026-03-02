@@ -672,9 +672,10 @@ def generate_cv_endpoint(
 
     # Plan is built from the job data + the user's CV (from DB) — no disk files
     plan = build_cv_plan(row, user_cv_markdown)
+    profile_data = load_profile_data(user.get("profile_id"))
 
     try:
-        system_prompt, user_prompt = build_cv_prompts(row, user_cv_markdown, plan)
+        system_prompt, user_prompt = build_cv_prompts(row, user_cv_markdown, plan, profile_data)
     except FileNotFoundError as e:
         logger.error("CV generation failed: missing reference file", job_id=job_id, user_id=user["id"], detail=str(e))
         return JSONResponse(

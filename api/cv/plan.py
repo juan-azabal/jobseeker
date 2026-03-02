@@ -174,7 +174,8 @@ def build_cv_plan(job: dict, user_cv_markdown: str = "") -> dict:
 
     Returns:
         Plan dict with keys: jd_context, score_summary, strengths, gaps,
-        bullet_allocation, source_facts.
+        bullet_allocation, source_facts. Optionally: requirement_evidence,
+        cv_strategy (when scorer v2.1 fields are present).
 
     This function never raises — missing data produces conservative defaults.
     """
@@ -184,18 +185,29 @@ def build_cv_plan(job: dict, user_cv_markdown: str = "") -> dict:
     jd_text = parsed.get("description", "") or ""
     location = (parsed.get("locations_mentioned") or [""])[0]
 
-    return {
-        "jd_context": _build_jd_context(parsed, jd_text, location),
+    # Scorer v2.1 enrichment fields (optional, graceful if absent)
+    evidence_map = scored.get("requirement_evidence_map") or []
+    cv_strategy = scored.get("cv_strategy")
+
+    companies = _parse_companies_from_experience(cv_text)
+    allocation = _build_bullet_allocation(companies, cv_text, parsed)
+    _enrich_allocation_from_evidence(allocation, evidence_map)
+
+    jd_ctx = _build_jd_context(parsed, jd_text, location)
+    if cv_strategy:
+        jd_ctx["cv_strategy"] = cv_strategy
+
+    plan: dict = {
+        "jd_context": jd_ctx,
         "score_summary": _build_score_summary(scored),
         "strengths": scored.get("strengths", []),
         "gaps": scored.get("gaps", []),
-        "bullet_allocation": _build_bullet_allocation(
-            _parse_companies_from_experience(cv_text),
-            cv_text,
-            parsed,
-        ),
+        "bullet_allocation": allocation,
         "source_facts": _extract_source_facts(cv_text),
     }
+    if evidence_map:
+        plan["requirement_evidence"] = evidence_map[:5]
+    return plan
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -220,7 +232,7 @@ def _parse_job_blobs(job: dict) -> tuple[dict, dict]:
 
 
 def _build_jd_context(parsed: dict, jd_text: str, location: str) -> dict:
-    return {
+    ctx = {
         "company_type": _detect_company_type(jd_text),
         "business_model": _detect_business_model(parsed, jd_text),
         "vertical": parsed.get("domain", "unknown"),
@@ -230,6 +242,10 @@ def _build_jd_context(parsed: dict, jd_text: str, location: str) -> dict:
         "team_signals": _extract_team_signals(jd_text),
         "location_language_hints": _location_language_hints([location]),
     }
+    role_summary = parsed.get("role_in_plain_english")
+    if role_summary:
+        ctx["role_summary"] = role_summary
+    return ctx
 
 
 def _detect_company_type(jd_text: str) -> str:
@@ -556,6 +572,27 @@ def _compute_company_relevance(
     if ratio >= 0.05:
         return "medium", f"{matched} JD skills/tools found in role"
     return "low", "limited overlap with JD requirements"
+
+
+def _enrich_allocation_from_evidence(
+    allocation: dict,
+    evidence_map: list[dict],
+) -> None:
+    """Add cv_hints to allocation entries where evidence mentions the company.
+
+    Mutates allocation in-place. Graceful: no-op when either arg is empty.
+    """
+    if not evidence_map or not allocation:
+        return
+    for company in allocation:
+        hints: list[str] = []
+        for entry in evidence_map:
+            ev_text = (entry.get("best_evidence") or "").lower()
+            cv_hint = entry.get("cv_bullet_hint") or ""
+            if company.lower() in ev_text and cv_hint:
+                hints.append(cv_hint)
+        if hints:
+            allocation[company]["cv_hints"] = hints
 
 
 def _build_bullet_allocation(

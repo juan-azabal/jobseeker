@@ -52,6 +52,26 @@ export interface ScoredResult {
   talking_points?: string[];
   stories_to_prepare?: string[];
   one_line_verdict?: string;
+  requirement_evidence_map?: RequirementEvidence[];
+  cv_strategy?: string;
+}
+
+export interface RequirementEvidence {
+  requirement: string;
+  best_evidence: string;
+  cv_bullet_hint: string;
+}
+
+export interface CompanyContext {
+  stage?: string;
+  what_they_value?: string[];
+  tone?: string;
+}
+
+export interface CompanyContext {
+  stage?: string;
+  what_they_value?: string[];
+  tone?: string;
 }
 
 export interface CompanyContext {
@@ -80,6 +100,7 @@ export interface ParsedJob {
   company_context?: CompanyContext;
   verbatim_for_cv?: string[];
   responsibilities_summary?: string;
+  description?: string;
   team_size_hints?: string | null;
   salary_mentioned?: string | null;
   remote_restriction?: string | null;

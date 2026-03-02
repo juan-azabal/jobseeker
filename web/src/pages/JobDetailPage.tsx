@@ -180,6 +180,7 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
   const [cvError, setCvError] = useState<string | null>(null);
   const [addedSkills, setAddedSkills] = useState<Set<string>>(new Set());
   const [fitFilter, setFitFilter] = useState<'all' | 'gaps' | 'strengths'>('all');
+  const [userCvMd, setUserCvMd] = useState('');
 
   useEffect(() => {
     setLoading(true);
@@ -206,6 +207,13 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
       })
       .finally(() => setLoading(false));
   }, [jobId]);
+
+  useEffect(() => {
+    fetch('/api/onboard/profile')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.cv_markdown) setUserCvMd(data.cv_markdown.toLowerCase()); })
+      .catch(() => {});
+  }, []);
 
   if (loading) {
     return (
@@ -368,11 +376,13 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
       : `${p.years_experience_min}+ yrs`
     : null;
 
-  // Derived: filtered requirements and skills
+  // Derived: filtered requirements and skills (v1.5 names with backward compat)
+  const mustHaveSkills = p?.truly_required ?? p?.must_have_skills ?? [];
+  const niceToHaveSkills = p?.preferred_skills ?? p?.nice_to_have_skills ?? [];
   const filteredRequirements = filterRequirements(p?.experience_requirements ?? [], p?.role_function);
-  const filteredMustHave = filterSkills(p?.must_have_skills ?? [], p?.role_function);
+  const filteredMustHave = filterSkills(mustHaveSkills, p?.role_function);
   const allSkillsLower = new Set(
-    [...(p?.must_have_skills ?? []), ...(p?.nice_to_have_skills ?? [])].map(s => s.toLowerCase())
+    [...mustHaveSkills, ...niceToHaveSkills].map(s => s.toLowerCase())
   );
   const techStackOnly = (p?.technical_stack ?? []).filter(s => !allSkillsLower.has(s.toLowerCase()));
 
@@ -506,13 +516,34 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
         <div className="space-y-4">
 
           {/* ── Section 1: The Role ─────────────────────────────────── */}
-          {(p?.responsibilities_summary || filteredRequirements.length > 0 || (p?.key_phrases && p.key_phrases.length > 0)) && (
+          {(p?.role_in_plain_english || p?.responsibilities_summary || p?.company_context || filteredRequirements.length > 0 || (p?.key_phrases && p.key_phrases.length > 0)) && (
             <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
               <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
                 The Role
               </h2>
-              {p?.responsibilities_summary && (
-                <p className="text-sm leading-relaxed text-zinc-300">{p.responsibilities_summary}</p>
+              {(p?.role_in_plain_english || p?.responsibilities_summary) && (
+                <p className="text-sm leading-relaxed text-zinc-300">
+                  {p?.role_in_plain_english ?? p?.responsibilities_summary}
+                </p>
+              )}
+              {p?.company_context && (p.company_context.stage || p.company_context.tone || (p.company_context.what_they_value && p.company_context.what_they_value.length > 0)) && (
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                  {p.company_context.stage && (
+                    <span className="rounded border border-zinc-700 bg-zinc-800/60 px-2 py-0.5 text-xs text-zinc-400">
+                      {p.company_context.stage}
+                    </span>
+                  )}
+                  {p.company_context.tone && (
+                    <span className="rounded border border-zinc-700 bg-zinc-800/60 px-2 py-0.5 text-xs text-zinc-400">
+                      {p.company_context.tone.replace(/_/g, ' ')}
+                    </span>
+                  )}
+                  {p.company_context.what_they_value && p.company_context.what_they_value.length > 0 && (
+                    <span className="text-xs text-zinc-500">
+                      {p.company_context.what_they_value.join(' · ')}
+                    </span>
+                  )}
+                </div>
               )}
               {p?.key_phrases && p.key_phrases.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
@@ -624,13 +655,13 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
           )}
 
           {/* ── Section 3: Skills (all jobs) ───────────────────────── */}
-          {(filteredMustHave.length > 0 || (p?.nice_to_have_skills?.length ?? 0) > 0 || techStackOnly.length > 0) && (
+          {(filteredMustHave.length > 0 || niceToHaveSkills.length > 0 || techStackOnly.length > 0) && (
             <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
               <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
                 Skills
               </h2>
               {filteredMustHave.length > 0 && (
-                <div className={p?.nice_to_have_skills?.length || techStackOnly.length ? 'mb-3' : ''}>
+                <div className={niceToHaveSkills.length > 0 || techStackOnly.length > 0 ? 'mb-3' : ''}>
                   <p className="mb-1.5 text-xs text-zinc-600">Required</p>
                   <div className="flex flex-wrap gap-1.5">
                     {job.skill_matches
@@ -649,9 +680,9 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
                   </div>
                 </div>
               )}
-              {p?.nice_to_have_skills && p.nice_to_have_skills.length > 0 && (
+              {niceToHaveSkills.length > 0 && (
                 <div className={techStackOnly.length > 0 ? 'mb-3' : ''}>
-                  <p className="mb-1.5 text-xs text-zinc-600">Nice to have</p>
+                  <p className="mb-1.5 text-xs text-zinc-600">Preferred</p>
                   <div className="flex flex-wrap gap-1.5">
                     {job.skill_matches
                       ? job.skill_matches.nice_to_have.map((m, i) => (
@@ -662,7 +693,7 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
                             onClick={m.status !== 'matched' ? () => handleAddSkill(m.skill) : undefined}
                           />
                         ))
-                      : p.nice_to_have_skills.map((s, i) => <Chip key={i} label={s} />)
+                      : niceToHaveSkills.map((s, i) => <Chip key={i} label={s} />)
                     }
                   </div>
                 </div>
@@ -675,6 +706,57 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
                   </div>
                 </div>
               )}
+            </section>
+          )}
+
+          {/* ── Keywords to match ─────────────────────────────────── */}
+          {p?.verbatim_for_cv && p.verbatim_for_cv.length > 0 && (
+            <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                Keywords to match
+              </h2>
+              <div className="flex flex-wrap gap-1.5">
+                {p.verbatim_for_cv.map((phrase, i) => {
+                  const inCv = userCvMd ? userCvMd.includes(phrase.toLowerCase()) : null;
+                  return (
+                    <span
+                      key={i}
+                      className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs ${
+                        inCv === true
+                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                          : inCv === false
+                            ? 'border-zinc-700 bg-violet-500/10 text-violet-300'
+                            : 'border-zinc-700 bg-violet-500/10 text-violet-300'
+                      }`}
+                      title={inCv === true ? 'In your CV' : inCv === false ? 'Missing from CV' : ''}
+                    >
+                      {inCv === true && <span className="text-emerald-500">✓</span>}
+                      {inCv === false && <span className="text-zinc-500">·</span>}
+                      {phrase}
+                    </span>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* ── Requirement evidence map (scored v2.1 only) ─────────── */}
+          {scored?.requirement_evidence_map && scored.requirement_evidence_map.length > 0 && (
+            <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                Your fit — by requirement
+              </h2>
+              <ul className="space-y-3">
+                {scored.requirement_evidence_map.map((item, i) => (
+                  <li key={i} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+                    <p className="text-xs font-medium text-zinc-300">{item.requirement}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{item.best_evidence}</p>
+                    {item.cv_bullet_hint && (
+                      <p className="mt-1.5 text-xs italic text-violet-400">→ {item.cv_bullet_hint}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </section>
           )}
 
@@ -723,8 +805,28 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
             </section>
           )}
 
+          {/* ── Raw JD (collapsed) ────────────────────────────────── */}
+          {p?.description && (
+            <details className="rounded-xl border border-zinc-800 bg-zinc-900/60">
+              <summary className="cursor-pointer select-none px-5 py-3 text-xs font-semibold uppercase tracking-widest text-zinc-500 hover:text-zinc-400">
+                View original job description
+              </summary>
+              <div className="border-t border-zinc-800 px-5 py-4">
+                <pre className="whitespace-pre-wrap text-xs leading-relaxed text-zinc-500">
+                  {p.description}
+                </pre>
+              </div>
+            </details>
+          )}
+
           {/* ── Actions ───────────────────────────────────────────── */}
           <div className="pt-2">
+            {scored?.cv_strategy && (
+              <div className="mb-4 rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-3">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-violet-400/70">CV strategy</p>
+                <p className="text-sm leading-relaxed text-zinc-300">{scored.cv_strategy}</p>
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-3">
               <button
                 onClick={handleGenerateCV}
