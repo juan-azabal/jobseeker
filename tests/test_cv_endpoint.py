@@ -165,13 +165,12 @@ def test_generate_cv_invalid_job_returns_404(authed_client):
     assert resp.status_code == 404
 
 
-def test_generate_cv_no_jd_returns_422(authed_client):
-    """Job without extractable JD returns 422 with error code no_jd."""
+def test_generate_cv_no_jd_succeeds_with_fallback(authed_client):
+    """Job without JD text succeeds in plan-aware path using parsed fallback note."""
     with patch("api.cv.llm.generate_cv", return_value=MOCK_CV_MARKDOWN):
         resp = authed_client.post("/api/jobs/cv_test_2/generate-cv")
-    assert resp.status_code == 422
-    data = resp.json()
-    assert data["error"] == "no_jd"
+    assert resp.status_code == 200
+    assert "no_jd" not in resp.text
 
 
 def test_generate_cv_llm_failure_returns_500(authed_client):

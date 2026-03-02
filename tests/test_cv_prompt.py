@@ -393,8 +393,8 @@ def test_build_cv_prompts_with_plan_user_contains_plan_json(monkeypatch, mock_re
     assert "source_facts" in user
 
 
-def test_build_cv_prompts_with_plan_user_contains_jd_text(monkeypatch, mock_references_dir):
-    """User prompt with plan must still contain the JD text."""
+def test_build_cv_prompts_with_plan_user_no_raw_jd(monkeypatch, mock_references_dir):
+    """User prompt with plan must NOT contain the raw JD text (replaced by parsed summary)."""
     monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
 
     import importlib
@@ -404,7 +404,9 @@ def test_build_cv_prompts_with_plan_user_contains_jd_text(monkeypatch, mock_refe
 
     _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
 
-    assert "data platform team" in user  # from parsed.description
+    # Raw JD removed from plan-aware path — replaced by parsed distillation
+    assert "data platform team" not in user, "Raw JD text must not appear in plan-aware user prompt"
+    assert "## Job Summary (parsed)" in user
 
 
 def test_build_cv_prompts_with_plan_system_contains_bullet_allocation_instruction(monkeypatch, mock_references_dir):
@@ -560,3 +562,79 @@ def test_build_cv_prompts_backward_compat_empty_plan(monkeypatch, mock_reference
 
     assert len(system) > 100
     assert "Senior Product Manager" in user
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Phase 3.1 tests — parsed distillation replaces raw JD in plan-aware path
+# ══════════════════════════════════════════════════════════════════════════
+
+SAMPLE_JOB_V15 = {
+    **SAMPLE_JOB,
+    "parsed": json.dumps(
+        {
+            "description": "Full raw job description text goes here.",
+            "role_in_plain_english": "You will own the roadmap and work with the data team.",
+            "truly_required": ["SQL", "Python"],
+            "preferred_skills": ["dbt", "Airflow"],
+            "verbatim_for_cv": ["event-driven architecture", "self-serve analytics"],
+            "company_context": {
+                "stage": "growth",
+                "what_they_value": ["speed", "data"],
+                "tone": "startup_scrappy",
+            },
+        }
+    ),
+}
+
+
+def test_build_cv_prompts_with_plan_system_no_reference_files(monkeypatch, mock_references_dir):
+    """System prompt in plan-aware path must NOT contain reference file sections."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+
+    importlib.reload(prompt_module)
+
+    system, _ = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
+
+    assert "SECTION: generate-cv.md" not in system, "Reference files must not appear in plan-aware system prompt"
+    assert "SECTION: ats-rules.md" not in system, "Reference files must not appear in plan-aware system prompt"
+
+
+def test_build_cv_prompts_with_plan_user_v15_fields_in_summary(monkeypatch, mock_references_dir):
+    """Plan-aware user prompt includes v1.5 parsed fields in Job Summary section."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+
+    importlib.reload(prompt_module)
+
+    _, user = prompt_module.build_cv_prompts(SAMPLE_JOB_V15, "", SAMPLE_PLAN)
+
+    assert "## Job Summary (parsed)" in user
+    assert "You will own the roadmap" in user
+    assert "SQL" in user
+    assert "dbt" in user
+    assert "event-driven architecture" in user
+    assert "growth stage" in user
+    assert "startup_scrappy tone" in user
+    # Raw JD must not leak through
+    assert "Full raw job description text" not in user
+
+
+def test_build_cv_prompts_with_plan_user_no_v15_fallback(monkeypatch, mock_references_dir):
+    """Plan-aware user prompt shows fallback note when no v1.5 fields available."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+
+    importlib.reload(prompt_module)
+
+    _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
+
+    # SAMPLE_JOB has no v1.5 fields — fallback note should appear
+    assert "## Job Summary (parsed)" in user
+    assert "predates parser v1.5" in user

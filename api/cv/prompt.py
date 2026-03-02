@@ -166,6 +166,21 @@ Spanish (native) | English (advanced)
 
 6. If the target role involves consulting, working across multiple clients, or embedded
    product work, include a sentence about adaptability to different environments.
+
+---
+
+## Character and syntax rules
+
+- Use only ASCII hyphen (-) in dates and separators. Never em dash (—), en dash (–),
+  arrows (->) or tilde (~) — replace any that appear.
+- No Oxford comma: write "A, B and C" not "A, B, and C".
+- No AI-telltale patterns: avoid identical bullet lengths, perfect rhythmic structure,
+  round metrics without context, or generic openings ("Experienced professional with...").
+  Each bullet should differ in length and structure.
+- Projects section: include ONLY when the role explicitly values AI/LLM, data platform,
+  ML infrastructure, or technical portfolio (signals: "AI PM", "data platform",
+  "technical PM" in JD). Omit for traditional or generalist PM roles — distribute
+  relevant project keywords into Core Skills instead.
 """
 
 # Plan-aware rules — appended to the system prompt when a cv_plan is provided.
@@ -315,6 +330,54 @@ def _extract_jd_text(parsed: dict) -> str:
     )
 
 
+def _format_job_summary(parsed: dict) -> str:
+    """Format parser v1.5 fields as a compact job summary (~450 tokens).
+
+    Replaces the raw JD in the plan-aware prompt path.
+    Falls back to a note for old jobs without v1.5 fields.
+    """
+    parts: list[str] = []
+
+    role = parsed.get("role_in_plain_english")
+    if role:
+        parts += ["**What you'll do:**", role, ""]
+
+    truly_required = parsed.get("truly_required") or parsed.get("must_have_skills") or []
+    if truly_required:
+        parts.append("**Required:**")
+        parts.extend(f"- {s}" for s in truly_required)
+        parts.append("")
+
+    preferred = parsed.get("preferred_skills") or parsed.get("nice_to_have_skills") or []
+    if preferred:
+        parts.append("**Preferred:**")
+        parts.extend(f"- {s}" for s in preferred)
+        parts.append("")
+
+    verbatim = parsed.get("verbatim_for_cv") or []
+    if verbatim:
+        parts.append("**Key phrases to mirror:**")
+        parts.extend(f'- "{p}"' for p in verbatim)
+        parts.append("")
+
+    ctx = parsed.get("company_context") or {}
+    ctx_items: list[str] = []
+    if ctx.get("stage"):
+        ctx_items.append(f"{ctx['stage']} stage")
+    if ctx.get("tone"):
+        ctx_items.append(f"{ctx['tone']} tone")
+    values = ctx.get("what_they_value") or []
+    if values:
+        ctx_items.append(f"values: {', '.join(values)}")
+    if ctx_items:
+        parts += [f"**Company context:** {' · '.join(ctx_items)}", ""]
+
+    if not parts:
+        parts.append("(No parsed summary — job predates parser v1.5.)")
+
+    return "\n".join(["## Job Summary (parsed)", ""] + parts)
+
+
 def build_cv_prompts(
     job: dict,
     user_cv_markdown: str,
@@ -342,9 +405,6 @@ def build_cv_prompts(
         FileNotFoundError: If a required reference file is missing.
         ValueError: If the job has no extractable job description text.
     """
-    refs_dir = _get_references_dir()
-    reference_content = _load_reference_files(refs_dir)
-
     # Inject the user's CV as the authoritative candidate source.
     # It replaces the old per-user reference files (master-cv-profile.md /
     # master-cv-experience.md) that used to be committed to the repo.
@@ -368,15 +428,18 @@ def build_cv_prompts(
         except (json.JSONDecodeError, TypeError):
             scored = {}
 
-    jd_text = _extract_jd_text(parsed)
-
     # ── Plan-aware path ───────────────────────────────────────────────────
     if cv_plan:
-        system_prompt = reference_content + cv_section + "\n\n" + _OUTPUT_CONTRACT + "\n\n" + _PLAN_AWARE_RULES
-        user_prompt = _build_plan_aware_user_prompt(job, jd_text, cv_plan)
+        # Reference files excluded: rules captured in _OUTPUT_CONTRACT + _PLAN_AWARE_RULES.
+        # Raw JD replaced by parsed distillation (~450 tokens vs 3-5K tokens).
+        system_prompt = cv_section + "\n\n" + _OUTPUT_CONTRACT + "\n\n" + _PLAN_AWARE_RULES
+        user_prompt = _build_plan_aware_user_prompt(job, parsed, cv_plan)
         return system_prompt, user_prompt
 
     # ── Legacy path (no plan) ─────────────────────────────────────────────
+    refs_dir = _get_references_dir()
+    reference_content = _load_reference_files(refs_dir)
+    jd_text = _extract_jd_text(parsed)
     system_prompt = reference_content + cv_section + "\n\n" + _OUTPUT_CONTRACT
 
     # Extract scoring details
@@ -425,19 +488,20 @@ def build_cv_prompts(
 
 def _build_plan_aware_user_prompt(
     job: dict,
-    jd_text: str,
+    parsed: dict,
     cv_plan: dict,
 ) -> str:
     """Build the simplified user prompt for plan-aware generation.
 
     The candidate's CV is in the system prompt (candidate-master-cv.md section).
+    Raw JD replaced by _format_job_summary() — ~450 tokens vs 3-5K tokens.
 
     Structure:
         ## CV Generation Plan
         {plan JSON}
 
-        ## Job Description
-        {JD text}
+        ## Job Summary (parsed)
+        {v1.5 parsed fields}
 
         ## Job Metadata
         Title / Company / Location / Score
@@ -452,9 +516,7 @@ def _build_plan_aware_user_prompt(
         "",
         plan_json,
         "",
-        "## Job Description",
-        "",
-        jd_text,
+        _format_job_summary(parsed),
         "",
         "## Job Metadata",
         "",
