@@ -18,5 +18,13 @@
   ],
   "deal_breakers": ["anything that makes this a hard no"],
   "talking_points": ["1-2 sentence angle to open with in interview"],
-  "one_line_verdict": "10-15 word summary of fit"
+  "one_line_verdict": "10-15 word summary of fit",
+  "requirement_evidence_map": [
+    {
+      "requirement": "truly_required skill or key experience_requirement",
+      "best_evidence": "specific achievement from profile that proves this",
+      "cv_bullet_hint": "1-sentence suggestion for CV bullet angle"
+    }
+  ],
+  "cv_strategy": "3-sentence CV strategy: angle, company to feature, gap framing"
 }
