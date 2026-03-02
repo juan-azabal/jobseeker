@@ -32,6 +32,7 @@ from api.master_cv_vectorstore import index_master_cv
 from shared.file_extract import extract_text_from_file
 from shared.master_cv_extract import extract_master_cv_json
 from shared.master_cv_derive import derive_profile_from_master_cv
+from shared.master_cv_merge import merge_master_cvs
 
 MAX_CV_BYTES = 5 * 1024 * 1024  # 5 MB
 
@@ -81,6 +82,40 @@ async def get_master_cv(user: dict = Depends(get_current_user)):
     if raw is None:
         raise HTTPException(status_code=404, detail="No Master CV found")
     return json.loads(raw)
+
+
+@router.post("/add-source")
+async def add_source(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """Merge a new CV file (PDF or DOCX) into the user's existing Master CV JSON."""
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".docx") and not filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only .docx and .pdf files are supported")
+
+    contents = await file.read()
+    if len(contents) > MAX_CV_BYTES:
+        raise HTTPException(status_code=413, detail="File exceeds 5 MB limit")
+
+    try:
+        cv_text = extract_text_from_file(contents, file.filename or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    client = _make_openai_client()
+    incoming = extract_master_cv_json(cv_text, "add_source", client)
+
+    raw = get_master_cv_json(db_path, user["id"])
+    existing = json.loads(raw) if raw and raw != "null" else None
+    merged = merge_master_cvs(existing, incoming) if existing else incoming
+
+    save_master_cv_json(db_path, user["id"], json.dumps(merged))
+    try:
+        index_master_cv(user["id"], merged)
+    except Exception:
+        logger.exception("ChromaDB index failed for user_id=%d (non-fatal)", user["id"])
+
+    profile = derive_profile_from_master_cv(merged)
+    return {"profile": profile, "master_cv": merged}
 
 
 def _build_profile_yaml(profile: dict, profile_id: str, salary_min: int, location_preference: str) -> str:
