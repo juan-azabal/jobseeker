@@ -91,3 +91,58 @@ def test_empty_master_cv_returns_empty_context():
     }
     ctx = build_scoring_context(empty_cv, _JOB)
     assert isinstance(ctx, str)
+
+
+# --- Phase 3.3: ChromaDB-enhanced gap detection ---
+
+_CV_NO_HEALTHCARE = {
+    **_MASTER_CV,
+    "work": [
+        {
+            **_MASTER_CV["work"][0],
+            "skills_used": ["product management"],  # healthcare removed
+        }
+    ],
+}
+
+_JOB_HEALTHCARE_REQ = {
+    "must_have_skills": ["healthcare"],
+    "nice_to_have_skills": [],
+}
+
+
+def test_query_fn_provides_semantic_evidence_when_close_match():
+    """query_fn returning distance ≤ 0.5 → highlight shown as semantic evidence."""
+
+    def mock_query(_skill):
+        return [{"document": "Reduced patient wait time by 30%", "distance": 0.2}]
+
+    ctx = build_scoring_context(_CV_NO_HEALTHCARE, _JOB_HEALTHCARE_REQ, query_fn=mock_query)
+    assert "30%" in ctx or "patient wait time" in ctx.lower()
+
+
+def test_query_fn_marks_gap_when_no_semantic_match():
+    """query_fn returning distance > 0.5 → [GAP] marker added."""
+
+    def mock_query(_skill):
+        return [{"document": "unrelated content about fintech", "distance": 0.9}]
+
+    ctx = build_scoring_context(_CV_NO_HEALTHCARE, _JOB_HEALTHCARE_REQ, query_fn=mock_query)
+    assert "[GAP]" in ctx
+
+
+def test_query_fn_marks_gap_when_empty_results():
+    """query_fn returning empty list → [GAP] marker added."""
+
+    def mock_query(_skill):
+        return []
+
+    ctx = build_scoring_context(_CV_NO_HEALTHCARE, _JOB_HEALTHCARE_REQ, query_fn=mock_query)
+    assert "[GAP]" in ctx
+
+
+def test_no_query_fn_uses_deterministic_gap_no_marker():
+    """Without query_fn, gap shows 'No evidence' but no [GAP] marker (backward compat)."""
+    ctx = build_scoring_context(_CV_NO_HEALTHCARE, _JOB_HEALTHCARE_REQ)
+    assert "No evidence" in ctx
+    assert "[GAP]" not in ctx
