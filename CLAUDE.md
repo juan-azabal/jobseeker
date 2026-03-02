@@ -37,14 +37,15 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `api/geo.py` — geographic region utilities (API-side copy of agent/geo.py)
   - `api/onboard_utils.py` — CV parsing + profile YAML generation (extracted from agent/onboard.py)
   - `api/prompts/` — LLM prompts for API-side features (onboard-extraction.md)
-  - `api/cv/` — CV generation pipeline (plan, prompt, llm, validator, docx_builder, ats_audit)
+  - `api/cv/` — CV generation pipeline (plan, prompt, llm, validator, docx_builder, ats_audit, select, render, rewrite)
   - `api/analytics.py` — PostHog Python client (init, capture, identify_user, capture_exception)
   - `api/logging_config.py` — structlog configuration (JSON in CI, ConsoleRenderer locally)
 - Frontend: `web/`
-  - `web/src/components/` — FilterBar, JobCard, ProfileEditor, ScoreBreakdown, FileUpload, UserMenu, DomainSelector, WaitlistForm, MockDashboard, MockJobDetail, MockCVButton
+  - `web/src/components/` — FilterBar, JobCard, ProfileEditor, ScoreBreakdown, FileUpload, UserMenu, DomainSelector, WaitlistForm, MockDashboard, MockJobDetail, MockCVButton, AddSourceModal, AddEntryModal
   - `web/src/pages/` — Landing, Login, Onboard, Jobs, JobDetail, Profile, Admin
   - `web/src/context/AuthContext.tsx` — auth state provider
-  - `web/src/types/job.ts` — TypeScript types
+  - `web/src/types/job.ts` — job TypeScript types
+  - `web/src/types/masterCv.ts` — Master CV JSON schema TypeScript types
   - `web/src/constants/domains.ts` — 30-domain canonical enum, display labels, grouped categories
   - `web/src/analytics.ts` — posthog-js wrapper (initPostHog, identifyUser, resetPostHog)
 - Agent: `agent/`
@@ -94,6 +95,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 - Shared: `shared/`
   - `shared/scoring_core.py` — scoring logic (domain inference, grade mapping, eligibility penalty, heuristic score); imported by both `api/` and `agent/`
   - `shared/scoring_data.py` — scoring data constants (domains, keywords, city map, lang signals)
+  - `shared/master_cv_scoring.py` — `build_scoring_context(master_cv, job, query_fn=None)` → enriched skill evidence + recent roles string for RAG prompt injection (≤6000 chars)
 - DB: `data/jobseeker.db` (gitignored)
 - Static build: `web/dist/` (gitignored)
 - Scripts: `scripts/seed_dev.py` — dev database seeder, `scripts/backfill_embeddings.py` — one-time skill embedding backfill
@@ -420,6 +422,15 @@ Scoring data extraction (complete: 2026-03-01)
 - Scoring data extraction: pure data constants in shared/scoring_data.py, logic in shared/scoring_core.py (~370 lines). Re-exports preserve all import paths.
 - GATE: 692 backend tests + 429 agent tests passing (1 pre-existing scorer failure); scoring_core.py ~370 lines; no import path broken.
 
+Master CV JSON — Multi-source career history (complete: 2026-03-02)
+- Phase 1: Parser v1.5 fields → `role_in_plain_english`, `company_stage`, `company_tone` extracted to real DB columns (migration 020); exposed in list + detail API; TypeScript types updated
+- Phase 3.1: `shared/master_cv_scoring.py` — `build_scoring_context(master_cv, job)` → skill evidence + recent roles context string (≤6000 chars / ~1500 tokens)
+- Phase 3.2: `score_job()` + `score_all()` in `agent/scorer.py` — `knowledge_dir` param reads `master_cv.json`, injects enriched context before LLM call; non-fatal fallback
+- Phase 3.3: `build_scoring_context()` gains `query_fn: Callable | None` — ChromaDB semantic gap detection; distance ≤ 0.5 → evidence; > 0.5 → `[GAP]` marker; without `query_fn`: backward-compat "No evidence" (no marker)
+- Phase 4: CV generation from Master CV JSON — `api/cv/select.py` (ChromaDB-ranked work entry selection), `api/cv/render.py` (selection → markdown), `api/cv/rewrite.py` (narrow LLM rewrite, tone/emphasis only); wired into `generate_cv_endpoint()` with legacy fallback; `X-CV-Plan` response header
+- Phase 5 (UI): `web/src/types/masterCv.ts` (full TS schema), `AddSourceModal` (file + paste → POST /api/onboard/add-source), `AddEntryModal` (work/project, highlights, skills autocomplete → POST /api/onboard/add-entry), `ProfilePage` career history section with source badges, `OnboardPage` LinkedIn guidance card
+- GATE: 841 backend tests + 601 agent (5 skipped) passing
+
 Parser Enrichment + CV Pipeline Optimization (complete: 2026-03-02)
 - Phase 1: Parser v1.5 — 4 new fields: `role_in_plain_english`, `company_context` (stage/tone/what_they_value), `verbatim_for_cv`, `truly_required`/`preferred_skills` split; backward compat for `must_have_skills`/`nice_to_have_skills`; schemas/parsed_job.json updated
 - Phase 2: DB migration 020 (role_in_plain_english, company_stage, company_tone columns); ingest + API expose new fields; TypeScript types updated; null-omit pattern
@@ -435,6 +446,9 @@ Parser Enrichment + CV Pipeline Optimization (complete: 2026-03-02)
 
 ### Decisions
 - Parser enrichment strategy (2026-03-02): parser is single point of leverage — one prompt change cascades to scorer, CV gen, UI without new LLM calls. New fields: `role_in_plain_english` (daily-activity summary), `company_context` (stage/tone/values), `verbatim_for_cv` (exact phrases to mirror in CV), `truly_required`/`preferred_skills` (replaces must_have/nice_to_have). Backward compat: all consumers use `get("truly_required") or get("must_have_skills") or []` pattern so old cached jobs continue to work.
+- Master CV JSON scoring injection (2026-03-02): `score_job()` reads `master_cv.json` from `knowledge_dir`, calls `build_scoring_context()` to produce ≤6000-char evidence string, appends to LLM user prompt. Non-fatal: any exception falls through to scoring without enrichment. `score_all()` propagates `knowledge_dir` to all workers.
+- Master CV CV generation pipeline (2026-03-02): `select_cv_content()` uses ChromaDB `query_similar_work()` + `query_similar_highlights()` to rank work entries by semantic distance to job description. `render_cv_markdown()` converts selection to markdown. `rewrite_cv_content()` calls `generate_cv()` (LLM) to adapt tone/emphasis only — no fabrication, no removal. Falls back to `render_cv_markdown()` output on any LLM error. `generate_cv_endpoint()` tries Master CV pipeline first; falls back to legacy `build_cv_plan()` path on any exception.
+- `X-CV-Plan` header (2026-03-02): `generate_cv_endpoint()` returns `{"entries":[{id,company,relevance}],"skill_intersection":[...]}` in `X-CV-Plan` response header when Master CV pipeline succeeds. Enables client-side transparency about which work entries were used.
 - CV prompt token reduction (2026-03-02): plan-aware prompt replaced raw JD (~3-5K tokens) with parsed distillation (~450 tokens): role_in_plain_english + truly_required + preferred_skills + verbatim_for_cv + company_context + key_phrases. Reference files (generate-cv.md, ats-rules.md) removed from plan-aware path — content already captured in _OUTPUT_CONTRACT. Token reduction ~40% on the expensive Sonnet call. Legacy path (no plan) unchanged.
 - Scorer v2.1 enrichments (2026-03-02): `requirement_evidence_map` (max 5 entries: requirement→evidence→cv_bullet_hint) + `cv_strategy` (3 sentences). Cost ~200 extra output tokens per score. plan.py uses `_enrich_allocation_from_evidence()` to add cv_hints to bullet_allocation entries when company name appears in evidence text. Graceful: both fields optional — old scores without them work identically.
 - Dockerfile must copy shared/ (2026-03-01 incident): Railway uses the repo Dockerfile, not Nixpacks. When Phase R added `shared/scoring_core.py`, the Dockerfile only copied `api/` and `agent/` → `ModuleNotFoundError: No module named 'shared'` on every startup. Fix: `COPY shared/ ./shared/` in Stage 2. Diagnosis via `railway logs --deployment <id>`.
