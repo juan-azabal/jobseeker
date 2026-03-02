@@ -29,6 +29,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `api/main.py` — FastAPI app
   - `api/routes/` — one file per resource (auth, jobs, onboard, ingest, admin, digest)
   - `api/middleware/auth.py` — session auth + admin guards (`get_current_user`, `get_current_admin`)
+  - `api/middleware/staging.py` — blocks non-admin requests in ENVIRONMENT=staging (returns 403)
   - `api/db/` — SQLite init, migrations (001–016), queries
   - `api/ingest.py` — pipeline output → SQLite
   - `api/scoring.py` — per-user heuristic scoring (ported from agent)
@@ -40,6 +41,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `api/cv/` — CV generation pipeline (plan, prompt, llm, validator, docx_builder, ats_audit, select, render, rewrite)
   - `api/analytics.py` — PostHog Python client (init, capture, identify_user, capture_exception)
   - `api/logging_config.py` — structlog configuration (JSON in CI, ConsoleRenderer locally)
+  - `api/db/snapshot.py` — async `download_prod_snapshot()`: streams SQLite backup from prod, validates magic bytes, atomic replace
 - Frontend: `web/`
   - `web/src/components/` — FilterBar, JobCard, ProfileEditor, ScoreBreakdown, FileUpload, UserMenu, DomainSelector, WaitlistForm, MockDashboard, MockJobDetail, MockCVButton, AddSourceModal, AddEntryModal
   - `web/src/pages/` — Landing, Login, Onboard, Jobs, JobDetail, Profile, Admin
@@ -117,6 +119,12 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 | `GH_ACTIONS_TOKEN` | GitHub PAT (contents:write + actions:write) | — |
 | `GH_REPO` | GitHub repo `owner/repo` for workflow dispatch | — |
 | `GH_REF` | Git branch for workflow dispatch | `main` |
+| `ENVIRONMENT` | Runtime environment (`production`\|`staging`) | `production` |
+| `PROD_API_URL` | Production base URL for staging DB snapshot | — |
+| `DB_EXPORT_API_KEY` | Shared secret for `/api/admin/db-export` | — |
+| `LLM_MODEL_PARSING` | Override parsing model for cheap staging inference | `gpt-4o-mini` |
+| `LLM_MODEL_SCORING` | Override scoring model for cheap staging inference | `gpt-4o-mini` |
+| `VITE_ENVIRONMENT` | Frontend env string (`staging` shows banner) | — |
 
 ### CV Generation (api/cv/)
 | Variable | Description | Default |
@@ -422,6 +430,17 @@ Scoring data extraction (complete: 2026-03-01)
 - Scoring data extraction: pure data constants in shared/scoring_data.py, logic in shared/scoring_core.py (~370 lines). Re-exports preserve all import paths.
 - GATE: 692 backend tests + 429 agent tests passing (1 pre-existing scorer failure); scoring_core.py ~370 lines; no import path broken.
 
+Phase Staging — Staging Environment (complete: 2026-03-01)
+- Config: `ENVIRONMENT`, `PROD_API_URL`, `DB_EXPORT_API_KEY`, `LLM_MODEL_PARSING`, `LLM_MODEL_SCORING` in `api/config.py`
+- Middleware: `api/middleware/staging.py` — `StagingGateMiddleware` returns 403 for non-admin users when `ENVIRONMENT=staging`
+- Export: `GET /api/admin/db-export` (X-API-Key auth) — streams live SQLite database as download
+- Import: `POST /api/admin/db-import` (admin auth) — downloads prod snapshot, validates SQLite magic, atomic replace
+- Snapshot: `api/db/snapshot.py` — shared `download_prod_snapshot()` used by both import endpoint and startup
+- Auto-seed: startup downloads prod DB when `ENVIRONMENT=staging` + DB file missing + both secrets set
+- Frontend: `StagingBanner` in `App.tsx` (amber, shows when `VITE_ENVIRONMENT=staging`)
+- Admin UI: staging-only "Refresh from production" button in `AdminPage.tsx` (amber section, POST `/api/admin/db-import`)
+- Tests: `tests/test_db_export.py` (4), `tests/test_db_import.py` (5), `tests/test_startup_autoseed.py` (5) — 717 backend tests total
+
 Master CV JSON — Multi-source career history (complete: 2026-03-02)
 - Phase 1: Parser v1.5 fields → `role_in_plain_english`, `company_stage`, `company_tone` extracted to real DB columns (migration 020); exposed in list + detail API; TypeScript types updated
 - Phase 3.1: `shared/master_cv_scoring.py` — `build_scoring_context(master_cv, job)` → skill evidence + recent roles context string (≤6000 chars / ~1500 tokens)
@@ -445,6 +464,9 @@ Parser Enrichment + CV Pipeline Optimization (complete: 2026-03-02)
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
+- Staging gate middleware (Phase Staging): `StagingGateMiddleware` is registered after `CorrelationIdMiddleware` so the correlation ID is already set when 403 is returned. Non-admin users on staging see 403 on every request. Admin users and health check routes pass through. `/api/health` is whitelisted (no auth check).
+- Staging DB snapshot (Phase Staging): `download_prod_snapshot()` re-raises `httpx.TimeoutException` so the admin route can return 502 (upstream unreachable) vs 400 (bad response). Startup auto-seed catches all exceptions so a failed download never aborts startup.
+- DB export authentication (Phase Staging): uses `X-API-Key` header (same `DB_EXPORT_API_KEY` as `INGEST_API_KEY` pattern) rather than admin session cookie — the staging service needs to call it without a browser session.
 - Parser enrichment strategy (2026-03-02): parser is single point of leverage — one prompt change cascades to scorer, CV gen, UI without new LLM calls. New fields: `role_in_plain_english` (daily-activity summary), `company_context` (stage/tone/values), `verbatim_for_cv` (exact phrases to mirror in CV), `truly_required`/`preferred_skills` (replaces must_have/nice_to_have). Backward compat: all consumers use `get("truly_required") or get("must_have_skills") or []` pattern so old cached jobs continue to work.
 - Master CV JSON scoring injection (2026-03-02): `score_job()` reads `master_cv.json` from `knowledge_dir`, calls `build_scoring_context()` to produce ≤6000-char evidence string, appends to LLM user prompt. Non-fatal: any exception falls through to scoring without enrichment. `score_all()` propagates `knowledge_dir` to all workers.
 - Master CV CV generation pipeline (2026-03-02): `select_cv_content()` uses ChromaDB `query_similar_work()` + `query_similar_highlights()` to rank work entries by semantic distance to job description. `render_cv_markdown()` converts selection to markdown. `rewrite_cv_content()` calls `generate_cv()` (LLM) to adapt tone/emphasis only — no fabrication, no removal. Falls back to `render_cv_markdown()` output on any LLM error. `generate_cv_endpoint()` tries Master CV pipeline first; falls back to legacy `build_cv_plan()` path on any exception.

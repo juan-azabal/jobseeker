@@ -18,7 +18,9 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from api.logging_config import configure_logging
 from api.db.init import init_db
-from api import analytics
+from api.db.snapshot import download_prod_snapshot
+from api import analytics, config
+from api.middleware.staging import StagingGateMiddleware
 from api.routes.health import router as health_router
 from api.routes.jobs import router as jobs_router
 from api.routes.auth import router as auth_router
@@ -42,7 +44,8 @@ app = FastAPI(title="JobSeeker")
 # Middleware ordering (first added = outermost per Starlette/FastAPI behaviour):
 # 1. SessionMiddleware — reads oauth_state cookie
 # 2. CorrelationIdMiddleware — generates UUID per request, sets X-Request-ID header
-# 3. structlog_middleware — binds correlation_id + user_id to contextvars, logs request
+# 3. StagingGateMiddleware — blocks non-admin users in ENVIRONMENT=staging
+# 4. structlog_middleware — binds correlation_id + user_id to contextvars, logs request
 
 app.add_middleware(
     SessionMiddleware,
@@ -51,6 +54,7 @@ app.add_middleware(
 )
 
 app.add_middleware(CorrelationIdMiddleware)
+app.add_middleware(StagingGateMiddleware)
 
 
 @app.middleware("http")
@@ -82,7 +86,7 @@ async def structlog_middleware(request: Request, call_next):
 
 
 @app.on_event("startup")
-def on_startup():
+async def on_startup():
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
     db_exists = Path(db_path).exists()
     logger.info("JobSeeker starting up", db_path=db_path, db_exists=db_exists)
@@ -99,6 +103,18 @@ def on_startup():
         logger.warning("Missing critical env vars", missing=missing)
     else:
         logger.info("All critical env vars present")
+
+    # Staging auto-seed: download prod DB when volume is empty on first boot
+    if config.ENVIRONMENT == "staging" and not db_exists and config.PROD_API_URL and config.DB_EXPORT_API_KEY:
+        logger.info("Staging auto-seed: DB not found, downloading from production", prod_url=config.PROD_API_URL)
+        try:
+            ok = await download_prod_snapshot(config.PROD_API_URL, config.DB_EXPORT_API_KEY, db_path)
+            if ok:
+                logger.info("Staging auto-seed: success", db_path=db_path)
+            else:
+                logger.warning("Staging auto-seed: failed, starting with empty DB")
+        except Exception as exc:
+            logger.error("Staging auto-seed: unexpected error", error=str(exc))
 
     init_db(db_path)
     logger.info("DB ready", db_path=db_path)
