@@ -220,7 +220,7 @@ def _parse_job_blobs(job: dict) -> tuple[dict, dict]:
 
 
 def _build_jd_context(parsed: dict, jd_text: str, location: str) -> dict:
-    return {
+    ctx = {
         "company_type": _detect_company_type(jd_text),
         "business_model": _detect_business_model(parsed, jd_text),
         "vertical": parsed.get("domain", "unknown"),
@@ -230,6 +230,10 @@ def _build_jd_context(parsed: dict, jd_text: str, location: str) -> dict:
         "team_signals": _extract_team_signals(jd_text),
         "location_language_hints": _location_language_hints([location]),
     }
+    role_summary = parsed.get("role_in_plain_english")
+    if role_summary:
+        ctx["role_summary"] = role_summary
+    return ctx
 
 
 def _detect_company_type(jd_text: str) -> str:
