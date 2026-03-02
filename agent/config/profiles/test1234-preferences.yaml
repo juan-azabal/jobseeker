@@ -15,6 +15,11 @@ prefilter:
   - principal pm
   - staff pm
   - senior pm
+  - director of product
+  - head of product
+  - group product manager
+  - vp product
+  - vp of product
   title_exclude:
   - business development
   - crm manager
