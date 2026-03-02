@@ -94,7 +94,7 @@ def authed_client(tmp_path, monkeypatch):
 
 
 def test_add_source_file_upload_200(authed_client):
-    """Upload a PDF → merge → return updated profile + master_cv."""
+    """Upload a PDF → merge → return 202; merged master_cv persisted in DB."""
     client, db_path, user_id = authed_client
     with (
         patch("api.routes.onboard._make_openai_client", return_value=None),
@@ -106,28 +106,22 @@ def test_add_source_file_upload_200(authed_client):
             "api.routes.onboard.extract_master_cv_json",
             return_value=_NEW_SOURCE_MASTER_CV,
         ),
-        patch(
-            "api.routes.onboard.derive_profile_from_master_cv",
-            return_value=_MOCK_DERIVED,
-        ),
         patch("api.routes.onboard.index_master_cv"),
     ):
         resp = client.post(
             "/api/onboard/add-source",
             files={"file": ("linkedin.pdf", io.BytesIO(b"%PDF"), "application/pdf")},
         )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "profile" in data
-    assert "master_cv" in data
-    # Both companies should be in merged master CV
-    companies = [e["company"] for e in data["master_cv"]["work"]]
+    assert resp.status_code == 202
+    # TestClient runs BackgroundTasks synchronously — data is persisted now
+    saved = json.loads(get_master_cv_json(db_path, user_id))
+    companies = [e["company"] for e in saved["work"]]
     assert "Acme" in companies
     assert "StartupCo" in companies
 
 
 def test_add_source_merges_skills(authed_client):
-    """Skills from new source are merged with existing."""
+    """Skills from new source are merged with existing; persisted in DB after 202."""
     client, db_path, user_id = authed_client
     with (
         patch("api.routes.onboard._make_openai_client", return_value=None),
@@ -138,10 +132,6 @@ def test_add_source_merges_skills(authed_client):
         patch(
             "api.routes.onboard.extract_master_cv_json",
             return_value=_NEW_SOURCE_MASTER_CV,
-        ),
-        patch(
-            "api.routes.onboard.derive_profile_from_master_cv",
-            return_value=_MOCK_DERIVED,
         ),
         patch("api.routes.onboard.index_master_cv"),
     ):
@@ -155,14 +145,15 @@ def test_add_source_merges_skills(authed_client):
                 )
             },
         )
-    assert resp.status_code == 200
-    names = {s["name"] for s in resp.json()["master_cv"]["skills"]}
+    assert resp.status_code == 202
+    saved = json.loads(get_master_cv_json(db_path, user_id))
+    names = {s["name"] for s in saved["skills"]}
     assert "python" in names
     assert "sql" in names
 
 
 def test_add_source_no_existing_master_cv(authed_client):
-    """If no existing master CV, incoming becomes the master CV."""
+    """If no existing master CV, incoming becomes master CV; returns 202."""
     client, db_path, user_id = authed_client
     # Clear existing master CV
     from api.db.queries import save_master_cv_json as _save  # noqa: PLC0415
@@ -178,17 +169,13 @@ def test_add_source_no_existing_master_cv(authed_client):
             "api.routes.onboard.extract_master_cv_json",
             return_value=_NEW_SOURCE_MASTER_CV,
         ),
-        patch(
-            "api.routes.onboard.derive_profile_from_master_cv",
-            return_value=_MOCK_DERIVED,
-        ),
         patch("api.routes.onboard.index_master_cv"),
     ):
         resp = client.post(
             "/api/onboard/add-source",
             files={"file": ("cv.pdf", io.BytesIO(b"%PDF"), "application/pdf")},
         )
-    assert resp.status_code == 200
+    assert resp.status_code == 202
 
 
 def test_add_source_unsupported_type(authed_client):
