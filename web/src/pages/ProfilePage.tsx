@@ -134,7 +134,7 @@ export default function ProfilePage() {
     const mergeResp = await fetch('/api/onboard/replace-cv', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cv_markdown: pendingMarkdown, extracted_profile: extracted }),
+      body: JSON.stringify({ cv_markdown: pendingMarkdown, extracted_profile: extracted.profile, master_cv_json: extracted.master_cv_json }),
     });
     if (!mergeResp.ok) {
       const data = await mergeResp.json().catch(() => ({}));
