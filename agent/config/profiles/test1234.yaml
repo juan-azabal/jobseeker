@@ -21,7 +21,7 @@ target:
     senior: 10
 scoring:
   rag_threshold: 25
-  salary_min: 80000
+  salary_min: 60000
 skills:
 - python
 - sql
