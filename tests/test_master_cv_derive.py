@@ -155,6 +155,54 @@ class TestDeriveProfileFromMasterCv:
         assert len(profile["domains"]) > 0
 
 
+class TestEnrichSkillsFromWork:
+    def test_missing_skill_added_with_source_inferred(self):
+        from shared.master_cv_derive import enrich_skills_from_work
+
+        cv = {
+            "work": [{"skills_used": ["Figma", "SQL"]}],
+            "skills": [{"name": "SQL", "level": None, "keywords": [], "source": "cv_upload"}],
+        }
+        result = enrich_skills_from_work(cv)
+        skill_names = [s["name"].lower() for s in result["skills"]]
+        assert "figma" in skill_names
+        inferred = [s for s in result["skills"] if s["name"].lower() == "figma"]
+        assert inferred[0]["source"] == "inferred"
+
+    def test_existing_skill_not_duplicated(self):
+        from shared.master_cv_derive import enrich_skills_from_work
+
+        cv = {
+            "work": [{"skills_used": ["SQL"]}],
+            "skills": [{"name": "SQL", "level": None, "keywords": [], "source": "cv_upload"}],
+        }
+        result = enrich_skills_from_work(cv)
+        sql_entries = [s for s in result["skills"] if s["name"].lower() == "sql"]
+        assert len(sql_entries) == 1
+
+    def test_case_insensitive_dedup(self):
+        from shared.master_cv_derive import enrich_skills_from_work
+
+        cv = {
+            "work": [{"skills_used": ["sql"]}],
+            "skills": [{"name": "SQL", "level": None, "keywords": [], "source": "cv_upload"}],
+        }
+        result = enrich_skills_from_work(cv)
+        sql_entries = [s for s in result["skills"] if s["name"].lower() == "sql"]
+        assert len(sql_entries) == 1
+
+    def test_does_not_mutate_input(self):
+        from shared.master_cv_derive import enrich_skills_from_work
+
+        cv = {
+            "work": [{"skills_used": ["Figma"]}],
+            "skills": [],
+        }
+        original_skills = list(cv["skills"])
+        enrich_skills_from_work(cv)
+        assert cv["skills"] == original_skills
+
+
 class TestMinimalMasterCv:
     def test_empty_work_returns_default_profile(self):
         from shared.master_cv_derive import derive_profile_from_master_cv

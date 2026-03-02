@@ -139,6 +139,23 @@ def _infer_role_function(entry: dict | None) -> str:
     return "other"
 
 
+def enrich_skills_from_work(master_cv: dict) -> dict:
+    """Add skills from work[].skills_used that are missing from skills[].
+
+    Skills added this way get source='inferred'. Input is not mutated.
+    """
+    existing_names = {s.get("name", "").lower() for s in master_cv.get("skills") or []}
+    new_skills = list(master_cv.get("skills") or [])
+
+    for entry in master_cv.get("work") or []:
+        for skill in entry.get("skills_used") or []:
+            if skill.strip().lower() not in existing_names:
+                existing_names.add(skill.strip().lower())
+                new_skills.append({"name": skill, "source": "inferred"})
+
+    return {**master_cv, "skills": new_skills}
+
+
 def _derive_home_locations(basics: dict) -> list[str]:
     """Return [city, country] from basics.location, filtering empty strings."""
     location = basics.get("location") or {}
