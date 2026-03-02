@@ -638,3 +638,93 @@ def test_build_cv_prompts_with_plan_user_no_v15_fallback(monkeypatch, mock_refer
     # SAMPLE_JOB has no v1.5 fields — fallback note should appear
     assert "## Job Summary (parsed)" in user
     assert "predates parser v1.5" in user
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Phase 3.2 tests — profile target context in plan-aware user prompt
+# ══════════════════════════════════════════════════════════════════════════
+
+SAMPLE_PROFILE_DATA = {
+    "domains": {"data": 15, "saas": 10, "fintech": 5, "gaming": -10},
+    "role_type": "Senior Product Manager",
+    "role_function": "product",
+    "skills": [
+        "sql",
+        "python",
+        "stakeholder management",
+        "roadmapping",
+        "data analysis",
+        "a/b testing",
+        "agile",
+        "scrum",
+        "jira",
+        "product strategy",
+    ],
+    "seniority": {},
+    "home_locations": [],
+    "home_regions": [],
+    "languages": [],
+    "location_preference": "b",
+    "country_weights": {},
+    "company_type_weights": {},
+}
+
+
+def test_build_cv_prompts_with_plan_and_profile_injects_candidate_target(monkeypatch, mock_references_dir):
+    """Plan-aware user prompt includes Candidate Target section when profile_data provided."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+
+    importlib.reload(prompt_module)
+
+    _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN, SAMPLE_PROFILE_DATA)
+
+    assert "## Candidate Target" in user
+    assert "data" in user
+    assert "Senior Product Manager" in user
+    assert "sql" in user
+
+
+def test_build_cv_prompts_with_plan_profile_omits_negative_domains(monkeypatch, mock_references_dir):
+    """Candidate Target must NOT list negative-weight domains."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+
+    importlib.reload(prompt_module)
+
+    _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN, SAMPLE_PROFILE_DATA)
+
+    assert "gaming" not in user
+
+
+def test_build_cv_prompts_with_plan_no_profile_no_candidate_target(monkeypatch, mock_references_dir):
+    """Plan-aware user prompt omits Candidate Target when no profile_data provided."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+
+    importlib.reload(prompt_module)
+
+    _, user = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
+
+    assert "## Candidate Target" not in user
+
+
+def test_build_cv_prompts_profile_data_none_is_no_op(monkeypatch, mock_references_dir):
+    """Passing profile_data=None behaves identically to omitting the param."""
+    monkeypatch.setenv("CV_REFERENCES_DIR", str(mock_references_dir))
+
+    import importlib
+    import api.cv.prompt as prompt_module
+
+    importlib.reload(prompt_module)
+
+    _, user_default = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN)
+    _, user_none = prompt_module.build_cv_prompts(SAMPLE_JOB, "", SAMPLE_PLAN, None)
+
+    assert user_default == user_none

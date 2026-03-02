@@ -378,10 +378,42 @@ def _format_job_summary(parsed: dict) -> str:
     return "\n".join(["## Job Summary (parsed)", ""] + parts)
 
 
+def _format_candidate_target(profile_data: dict) -> str:
+    """Format profile target context as a compact ~200-token section.
+
+    Returns empty string if profile_data is None or has no useful fields.
+    """
+    if not profile_data:
+        return ""
+
+    parts: list[str] = []
+
+    domains = {k: v for k, v in (profile_data.get("domains") or {}).items() if v > 0}
+    top_domains = sorted(domains.items(), key=lambda x: x[1], reverse=True)[:3]
+    if top_domains:
+        domain_str = ", ".join(f"{d} ({w:+d})" for d, w in top_domains)
+        parts += [f"**Target domains:** {domain_str}", ""]
+
+    role_type = profile_data.get("role_type")
+    role_function = profile_data.get("role_function")
+    if role_type or role_function:
+        role_str = " / ".join(x for x in [role_type, role_function] if x)
+        parts += [f"**Role:** {role_str}", ""]
+
+    skills = (profile_data.get("skills") or [])[:10]
+    if skills:
+        parts += [f"**Skills:** {', '.join(skills)}", ""]
+
+    if not parts:
+        return ""
+    return "\n".join(["## Candidate Target", ""] + parts)
+
+
 def build_cv_prompts(
     job: dict,
     user_cv_markdown: str,
     cv_plan: dict | None = None,
+    profile_data: dict | None = None,
 ) -> tuple[str, str]:
     """Build the (system_prompt, user_prompt) tuple for CV generation.
 
@@ -397,6 +429,8 @@ def build_cv_prompts(
         job: Full job dict from SQLite (includes parsed and scored JSON strings).
         user_cv_markdown: Content of the user's cv.md file (empty string if unavailable).
         cv_plan: Optional plan dict from build_cv_plan(). None → legacy behavior.
+        profile_data: Optional profile dict from load_profile_data(). Injects target
+            context (top domains, role, skills) into the plan-aware user prompt.
 
     Returns:
         Tuple of (system_prompt, user_prompt) ready for api.cv.llm.generate_cv().
@@ -433,7 +467,7 @@ def build_cv_prompts(
         # Reference files excluded: rules captured in _OUTPUT_CONTRACT + _PLAN_AWARE_RULES.
         # Raw JD replaced by parsed distillation (~450 tokens vs 3-5K tokens).
         system_prompt = cv_section + "\n\n" + _OUTPUT_CONTRACT + "\n\n" + _PLAN_AWARE_RULES
-        user_prompt = _build_plan_aware_user_prompt(job, parsed, cv_plan)
+        user_prompt = _build_plan_aware_user_prompt(job, parsed, cv_plan, profile_data)
         return system_prompt, user_prompt
 
     # ── Legacy path (no plan) ─────────────────────────────────────────────
@@ -490,15 +524,20 @@ def _build_plan_aware_user_prompt(
     job: dict,
     parsed: dict,
     cv_plan: dict,
+    profile_data: dict | None = None,
 ) -> str:
     """Build the simplified user prompt for plan-aware generation.
 
     The candidate's CV is in the system prompt (candidate-master-cv.md section).
     Raw JD replaced by _format_job_summary() — ~450 tokens vs 3-5K tokens.
+    Profile target context injected when profile_data is provided (~200 tokens).
 
     Structure:
         ## CV Generation Plan
         {plan JSON}
+
+        ## Candidate Target          ← only when profile_data provided
+        {top domains, role, skills}
 
         ## Job Summary (parsed)
         {v1.5 parsed fields}
@@ -511,11 +550,18 @@ def _build_plan_aware_user_prompt(
     """
     plan_json = json.dumps(cv_plan, indent=2, ensure_ascii=False)
 
-    parts = [
+    parts: list[str] = [
         "## CV Generation Plan",
         "",
         plan_json,
         "",
+    ]
+
+    candidate_target = _format_candidate_target(profile_data)
+    if candidate_target:
+        parts += [candidate_target, ""]
+
+    parts += [
         _format_job_summary(parsed),
         "",
         "## Job Metadata",
