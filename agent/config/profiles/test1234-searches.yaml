@@ -1,24 +1,24 @@
 searches:
-- term: Head of Product SaaS B2B
+- term: Senior Product Manager SaaS B2B
   location: Spain
   sites:
   - indeed
   - google
   results_wanted: 20
   hours_old: 72
-- term: Head of Product remote
+- term: Senior Product Manager remote
   location: Spain
   sites:
   - linkedin
   results_wanted: 15
   hours_old: 72
-- term: Head of Product SaaS B2B
+- term: Senior Product Manager SaaS B2B
   location: ''
   sites:
   - linkedin
   results_wanted: 10
   hours_old: 72
-- term: Head of Product python
+- term: Senior Product Manager python
   location: Spain
   sites:
   - linkedin
