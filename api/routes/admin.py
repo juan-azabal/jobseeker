@@ -243,7 +243,7 @@ def embedding_diagnostics(admin: dict = Depends(get_current_admin)):
     for (parsed_json,) in rows:
         try:
             parsed = json.loads(parsed_json)
-            for skill in parsed.get("must_have_skills", []) or []:
+            for skill in parsed.get("truly_required") or parsed.get("must_have_skills") or []:
                 if isinstance(skill, str) and skill.strip():
                     norm = skill.strip().lower()
                     if norm not in seen:
@@ -317,7 +317,13 @@ def backfill_embeddings(
                 for (parsed_json,) in conn.execute("SELECT parsed FROM jobs WHERE parsed IS NOT NULL").fetchall():
                     try:
                         parsed = json.loads(parsed_json)
-                        for key in ("must_have_skills", "nice_to_have_skills", "technical_stack"):
+                        for key in (
+                            "truly_required",
+                            "must_have_skills",
+                            "preferred_skills",
+                            "nice_to_have_skills",
+                            "technical_stack",
+                        ):
                             for s in parsed.get(key, []) or []:
                                 if isinstance(s, str) and s.strip():
                                     job_skills.add(s.strip().lower())

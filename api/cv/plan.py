@@ -280,11 +280,11 @@ def _location_language_hints(locations: list[str]) -> list[str]:
 
 
 def _extract_key_tools(parsed: dict) -> list[str]:
-    """Filter must_have_skills + technical_stack to known tool names."""
+    """Filter truly_required + technical_stack to known tool names."""
     raw: list[str] = (
-        (parsed.get("must_have_skills") or [])
+        (parsed.get("truly_required") or parsed.get("must_have_skills") or [])
         + (parsed.get("technical_stack") or [])
-        + (parsed.get("nice_to_have_skills") or [])
+        + (parsed.get("preferred_skills") or parsed.get("nice_to_have_skills") or [])
     )
     seen: set[str] = set()
     result: list[str] = []
@@ -511,7 +511,7 @@ def _parse_companies_from_experience(experience: str) -> list[str]:
 
 def _build_required_tokens(parsed: dict) -> frozenset[str]:
     """Build a set of meaningful tokens from JD requirements."""
-    raw = (parsed.get("must_have_skills") or []) + (parsed.get("technical_stack") or [])
+    raw = (parsed.get("truly_required") or parsed.get("must_have_skills") or []) + (parsed.get("technical_stack") or [])
     tokens: set[str] = set()
     for item in raw:
         for token in item.lower().split():

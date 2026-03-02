@@ -1,6 +1,6 @@
 """
 Phase 2: RAG-based fit scoring.
-Retrieves relevant chunks from the knowledge base and calls gpt-4o
+Retrieves relevant chunks from the knowledge base and calls gpt-4o-mini
 to score each parsed job against the user's profile.
 """
 
@@ -138,8 +138,8 @@ def _map_stories(job, story_tags: dict):
         job.get("title", ""),
         parsed.get("domain", ""),
         parsed.get("responsibilities_summary", ""),
-        " ".join(parsed.get("must_have_skills") or []),
-        " ".join(parsed.get("nice_to_have_skills") or []),
+        " ".join(parsed.get("truly_required") or parsed.get("must_have_skills") or []),
+        " ".join(parsed.get("preferred_skills") or parsed.get("nice_to_have_skills") or []),
         " ".join(parsed.get("technical_stack") or []),
         " ".join(parsed.get("key_phrases") or []),
     ]
@@ -174,8 +174,8 @@ Seniority: {parsed.get("seniority", "?")}
 Domain: {parsed.get("domain", "?")}
 Salary: {parsed.get("salary_mentioned", "not mentioned")}
 
-Must-have skills: {", ".join(parsed.get("must_have_skills") or [])}
-Nice-to-have: {", ".join(parsed.get("nice_to_have_skills") or [])}
+Must-have skills: {", ".join(parsed.get("truly_required") or parsed.get("must_have_skills") or [])}
+Nice-to-have: {", ".join(parsed.get("preferred_skills") or parsed.get("nice_to_have_skills") or [])}
 Technical stack: {", ".join(parsed.get("technical_stack") or [])}
 Responsibilities: {parsed.get("responsibilities_summary", "")}
 Red flags: {", ".join(parsed.get("red_flags") or [])}
@@ -206,7 +206,7 @@ def score_job(job, collection, profile: dict, n_chunks=8):
     parsed = job["parsed"]
     query_parts = [
         job.get("title", ""),
-        " ".join(parsed.get("must_have_skills", [])[:5]),
+        " ".join((parsed.get("truly_required") or parsed.get("must_have_skills") or [])[:5]),
         " ".join(parsed.get("technical_stack", [])[:5]),
         parsed.get("responsibilities_summary", "")[:200],
         parsed.get("domain", ""),
@@ -281,7 +281,7 @@ def score_job(job, collection, profile: dict, n_chunks=8):
 def score_all(jobs, collection, profile: dict, max_workers=2):
     """
     Score all parsed jobs concurrently.
-    Uses fewer workers than parser (gpt-4o is slower/more expensive).
+    Uses fewer workers than parser to respect rate limits.
     Returns enriched job list.
     """
     scoreable = [j for j in jobs if j.get("parsed")]
