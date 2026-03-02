@@ -156,7 +156,10 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 - Commits to main should be logically grouped, not one-per-file.
 - Railway MCP is READ-ONLY: logs and deployment status only.
 - Railway CLI (`railway logs --deployment <id>`) is the fastest way to diagnose failed deployments.
-- GHA secrets: `RAILWAY_TOKEN`, `RAILWAY_SERVICE_ID`, `RAILWAY_ENVIRONMENT_ID`.
+- GHA secrets (production): `RAILWAY_TOKEN`, `RAILWAY_SERVICE_ID`, `RAILWAY_ENVIRONMENT_ID`.
+- GHA secrets (staging): `RAILWAY_TOKEN` (shared), `RAILWAY_STAGING_SERVICE_ID`, `RAILWAY_STAGING_ENVIRONMENT_ID`.
+- **Deploy flow**: PR → `ci.yml` (tests + web-image-check + deploy-staging) → validate on staging → merge to main → `deploy.yml` (tests + web-image-check + deploy-production). Never merge without staging validation.
+- **`[skip ci]`** skips all tests + deploys. **`[skip deploy]`** skips production deploy only (tests still run, staging still deploys).
 
 ## Conventions
 - Commits: conventional (`type: description`)
