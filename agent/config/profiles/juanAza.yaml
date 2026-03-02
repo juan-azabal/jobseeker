@@ -10,16 +10,12 @@ user:
   - barcelona
   - spain
   - españa
+  - madrid
+  - valladolid
   location_preference: b
 target:
   level: principal
   track: ic
-  search_titles:
-  - Senior Product Manager
-  - Principal Product Manager
-  - Staff Product Manager
-  - Product Owner
-  - Product Manager
   domains:
     data: 20
     adtech: 16
@@ -61,6 +57,9 @@ target:
     scaleup: 15
   role_type: Senior Product Manager
   role_function: product
+  search_titles:
+  - Principal Product Manager
+  - Senior product Owner
 scoring:
   rag_threshold: 25
   salary_min: 70000
@@ -119,6 +118,8 @@ skills:
 - data-heavy products
 - event-driven-architecture
 - data-contracts
+- technical acumen
+- innovation
 knowledge:
   dir: knowledge/juan
   profile_files:

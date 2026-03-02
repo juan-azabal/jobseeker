@@ -1,122 +1,107 @@
-**JUAN AZABAL**
+**Juan Azabal**
 Senior Product Manager | Data, Personalization & Monetization
-Barcelona, Spain | j.azabal@gmail.com | +34 625 588 926 | linkedin.com/in/juanazabal
-# **SUMMARY**
+Barcelona, Spain | j.azabal@gmail.com | +34 625 588 926 | linkedin.com/in/juanazabal | github.com/juan-azabal
+# **Summary**
 Senior Product Manager with a software engineering background, focused on data platforms, personalization and monetization in high-traffic B2C media and B2B marketplace contexts. I have owned end-to-end data pipelines processing billions of events monthly, from ingestion and event taxonomy through data modeling (dbt, entity design), quality controls and downstream consumption by ML models and personalization systems. I am technical and analytical enough to dig into raw data, spot anomalies, trace issues to the code or the network layer and figure out why the numbers do not add up. That instinct has led me to rebuild or replace tracking and instrumentation at every company I have joined: Softonic, Marfeel, LaVanguardia and finally designing and owning the pipeline end-to-end at Gartner. Strong bias toward reusable platforms over one-off features. Comfortable coordinating across Engineering, Data Architecture, ML, DevOps and compliance stakeholders. Not interested in pure delivery roles.
-# **SELECTED IMPACT**
+I also build AI products end-to-end. I have designed and shipped a multi-user job search platform with a 6-phase scoring pipeline (scrape, prefilter, parse, RAG score, hybrid rank, notify), semantic skill matching via embeddings and cosine similarity plus automated tailored CV generation. The system serves real users on a production deployment, running daily automated pipelines within a budget of under two euros per user per month through deliberate model selection and cost optimization. I bring the same architectural rigor to AI products that I apply to data platforms: ADRs for every significant trade-off, test-first development and separation of deterministic logic from LLM inference.
+# **Selected Impact**
 - Built a first-party data platform (Snowplow, Kafka, Flink, S3, Snowflake) replacing GA4 across three marketplace brands serving millions of monthly software buyers. Designed the data model, specified dbt package configuration, defined event contracts, SLIs/SLOs and Datadog observability that reduced data loss to effectively zero.
 - Aligned 7 teams with independent roadmaps (Data, Analytics, Cloud, DevOps, Traffic Quality, ML and Martech) around a shared data platform strategy, negotiating cross-team trade-offs on quality, latency and access patterns.
-- Became the internal reference for Snowplow across the organization, ahead of engineering, leading architecture decisions on event taxonomy, enrichments, dbt package configuration and SDK implementation.
-- Defined data governance frameworks including consent-aware collection, GDPR-compliant taxonomies and data minimization policies across multiple brands, geographies and regulatory contexts.
-- Introduced data contracts and incident runbooks for freshness, loss and latency, cutting mean time to detect pipeline issues from hours to minutes.
 - Increased video revenue by 70% by analyzing raw Ad Manager data, classifying error types, killing broken campaigns (80% of the gain) and building a detection and response protocol that prevented recurrence.
-- Scaled an ad monetization and analytics platform to 600+ publishers and over 5B monthly impressions while enforcing latency and quality thresholds.
-- Coordinated the Google MCM migration for 800 publishers in approximately one month with minimal revenue loss. Specified and iterated on monitoring tooling in Apps Script connecting Ad Manager data for real-time status tracking, tiered outreach operations and automated communications, while simultaneously adapting to sellers.json and consent string requirements.
 - Diagnosed a broken ad loading sequence by analyzing raw Ad Manager data and network behavior. Redesigned the critical rendering path and built a header bidding solution in a web worker, lifting ad ARPU by approximately 40% and driving additional revenue through technical SEO improvements.
-- Shipped SaaS packaging and tiering that lifted total revenue by 25% and increased ARPPU by 50% on premium formats.
-- Co-designed and shipped Compass, a prescriptive analytics product built on IBM Watson NLP that classified articles at scale by category, tone, entities, characters and sentiment. These signals powered a tool enabling publishers to make data-driven editorial decisions based on which content attributes correlated with engagement and revenue.
-- Co-designed and productionized the recommendation engine within Flowcards (scroll-bounded engagement and conversion overlays): feature selection from NLP signals, NDCG/CTR evaluation, production guardrails and automated retraining pipeline. Flowcards evolved from an earlier project I led using AMP Next on desktop as a lightweight alternative to JS-heavy infinite scroll. That project had no impact because barely any users scrolled to the end, revealing the real insight: engage users when they lose interest in the current article, not when they finish it. Compass and Flowcards became the core products that carried Marfeel through the COVID downturn and remain central to the business today.
-- Balanced subscription and advertising revenue using propensity-driven paywalls, bundles and guardrails, increasing registrations by 12% without degrading ad RPM.
-- Led cross-functional alignment across Engineering, Data, Marketing and Finance to standardize KPI definitions, data access patterns and reporting cadences.
-- Enabled Google and Bing conversion uploaders and traffic-quality controls to improve attribution signal, bidding efficiency and CAC/LTV reads.
-- Designed, built and shipped a multi-user AI scoring platform from zero to production using AI-assisted development (Claude Code). Full stack: FastAPI API, React 19 frontend, RAG scoring pipeline with multi-model orchestration (GPT-4o-mini for parsing, GPT-4o for grading), semantic skill matching via OpenAI embeddings and cosine similarity, Google OAuth, CI/CD on GitHub Actions and Railway deploy. Four active users, sub-2 EUR per user per month through deliberate model selection per pipeline phase.
-# **PROJECTS**
-## **Jobseeker - AI-Powered Job Matching and CV Platform | 2024 - Present**
-Built end-to-end as sole product owner and developer, using Claude Code as execution multiplier. The platform ingests job postings from multiple sources, scores them against user profiles and generates tailored CVs per application.
-- Designed a 6-phase scoring pipeline: ingest (multi-source scraper with domain classification) to heuristic pre-filter to RAG grading (LLM-as-judge with structured rubrics) to deterministic re-scoring with user-editable preference weights. Heuristic and RAG scores complement each other: heuristic handles dimensions with clear business rules (domain, seniority, location), RAG handles subjective fit (technical depth, profile evidence).
-- Implemented semantic skill matching using 256-dimensional OpenAI embeddings with numpy matrix operations for cosine similarity, replacing exact keyword matching. Users see which of their skills match a posting and which are gaps, with conceptual proximity rather than string equality.
-- Architected for multi-user from day one: profile YAML as single source of truth per user, cross-user job deduplication via shared database, zero coupling between user-facing API and background processing agent.
-- Achieved sub-2 EUR monthly cost per user through strategic model selection: GPT-4o-mini for high-volume low-complexity tasks (parsing, classification), GPT-4o for low-volume high-judgment tasks (fit scoring). CV generation accounts for 95% of LLM spend.
-- Stack: FastAPI, SQLite (raw migrations), React 19, TypeScript, Tailwind v4, ChromaDB, OpenAI API, Google OAuth, Railway, GitHub Actions.
-# **CORE SKILLS**
+- Co-designed and shipped Compass, a prescriptive analytics product built on IBM Watson NLP that classified articles at scale by category, tone, entities, characters and sentiment. Together with Flowcards (scroll-bounded recommendation engine), these became the core products that carried Marfeel through the COVID downturn and remain central to the business today.
+- Designed and shipped a multi-user AI job search platform from zero to production: 6-phase scoring pipeline, semantic skill matching, automated CV generation, landing page with waitlist, daily automated pipelines via GitHub Actions, deployed on Railway in open beta with early users at under two euros per user per month.
+# **Core Skills**
 **Data Platforms & Tracking**
-- First-party tracking (edge and client-side collection), SDK and API ownership, event taxonomies.
-- Event-driven architectures: Snowplow, Kafka, Flink/SQL, S3, Snowflake, dbt.
-- Data modeling: entity-relationship design, keys, table dependencies, dbt package configuration.
-- Data contracts, schema validation, SLIs/SLOs for freshness, loss and latency.
-- Architecture documentation: ER diagrams, data flow diagrams, migration playbooks.
-- Hands-on technical diagnosis: raw data analysis, network waterfall inspection, code-level debugging of tracking and instrumentation issues. Moved away from coding deliberately to focus on architecture and decision-making. Now uses AI to prototype tooling and close the execution gap when speed matters more than delegation.
+- First-party tracking (edge and client-side collection), SDK and API ownership, event taxonomies. Event-driven architectures: Snowplow, Kafka, Flink/SQL, S3, Snowflake, dbt.
+- Data modeling: entity-relationship design, keys, table dependencies, dbt package configuration. Data contracts, schema validation, SLIs/SLOs for freshness, loss and latency.
+- Hands-on technical diagnosis: raw data analysis, network waterfall inspection, code-level debugging. Moved away from coding deliberately to focus on architecture and decision-making. Now uses AI to prototype tooling and close the execution gap when speed matters more than delegation.
 **Data Governance, Privacy & Compliance**
-- GDPR-compliant tracking, consent management (CMP), data minimization.
-- Consent-aware data flows, privacy-by-design, data classification.
-- Observability: Datadog dashboards, alerting, incident runbooks.
-- Error-budget thinking applied to data quality and pipeline reliability.
+- GDPR-compliant tracking, consent management (CMP), data minimization. Consent-aware data flows, privacy-by-design, data classification.
+- Observability: Datadog dashboards, alerting, incident runbooks. Error-budget thinking applied to data quality and pipeline reliability.
 **Personalization, Experimentation & Monetization**
-- Paywalls, subscriptions, pricing and packaging; ARPU, LTV and CAC.
-- AI-driven recommendations with guardrail metrics.
-- A/B tests, holdouts, cohort analysis and funnel diagnostics.
-- Programmatic advertising: header bidding, eCPM, fill rate, latency optimization.
-- Ad monetization: direct, programmatic, native and video formats.
-- Web performance and ad loading optimization: critical rendering path, Core Web Vitals, web workers.
+- Paywalls, subscriptions, pricing and packaging; ARPU, LTV and CAC. AI-driven recommendations with guardrail metrics. A/B tests, holdouts, cohort analysis and funnel diagnostics.
+- Programmatic advertising: header bidding, eCPM, fill rate, latency optimization. Ad monetization: direct, programmatic, native and video formats. Web performance and ad loading optimization: critical rendering path, Core Web Vitals, web workers.
 **Product Management & Stakeholder Leadership**
-- Cross-functional alignment across 7+ teams with independent roadmaps.
-- Product roadmap ownership, sprint planning, agile delivery.
-- Build vs buy decisions, vendor evaluation, platform adoption strategies.
-- Clear communication of trade-offs to senior stakeholders.
+- Cross-functional alignment across 7+ teams with independent roadmaps. Product roadmap ownership, sprint planning, agile delivery. Build vs buy decisions, vendor evaluation, platform adoption strategies.
 **AI, ML & Language Model Products**
-- Products built on language model outputs: prescriptive analytics on IBM Watson NLP (content classification at scale by category, tone, entities, sentiment).
-- Recommendation systems: feature engineering from NLP signals, NDCG/CTR evaluation, guardrails, retraining cadence.
-- RAG pipelines: retrieval-augmented generation with structured rubrics, LLM-as-judge scoring, prompt engineering as code.
-- Multi-model orchestration: model selection by task complexity and cost, pipeline decomposition into deterministic and LLM-graded phases.
-- Embedding-based semantic matching: vector similarity for skill detection, domain classification and content proximity.
-- AI-assisted development: spec-to-production using Claude Code, test-first methodology, phased implementation plans.
-- ML-assisted CRO and optimization initiatives.
-- DMP, identity resolution, audience segmentation.
-- Experience enabling ML teams with governed, reliable data pipelines.
-# **WORK EXPERIENCE**
-**Senior Product Manager, Data Platform (Tracking & Analytics)** - Gartner Digital Markets, Barcelona | 07/2024 - Present
+- Products built on language model outputs: prescriptive analytics on IBM Watson NLP, recommendation systems with feature engineering from NLP signals, NDCG/CTR evaluation, guardrails and retraining cadence. DMP, identity resolution, audience segmentation. Experience enabling ML teams with governed, reliable data pipelines.
+- Hands-on AI development: full-stack AI product architecture from zero to production. Multi-model orchestration (gpt-4o-mini for parsing and scoring, OpenAI embeddings for semantic matching, Claude/GPT-4o for CV generation). Cost-optimized LLM pipelines: model selection per task, heuristic pre-gating to skip expensive inference, budget tracking per user.
+- Agentic workflows: multi-source scraping, prefiltering, parsing, RAG scoring, notification pipelines as daily automated cron jobs. Prompt engineering as code: versioned prompts, interface contracts, scoring rubrics, categorical grades over numerical scores for stability.
+- Embedding-based semantic matching: OpenAI text-embedding-3-small with cosine similarity for skill and domain matching, batch precomputation for performance. RAG pipeline design: ChromaDB vector storage, context window management.
+- LLM governance layers (LiteLLM, NeMo Guardrails, Ollama): multi-tenant policy routing, deterministic and semantic rails, local LLM judge for content evaluation. Product analytics for AI: PostHog instrumentation for LLM observability. Built with Claude Code as development accelerator, maintaining architecture ownership through ADRs, patterns and schemas.
+# **Projects**
+**Jobseeker** (github.com/juan-azabal/jobseeker)
+- AI-powered job search platform deployed in production on Railway, in open beta with early free users. Monorepo: FastAPI + SQLite (api/), React 19 + TypeScript + Tailwind v4 (web/), scraper + scorer (agent/). Google OAuth, GitHub Actions for daily pipelines. 358 tests.
+- 6-phase scoring pipeline: Scrape (JobSpy + ATS + WTTJ) - Prefilter - Parse (gpt-4o-mini, 30-domain enum, role_function classification) - RAG Score (categorical grades A/B/C instead of numerical scores) - Hybrid Rank (deterministic scorers combined with LLM grades at query time) - Notify. Cross-user deduplication with per-user scoring.
+- Semantic skill matching via OpenAI embeddings with cosine similarity, precomputed and cached in SQLite. One-click ATS-ready CV generation tailored per job. Under two euros per user per month through deliberate model selection and heuristic pre-gating. Honest scoring that penalizes poor fits rather than inflating confidence.
+**LLM Control Plane** (github.com/juan-azabal/llm-control-plane)
+- Enterprise AI governance layer routing LLM usage across business teams with different risk profiles, budgets and content policies. Two-layer guardrails: deterministic rails (secrets detection, PII handling, budget enforcement) plus semantic rails (topic control, jailbreak detection) evaluated by a local LLM judge.
+- Multi-tenant architecture with independent policies per tenant. Built with LiteLLM, NeMo Guardrails, Ollama and Docker Compose. Local judge benchmarked at 90-100% F1 across tenants. 11 ADRs documenting trade-offs.
+**Claude Skills** (github.com/juan-azabal/claude-skills)
+- System of composable operational protocols for LLMs with trigger conditions, execution logic and quality gates. Production library of 10+ active skills covering phased implementation planning, career assistance, content creation, investment analysis and complex problem solving. Meta-skill architecture: skill-validator enforces the same patterns it uses internally.
+# **Work Experience**
+**Gartner Digital Markets, Barcelona, Spain**
+**Senior Product Manager, Data Platform (Tracking & Analytics)**	07/2024 - Present
+**Platform & Architecture**
 - Own a first-party data platform replacing GA4 across three brands (Capterra, GetApp, Software Advice), including event taxonomy, web and React SDKs, edge and client-side collection and a real-time ingestion pipeline (Snowplow to Kafka to Flink/SQL to S3 lake to Snowflake).
 - Studied the Snowplow dbt package documentation in depth and specified the configuration the team needed. Designed the data model: entity relationships, keys and table dependencies. Documented the full architecture with ER and data flow diagrams.
 - Became the internal reference for Snowplow across the organization, ahead of Tech Lead and Engineering Manager. Led architecture decisions on event taxonomy, enrichments, tracker configuration and SDK implementation.
-- Delivered a real-time analytics pipeline used for experimentation, CRO, personalization and monetization.
+**Data Quality & Observability**
 - Defined data contracts and SLIs/SLOs for freshness, loss and latency. Set up Datadog dashboards and alerts with incident playbooks to detect pipeline failures early.
 - Reduced data loss to effectively zero through event contracts, data quality KPIs and observability across the pipeline.
+**Stakeholder Alignment & Adoption**
 - Aligned 7 teams with independent roadmaps (Data, Analytics, Cloud, DevOps, Traffic Quality, ML and Martech) around a shared data platform strategy, negotiating cross-team trade-offs.
 - Led platform adoption across teams: documentation standards, SDK versioning, release channels and migration runbooks.
-- Partner with Marketing, Data and Finance on revenue forecasting, contribution margin and pricing experiments for marketplace offers.
+**Downstream Enablement**
 - Enable downstream consumers (experimentation, personalization, ML models, CRO) with reliable data access patterns.
 - Enabled Google and Bing conversion uploaders and traffic-quality controls to improve attribution signal, bidding efficiency and CAC/LTV reads.
-**Senior Product Manager** - Grupo Godo (LaVanguardia.com), Barcelona | 07/2022 - 07/2024
+**Grupo Godo (LaVanguardia.com), Barcelona, Spain**
+**Senior Product Manager**	07/2022 - 07/2024
+**Data & Personalization**
 - The site had no unified data layer. Built one by consolidating fragmented tracking into a governed event model on first-party data.
 - Introduced AI-driven content recommendations and personalization on first-party data: co-designed feature engineering with ML team, defined evaluation metrics (NDCG, CTR) and set guardrails for production deployment.
-- Established an experimentation framework on top of the unified data, enabling controlled A/B tests.
+**Revenue & Performance**
 - Balanced subscription and advertising revenue using propensity-driven paywalls, bundles and guardrails, increasing registrations by 12% without degrading ad RPM.
-- Spotted anomalies in Ad Manager data: video revenue and impressions were too low. Dug into the raw data, classified errors by type and severity, traced them to specific campaigns and stopped the worst offenders, which alone delivered 80% of the revenue improvement. Then built the detection protocol: what to check, what to request from clients, how to test and how to respond when something breaks. End result: 70% video revenue growth, 20% more pages per visit and 25% faster load times.
+- Spotted anomalies in Ad Manager data: video revenue and impressions were too low. Dug into the raw data, classified errors by type and severity, traced them to specific campaigns and stopped the worst offenders, which alone delivered 80% of the revenue improvement. Then built the detection protocol. End result: 70% video revenue growth, 20% more pages per visit and 25% faster load times.
+**Organization & Leadership**
 - Aligned Editorial, Engineering, Data and Ad Ops on shared KPIs and delivery cadence.
 - Mentored 2 PMs on data and experimentation, creating reusable playbooks.
-**Senior Product Manager** - Marfeel, Barcelona | 09/2018 - 07/2022
-- Owned an ad-wrapper SDK and unified analytics for eCPM, fill rate, latency and UX across programmatic, direct, native and video. Regularly audited raw ad-call data and network behavior across publisher sites to catch discrepancies between reported and actual performance.
+**Marfeel, Barcelona, Spain**
+**Senior Product Manager**	09/2018 - 07/2022
+**Platform & Analytics**
+- Owned an ad-wrapper SDK and unified analytics for eCPM, fill rate, latency and UX across programmatic, direct, native and video. Regularly audited raw ad-call data and network behavior across publisher sites.
 - Scaled the platform to 600+ publishers and over 5B monthly impressions, becoming a single source of truth for monetization and engagement metrics.
-- Expanded data collection from web-only to unified Web and Mobile SDK: events, identity resolution and postback integrations for attribution.
-- Detected that ad position 2 had more impressions than position 1, which should not happen in sequential loading. Tested the obvious fix (reducing timeout) first, no improvement. Pulled speed percentiles from Ad Manager, emulated devices and connection speeds in network analysis and traced the root cause: the sequential loading algorithm was broken, with ads blocking each other and content load. No clear rules governed what loaded first.
+**Ad Loading & Performance Optimization**
+- Detected that ad position 2 had more impressions than position 1, which should not happen in sequential loading. Traced the root cause: the sequential loading algorithm was broken, with ads blocking each other and content load.
 - Defined a critical rendering path for ad and content loading, created prioritization rules and ran multiple controlled tests. Designed a header bidding solution running in a web worker to unblock the main thread.
-- Result: approximately 40% increase in ad ARPU, with total revenue growing even more because improved technical SEO brought additional traffic. This led to hiring a dedicated technical SEO specialist, building a proprietary CDN for publishers and the promotion of my manager to Chief Monetization Officer.
-- Co-designed and shipped Compass, a prescriptive analytics product built on IBM Watson NLP. Watson classified articles at scale by category, tone, entities, characters and sentiment. These signals fed a tool that enabled publishers to make data-driven editorial decisions based on which content attributes correlated with engagement and revenue.
-- Co-designed and productionized the recommendation engine within Flowcards (scroll-bounded engagement and conversion overlays): feature selection from NLP signals, NDCG/CTR evaluation, production guardrails and automated retraining pipeline. Flowcards evolved from an earlier project I led using AMP Next on desktop as a lightweight alternative to JS-heavy infinite scroll. That project had no impact because barely any users scrolled to the end, which revealed the real insight: you need to engage users when they lose interest in the current article, not when they finish it. My role in Flowcards included the recommendation engine co-design, client testing, instrumentation and iteration.
-- Together, Compass and Flowcards became the products that carried Marfeel through the COVID downturn when the core marfeelization business declined. The company today operates better than ever on these products.
-- Evaluated all major CMPs on the market and found none acceptable: all were slow, JS-heavy and made it impossible to precache components or skip unnecessary loads in non-GDPR geos. Led the decision to build a proprietary CMP optimized for performance, with native integration to Ad Manager and header bidding before any market CMP offered this by default.
-- Ran extensive testing to maximize consent rate, since every percentage point of consent directly affected available demand partners and CPMs. Added translations for all major geos plus English as default. Partnered with CEO/CTO on privacy and monetization strategy: consent level directly affected the demand mix, requiring careful balance between compliance, banner UX and revenue.
+- Result: approximately 40% increase in ad ARPU, with total revenue growing even more because improved technical SEO brought additional traffic.
+**AI, NLP & Product Pivot**
+- Co-designed and shipped Compass, a prescriptive analytics product built on IBM Watson NLP. Watson classified articles at scale by category, tone, entities, characters and sentiment. These signals fed a tool enabling publishers to make data-driven editorial decisions.
+- Co-designed and productionized the recommendation engine within Flowcards: feature selection from NLP signals, NDCG/CTR evaluation, production guardrails and automated retraining pipeline. Flowcards evolved from an earlier project I led (AMP Next on desktop) that had no impact because barely any users scrolled to the end, revealing the real insight: engage users when they lose interest, not when they finish.
+- Together, Compass and Flowcards became the products that carried Marfeel through the COVID downturn. The company today operates better than ever on these products.
+**Privacy & Compliance**
+- Evaluated all major CMPs and found none acceptable for performance. Led the decision to build a proprietary CMP optimized for performance, with native integration to Ad Manager and header bidding.
 - Drove simultaneous adoption of sellers.json, TCF consent string and related industry standards across the publisher network while maintaining revenue and compliance.
-- Coordinated the Google MCM (Multiple Customer Management) migration across 800 publishers in approximately one month with minimal revenue loss. Defined requirements for monitoring tooling in Google Apps Script, reviewed code and iterated with a junior developer until it tracked migration status per client in real time. Segmented publishers into tiers for prioritized outreach and set up automated communications through Customer Support. Later iterated the Apps Script tooling into quick dashboards for metrics not yet available in Looker.
+**Industry Migrations & Operations at Scale**
+- Coordinated the Google MCM migration across 800 publishers in approximately one month with minimal revenue loss. Specified monitoring tooling in Google Apps Script, segmented publishers into tiers for prioritized outreach and set up automated communications.
+**Commercialization**
 - Introduced freemium to Enterprise packaging with usage guardrails, SLAs and revenue-share contracts tied to quality.
-- Introduced tiered data access and SLA-backed contracts for enterprise clients, tying data quality to commercial commitments.
 - Represented the company in industry standardization communities (Prebid, AMP).
-**Product Manager** - Softonic, Barcelona | 07/2017 - 09/2018
+**Softonic, Barcelona, Spain**
+**Product Manager**	07/2017 - 09/2018
 - Audited existing tracking and instrumentation by analyzing raw data and network requests. Found that live impression data from the ad server was not reaching GA4 correctly and header bidding bid data was not being captured at all. Rebuilt the measurement foundation before optimizing revenue.
-- Led the shift to a SaaS-like monetization model with packaging and tiering that increased total revenue by 25%.
-- Launched premium formats and growth products that increased ARPPU by 50%.
-- Discovered that the analytics team was using standard A/B testing for changes that affected how advertisers bid on positions, which contaminated the control group and invalidated results. Changed the experimentation framework to geo-based testing for these cases and built dashboards in GA4 combining ad revenue with web analytics to simplify and speed up product testing.
-- Worked with Engineering and Commercial teams to standardize KPI-driven optimization cycles.
-**Associate Product Manager, Programmatic & Data** - Adform, Madrid | 06/2015 - 07/2017
-- Led DMP and ML-assisted CRO initiatives for enterprise customers.
-- Owned data onboarding, taxonomy design and identity resolution for privacy-safe activation and measurement.
-- Coordinated multi-platform product improvements with Engineering, Data and Commercial teams.
-- Became a trusted advisor for enterprise clients across full-stack AdTech (ad serving, DSP, tag management, creative production) beyond Adform's own product scope. Clients consulted me on general AdTech decisions because they knew I would not recommend anything unnecessary. Regularly visited agencies to train non-technical teams on programmatic advertising, audience strategy and AdTech tooling.
-- Won Employee of the Year award after a client (Twinkey) flew me to Mexico to support their biggest account (Walmart) during Buen Fin (Mexico's Black Friday). Ran ad serving and DSP campaigns, produced creatives and diagnosed a third-party script without a timeout that was degrading site performance. Also joined client meetings with AT&T and other major players. The client brought me back to Guatemala a year later for a similar engagement.
-**Web Developer and Founder** - Various Companies, Madrid | 08/2006 - 05/2015
-- Built e-commerce platforms, media sites and a live video streaming platform for music festivals. Hands-on with full-stack development, server infrastructure and analytics.
-- Founded and grew an independent sports media outlet using SEO and social distribution, managing content, analytics and audience growth.
-# **EDUCATION AND CERTIFICATIONS**
+- Led the shift to a SaaS-like monetization model with packaging and tiering that increased total revenue by 25%. Launched premium formats and growth products that increased ARPPU by 50%.
+- Discovered the analytics team was using standard A/B testing for changes that affected how advertisers bid on positions, which contaminated the control group. Changed the experimentation framework to geo-based testing for these cases.
+**Adform, Madrid, Spain**
+**Associate Product Manager, Programmatic & Data**	06/2015 - 07/2017
+- Led DMP and ML-assisted CRO initiatives for enterprise customers. Owned data onboarding, taxonomy design and identity resolution for privacy-safe activation and measurement.
+- Became a trusted advisor for enterprise clients across full-stack AdTech beyond Adform's product scope. Regularly visited agencies to train non-technical teams on programmatic advertising, audience strategy and AdTech tooling.
+- Won Employee of the Year award after supporting a client's largest account (Walmart) during Buen Fin in Mexico. Ran ad serving and DSP campaigns, produced creatives and diagnosed a third-party script degrading site performance.
+**Various Companies, Madrid, Spain**
+**Web Developer and Founder**	08/2006 - 05/2015
+- Built e-commerce platforms, media sites and a live video streaming platform for music festivals. Founded and grew an independent sports media outlet using SEO and social distribution.
+# **Education and Certifications**
 MSc, Complex Problem Solving, Universidad Internacional de La Rioja (UNIR), 2024
 MBA, ThePower Business School, 2020
 Postgraduate, Product Management, The Hero Camp, 2019
@@ -124,5 +109,5 @@ Postgraduate, Web Development and Digital Content, CICE, 2014
 Engineer's Degree, Computer Software Technology, Universidad Europea Miguel de Cervantes, 2008
 
 Selected certifications: Google Ad Manager Certified Partner; TensorFlow AI Certification; LinkedIn Learning (AI-first Product Leadership, Advanced Product Marketing, Agile User Stories)
-# **LANGUAGES**
+# **Languages**
 Spanish (native) | English (advanced) | Catalan (basic)
