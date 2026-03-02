@@ -785,6 +785,20 @@ export default function JobDetailPage({ jobId, onBack, prevId, nextId, onNavigat
             </section>
           )}
 
+          {/* ── Raw JD (collapsed) ────────────────────────────────── */}
+          {p?.description && (
+            <details className="rounded-xl border border-zinc-800 bg-zinc-900/60">
+              <summary className="cursor-pointer select-none px-5 py-3 text-xs font-semibold uppercase tracking-widest text-zinc-500 hover:text-zinc-400">
+                View original job description
+              </summary>
+              <div className="border-t border-zinc-800 px-5 py-4">
+                <pre className="whitespace-pre-wrap text-xs leading-relaxed text-zinc-500">
+                  {p.description}
+                </pre>
+              </div>
+            </details>
+          )}
+
           {/* ── Actions ───────────────────────────────────────────── */}
           <div className="pt-2">
             <div className="flex flex-wrap items-center gap-3">

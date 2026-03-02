@@ -80,6 +80,7 @@ export interface ParsedJob {
   company_context?: CompanyContext;
   verbatim_for_cv?: string[];
   responsibilities_summary?: string;
+  description?: string;
   team_size_hints?: string | null;
   salary_mentioned?: string | null;
   remote_restriction?: string | null;
