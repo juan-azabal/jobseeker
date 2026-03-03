@@ -1,5 +1,6 @@
 /** Modal for adding a new CV source (file upload or paste text).
- *  Calls POST /api/onboard/add-source. On success, calls onAdded().
+ *  .docx uploads → replace-cv flow (profile update + diff).
+ *  .pdf uploads and paste text → add-source flow (career history only).
  */
 
 import { useState, useRef } from 'react';
@@ -13,22 +14,73 @@ type Mode = 'choose' | 'file' | 'text' | 'loading' | 'error';
 
 export default function AddSourceModal({ onAdded, onClose }: Props) {
   const [mode, setMode] = useState<Mode>('choose');
+  const [loadingLabel, setLoadingLabel] = useState('Processing…');
   const [pasteText, setPasteText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  /** .docx → full CV replace flow (3 steps). Returns true on success. */
+  const handleDocxReplace = async (file: File): Promise<boolean> => {
+    setLoadingLabel('Parsing CV…');
+    const form = new FormData();
+    form.append('file', file);
+    const uploadResp = await fetch('/api/onboard/upload-cv', { method: 'POST', body: form });
+    if (!uploadResp.ok) {
+      const d = await uploadResp.json().catch(() => ({}));
+      setError(d.detail || 'Upload failed. Please try again.');
+      return false;
+    }
+    const { markdown } = await uploadResp.json();
+
+    setLoadingLabel('Extracting profile…');
+    const extractResp = await fetch('/api/onboard/generate-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cv_markdown: markdown }),
+    });
+    if (!extractResp.ok) {
+      const d = await extractResp.json().catch(() => ({}));
+      setError(d.detail || 'Profile generation failed. Please try again.');
+      return false;
+    }
+    const extracted = await extractResp.json();
+
+    setLoadingLabel('Merging…');
+    const mergeResp = await fetch('/api/onboard/replace-cv', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cv_markdown: markdown,
+        extracted_profile: extracted.profile,
+        master_cv_json: extracted.master_cv_json,
+      }),
+    });
+    if (!mergeResp.ok) {
+      const d = await mergeResp.json().catch(() => ({}));
+      setError(d.detail || 'Merge failed. Please try again.');
+      return false;
+    }
+    return true;
+  };
+
   const handleFile = async (file: File) => {
     setMode('loading');
     setError(null);
-    const form = new FormData();
-    form.append('file', file);
     try {
-      const resp = await fetch('/api/onboard/add-source', { method: 'POST', body: form });
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        setError(data.detail || 'Upload failed. Please try again.');
-        setMode('file');
-        return;
+      if (file.name.toLowerCase().endsWith('.docx')) {
+        const ok = await handleDocxReplace(file);
+        if (!ok) { setMode('file'); return; }
+      } else {
+        setLoadingLabel('Processing…');
+        const form = new FormData();
+        form.append('file', file);
+        const resp = await fetch('/api/onboard/add-source', { method: 'POST', body: form });
+        if (!resp.ok) {
+          const d = await resp.json().catch(() => ({}));
+          setError(d.detail || 'Upload failed. Please try again.');
+          setMode('file');
+          return;
+        }
       }
       onAdded();
     } catch {
@@ -40,6 +92,7 @@ export default function AddSourceModal({ onAdded, onClose }: Props) {
   const handlePaste = async () => {
     if (!pasteText.trim()) return;
     setMode('loading');
+    setLoadingLabel('Processing…');
     setError(null);
     try {
       const resp = await fetch('/api/onboard/add-source', {
@@ -48,8 +101,8 @@ export default function AddSourceModal({ onAdded, onClose }: Props) {
         body: JSON.stringify({ text: pasteText }),
       });
       if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        setError(data.detail || 'Failed. Please try again.');
+        const d = await resp.json().catch(() => ({}));
+        setError(d.detail || 'Failed. Please try again.');
         setMode('text');
         return;
       }
@@ -80,7 +133,7 @@ export default function AddSourceModal({ onAdded, onClose }: Props) {
               <span className="text-base">📄</span>
               <div>
                 <div>Upload file</div>
-                <div className="text-xs font-normal text-zinc-500">.pdf or .docx</div>
+                <div className="text-xs font-normal text-zinc-500">.docx CV or LinkedIn PDF</div>
               </div>
             </button>
             <button
@@ -109,7 +162,7 @@ export default function AddSourceModal({ onAdded, onClose }: Props) {
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-700 bg-zinc-900 py-8 text-sm text-zinc-400 transition hover:border-zinc-500 hover:text-zinc-200"
               onClick={() => fileRef.current?.click()}
             >
-              Click to choose .pdf or .docx
+              Click to choose .docx or .pdf
             </button>
             {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
             <button onClick={() => setMode('choose')} className="mt-4 text-xs text-zinc-500 hover:text-zinc-300">← Back</button>
@@ -139,7 +192,12 @@ export default function AddSourceModal({ onAdded, onClose }: Props) {
         )}
 
         {mode === 'loading' && (
-          <p className="text-center text-sm text-zinc-400 py-6">Processing…</p>
+          <div className="py-6 text-center">
+            <p className="text-sm text-zinc-400">{loadingLabel}</p>
+            {loadingLabel !== 'Processing…' && (
+              <p className="mt-1 text-xs text-zinc-600">This may take a moment…</p>
+            )}
+          </div>
         )}
       </div>
     </div>

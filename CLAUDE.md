@@ -157,6 +157,8 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 - Railway MCP is READ-ONLY: logs and deployment status only.
 - Railway CLI (`railway logs --deployment <id>`) is the fastest way to diagnose failed deployments.
 - GHA secrets: `RAILWAY_TOKEN`, `RAILWAY_SERVICE_ID`, `RAILWAY_ENVIRONMENT_ID`.
+- **Deploy flow**: PR → Railway despliega staging automáticamente (GitHub integration). `ci.yml` corre tests + `web-image-check` en paralelo. Validás en staging. Merge a main → Railway despliega producción + `deploy.yml` re-triggers después de tests. Never merge without staging validation.
+- **`[skip ci]`** skips all tests + production redeploy. **`[skip deploy]`** skips production redeploy only (tests still run).
 
 ## Conventions
 - Commits: conventional (`type: description`)
@@ -459,6 +461,14 @@ Parser Enrichment + CV Pipeline Optimization (complete: 2026-03-02)
 - Phase 5: Scorer rubric v2.1 — `requirement_evidence_map` (5 entries max) + `cv_strategy` fields; plan.py consumes scorer enrichments; UI shows "Your fit — by requirement" + CV strategy above Generate CV button
 - GATE: 716 backend tests + 598 agent tests passing; TypeScript clean; no breaking changes for old jobs
 
+Career History UX — Async CV processing (complete: 2026-03-02)
+- Phase 1: Bug fixes — replace-cv persists master_cv_json; frontend payload sends extracted_profile + master_cv_json separately; add-source accepts JSON text body (`{"text": "..."}`)
+- Phase 2: Async processing via BackgroundTasks — migration 022 (cv_processing_status + cv_processing_result + cv_processing_started_at columns on users); `set/get_cv_processing_status` query helpers; replace-cv and add-source both return 202 immediately; background task wrapper (`_bg_safe_*`) guarantees status="failed" on unhandled exceptions; 5-minute timeout guard in GET /profile; `POST /api/onboard/accept-merge` clears processing state
+- Phase 3: Unified CV input flow — Replace CV separate flow removed from ProfilePage; AddSourceModal routes .docx uploads through replace-cv (upload-cv → generate-profile → replace-cv) for full profile merge + diff; .pdf and paste text go through add-source; ProfilePage layout refactored with career history as primary section
+- Frontend: Polling (5s) while processing; amber banner for "processing", red banner for "failed"; CVReplaceSummary shown from cvProcessing.result.diff when done
+- Tests: `tests/test_replace_cv_async.py` (5), `tests/test_add_source_async.py` (5), `tests/test_cv_processing_status.py` (new), `tests/test_add_source_text.py` (updated 200→202), `tests/test_replace_cv_master.py` (updated 200→202), `tests/test_profile_e2e.py` (updated 200→202), `tests/test_onboard_add_source_api.py` (updated 200→202)
+- GATE: 892 backend tests passing
+
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
 - Phase R — Refactor & Test Coverage
@@ -474,6 +484,7 @@ Parser Enrichment + CV Pipeline Optimization (complete: 2026-03-02)
 - `X-CV-Plan` header (2026-03-02): `generate_cv_endpoint()` returns `{"entries":[{id,company,relevance}],"skill_intersection":[...]}` in `X-CV-Plan` response header when Master CV pipeline succeeds. Enables client-side transparency about which work entries were used.
 - CV prompt token reduction (2026-03-02): plan-aware prompt replaced raw JD (~3-5K tokens) with parsed distillation (~450 tokens): role_in_plain_english + truly_required + preferred_skills + verbatim_for_cv + company_context + key_phrases. Reference files (generate-cv.md, ats-rules.md) removed from plan-aware path — content already captured in _OUTPUT_CONTRACT. Token reduction ~40% on the expensive Sonnet call. Legacy path (no plan) unchanged.
 - Scorer v2.1 enrichments (2026-03-02): `requirement_evidence_map` (max 5 entries: requirement→evidence→cv_bullet_hint) + `cv_strategy` (3 sentences). Cost ~200 extra output tokens per score. plan.py uses `_enrich_allocation_from_evidence()` to add cv_hints to bullet_allocation entries when company name appears in evidence text. Graceful: both fields optional — old scores without them work identically.
+- Two requirements files — NEVER add an api/ dep to only one (2026-03-02 incident × 3): `requirements.txt` is for local dev + CI tests. `requirements-web.txt` is what the Dockerfile installs. They are NOT kept in sync automatically. Any new `import X` at module level in `api/` MUST be added to `requirements-web.txt`. CI now validates this via the `web-image-check` job (`pip install -r requirements-web.txt && python -c "from api.main import app"`), which gates the deploy job.
 - Dockerfile must copy shared/ (2026-03-01 incident): Railway uses the repo Dockerfile, not Nixpacks. When Phase R added `shared/scoring_core.py`, the Dockerfile only copied `api/` and `agent/` → `ModuleNotFoundError: No module named 'shared'` on every startup. Fix: `COPY shared/ ./shared/` in Stage 2. Diagnosis via `railway logs --deployment <id>`.
 - Railway V2 startCommand does NOT shell-expand variables (2026-03-01 incident): `startCommand = "uvicorn ... --port $PORT"` in railway.toml passes `$PORT` literally → uvicorn error "invalid value for '--port': '$PORT'". The Dockerfile CMD calls `startup.sh` which uses `exec uvicorn ... --port "${PORT:-8000}"` (bash expands it correctly). Never add startCommand back to railway.toml.
 - pyproject.toml must NOT have [project] section (2026-03-01 incident): Nixpacks would have tried `pip install .` but the container uses Dockerfile, not Nixpacks. Keeping only `[tool.ruff]` config in pyproject.toml is correct. PYTHONPATH=${{ github.workspace }} in GHA handles CI import resolution for `shared/`.
@@ -600,6 +611,10 @@ Parser Enrichment + CV Pipeline Optimization (complete: 2026-03-02)
 - Auto-search site params (2026-03-01): LinkedIn → `results_wanted=15`, `is_remote=False`, `linkedin_fetch_description=True`; Indeed → `results_wanted=25`, `country_indeed` from profile home_locations[1]. Google dropped (JobSpy Issue #302 — consistently 0 results). `LINKEDIN_DELAY_SECS=2` between consecutive LinkedIn queries.
 - Auto-search + scoring decoupled (2026-03-01): `search_titles` controls WHAT gets scraped. `seniority_weights`/`domains` control scoring. They are independent. Adding "Product Owner" to search_titles does not affect how Product Owner roles score.
 - `onboard.py` generates search_titles (2026-03-01): `_build_search_titles()` derives `["{Level} {role_type}", "{role_type}"]` from extracted fields. Users extend via profile editing.
+- Async CV processing (2026-03-02): replace-cv and add-source return 202 immediately; background task runs via FastAPI `BackgroundTasks` (no Redis/Celery). `_bg_safe_*` wrappers guarantee `status="failed"` even when the background function is fully patched in tests. TestClient runs BackgroundTasks synchronously after response — test assertions on DB state are safe immediately after 202.
+- cv_processing state machine (2026-03-02): NULL → "processing" (on 202) → "done" | "failed" (after background task). `POST /api/onboard/accept-merge` clears all three columns (sets status=NULL). Timeout guard in `GET /profile`: if status="processing" and started_at > 5 min ago → auto-fail (prevents stuck "processing" banners).
+- AddSourceModal routing (2026-03-02): .docx uploads go through upload-cv → generate-profile → replace-cv (3 API calls, full profile merge + diff). .pdf uploads and paste text go through add-source (career history enrichment only). The distinction: .docx is a full CV (profile fields + career history); .pdf/.txt are supplementary sources.
+- Frontend cv_processing polling (2026-03-02): `useEffect` with `setInterval(5000)` runs while `cvProcessing.status === 'processing'`. Cleans up on status change. When status transitions to "done" with a `diff`, CVReplaceSummary renders. When status is "failed", dismissible red banner shown. `POST /api/onboard/accept-merge` called when user dismisses diff or banner.
 
 ### Known Bugs
 

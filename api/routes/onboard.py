@@ -5,7 +5,7 @@ import uuid
 from typing import Any, Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Request
 from pydantic import BaseModel
 import yaml
 
@@ -22,6 +22,8 @@ from api.db.queries import (
     get_user_profile_yaml,
     save_master_cv_json,
     get_master_cv_json,
+    set_cv_processing_status,
+    get_cv_processing_status,
 )
 from api.onboard_utils import (
     docx_to_markdown as _docx_to_markdown,
@@ -84,38 +86,86 @@ async def get_master_cv(user: dict = Depends(get_current_user)):
     return json.loads(raw)
 
 
+def _run_add_source_background(user_id: int, db_path: str, cv_text: str) -> None:
+    """Sync background task: extract master_cv from text, merge, persist."""
+    try:
+        client = _make_openai_client()
+        incoming = extract_master_cv_json(cv_text, "add_source", client)
+        raw = get_master_cv_json(db_path, user_id)
+        existing = json.loads(raw) if raw and raw != "null" else None
+        merged = merge_master_cvs(existing, incoming) if existing else incoming
+        save_master_cv_json(db_path, user_id, json.dumps(merged))
+        try:
+            index_master_cv(user_id, merged)
+        except Exception:
+            logger.exception("ChromaDB index failed for user_id=%d (non-fatal)", user_id)
+        result = {"type": "add_source"}
+        set_cv_processing_status(db_path, user_id, "done", result=result)
+    except Exception as exc:
+        logger.exception("Background add-source failed for user_id=%d", user_id)
+        set_cv_processing_status(db_path, user_id, "failed", error=str(exc))
+
+
+def _bg_safe_add_source(user_id: int, db_path: str, cv_text: str) -> None:
+    """Wrapper that guarantees status='failed' even if _run_add_source_background raises."""
+    try:
+        _run_add_source_background(user_id, db_path, cv_text)
+    except Exception as exc:
+        logger.exception("Unhandled error in add-source background task for user_id=%d", user_id)
+        set_cv_processing_status(db_path, user_id, "failed", error=str(exc))
+
+
 @router.post("/add-source")
-async def add_source(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    """Merge a new CV file (PDF or DOCX) into the user's existing Master CV JSON."""
+async def add_source(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user),
+):
+    """Merge a new source into the user's existing Master CV JSON.
+
+    Accepts either:
+    - multipart/form-data with a `file` field (PDF or DOCX)
+    - application/json with a `text` field (plain text / paste mode)
+
+    Returns 202 immediately. Extraction/merge runs in the background.
+    Poll GET /profile for cv_processing.status to know when done.
+    """
+    content_type = request.headers.get("content-type", "")
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
-    filename = (file.filename or "").lower()
-    if not filename.endswith(".docx") and not filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only .docx and .pdf files are supported")
 
-    contents = await file.read()
-    if len(contents) > MAX_CV_BYTES:
-        raise HTTPException(status_code=413, detail="File exceeds 5 MB limit")
+    if "application/json" in content_type:
+        body = await request.json()
+        text = body.get("text")
+        if not text:
+            raise HTTPException(status_code=422, detail="text field is required")
+        cv_text = text
+    elif "multipart/form-data" in content_type:
+        form = await request.form()
+        file = form.get("file")
+        if file is None:
+            raise HTTPException(status_code=422, detail="file field is required")
+        filename = (getattr(file, "filename", None) or "").lower()
+        if not filename.endswith(".docx") and not filename.endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="Only .docx and .pdf files are supported")
+        contents = await file.read()
+        if len(contents) > MAX_CV_BYTES:
+            raise HTTPException(status_code=413, detail="File exceeds 5 MB limit")
+        try:
+            cv_text = extract_text_from_file(contents, getattr(file, "filename", "") or "")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail="Content-Type must be application/json or multipart/form-data",
+        )
 
-    try:
-        cv_text = extract_text_from_file(contents, file.filename or "")
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    set_cv_processing_status(db_path, user["id"], "processing")
+    background_tasks.add_task(_bg_safe_add_source, user["id"], db_path, cv_text)
 
-    client = _make_openai_client()
-    incoming = extract_master_cv_json(cv_text, "add_source", client)
+    from fastapi.responses import JSONResponse  # noqa: PLC0415
 
-    raw = get_master_cv_json(db_path, user["id"])
-    existing = json.loads(raw) if raw and raw != "null" else None
-    merged = merge_master_cvs(existing, incoming) if existing else incoming
-
-    save_master_cv_json(db_path, user["id"], json.dumps(merged))
-    try:
-        index_master_cv(user["id"], merged)
-    except Exception:
-        logger.exception("ChromaDB index failed for user_id=%d (non-fatal)", user["id"])
-
-    profile = derive_profile_from_master_cv(merged)
-    return {"profile": profile, "master_cv": merged}
+    return JSONResponse(status_code=202, content={"status": "processing"})
 
 
 class AddEntryRequest(BaseModel):
@@ -1064,7 +1114,26 @@ async def get_profile(user: dict = Depends(get_current_user)):
         if cv_markdown:
             save_user_cv_md(db_path, user["id"], cv_markdown)
 
-    return {"profile": profile_data, "cv_markdown": cv_markdown}
+    # Include cv_processing status; apply timeout guard
+    from datetime import datetime, timezone, timedelta  # noqa: PLC0415
+
+    _TIMEOUT_MINUTES = 5
+    proc = get_cv_processing_status(db_path, user["id"])
+    if proc["status"] == "processing" and proc["started_at"]:
+        try:
+            started = datetime.fromisoformat(proc["started_at"])
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) - started > timedelta(minutes=_TIMEOUT_MINUTES):
+                set_cv_processing_status(db_path, user["id"], "failed", error="Processing timed out")
+                proc = get_cv_processing_status(db_path, user["id"])
+        except Exception:
+            logger.exception("Timeout guard failed for user_id=%d", user["id"])
+
+    response: dict = {"profile": profile_data, "cv_markdown": cv_markdown}
+    if proc["status"] is not None:
+        response["cv_processing"] = proc
+    return response
 
 
 class UpdateProfileRequest(BaseModel):
@@ -1267,14 +1336,80 @@ async def add_skill(body: AddSkillRequest, user: dict = Depends(get_current_user
 class ReplaceCVRequest(BaseModel):
     cv_markdown: str
     extracted_profile: dict
+    master_cv_json: dict[str, Any] | None = None
+
+
+def _run_replace_cv_background(
+    user_id: int,
+    profile_id: str,
+    db_path: str,
+    jobagent_dir: str,
+    cv_markdown: str,
+    master_cv_json: dict | None,
+    diff: dict,
+) -> None:
+    """Sync background task: persist master_cv + set processing status."""
+    try:
+        master_cv_to_save = master_cv_json
+        if not master_cv_to_save and cv_markdown:
+            client = _make_openai_client()
+            incoming = extract_master_cv_json(cv_markdown, "cv_upload", client)
+            existing_raw = get_master_cv_json(db_path, user_id)
+            existing = json.loads(existing_raw) if existing_raw and existing_raw != "null" else None
+            master_cv_to_save = merge_master_cvs(existing, incoming) if existing else incoming
+        elif master_cv_to_save:
+            existing_raw = get_master_cv_json(db_path, user_id)
+            existing = json.loads(existing_raw) if existing_raw and existing_raw != "null" else None
+            if existing:
+                master_cv_to_save = merge_master_cvs(existing, master_cv_to_save)
+
+        _persist_master_cv(db_path, user_id, profile_id, jobagent_dir, master_cv_to_save)
+
+        analytics.capture(
+            user_id,
+            "profile_cv_replaced",
+            {
+                "skills_added_count": len(diff.get("skills_added", [])),
+                "domains_added_count": len(diff.get("domains_added", [])),
+                "fields_updated": diff.get("fields_updated", []),
+            },
+        )
+
+        result = {"type": "replace", "diff": diff}
+        set_cv_processing_status(db_path, user_id, "done", result=result)
+    except Exception as exc:
+        logger.exception("Background replace-cv failed for user_id=%d", user_id)
+        set_cv_processing_status(db_path, user_id, "failed", error=str(exc))
+
+
+def _bg_safe_replace_cv(
+    user_id: int,
+    profile_id: str,
+    db_path: str,
+    jobagent_dir: str,
+    cv_markdown: str,
+    master_cv_json: dict | None,
+    diff: dict,
+) -> None:
+    """Wrapper that guarantees status='failed' even if _run_replace_cv_background itself raises."""
+    try:
+        _run_replace_cv_background(user_id, profile_id, db_path, jobagent_dir, cv_markdown, master_cv_json, diff)
+    except Exception as exc:
+        logger.exception("Unhandled error in replace-cv background task for user_id=%d", user_id)
+        set_cv_processing_status(db_path, user_id, "failed", error=str(exc))
 
 
 @router.patch("/replace-cv")
-async def replace_cv(body: ReplaceCVRequest, user: dict = Depends(get_current_user)):
-    """Server-side additive merge of a new CV extraction into the existing profile.
+async def replace_cv(
+    body: ReplaceCVRequest,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user),
+):
+    """Server-side additive merge of a new CV into the existing profile (async).
 
-    Returns merged_profile and a diff summary showing what changed.
-    The profile is saved to DB before returning — no separate save step needed.
+    Returns 202 immediately. Profile YAML is updated synchronously.
+    master_cv_json extraction/indexing runs in the background.
+    Poll GET /profile for cv_processing.status to know when done.
     """
     from ruamel.yaml import YAML  # noqa: PLC0415
     import io  # noqa: PLC0415
@@ -1302,12 +1437,11 @@ async def replace_cv(body: ReplaceCVRequest, user: dict = Depends(get_current_us
     with open(yaml_path) as f:
         raw = ry.load(f)
 
-    # Normalize existing YAML to flat dict, merge with new extraction, write back
+    # Synchronous merge: fast pure Python, updates profile YAML immediately
     existing_flat = _yaml_to_flat_profile(raw)
     merged = merge_profiles(existing_flat, body.extracted_profile)
     diff = compute_diff(existing_flat, merged)
 
-    # Preserve salary_min and location_preference from existing (not in merge strategy)
     merged["salary_min"] = existing_flat.get("salary_min", 60000)
     merged["location_preference"] = existing_flat.get("location_preference", "b")
 
@@ -1319,16 +1453,16 @@ async def replace_cv(body: ReplaceCVRequest, user: dict = Depends(get_current_us
     with open(yaml_path, "w") as f:
         f.write(updated_yaml)
 
-    # Persist to DB
+    # Persist profile YAML + cv.md to DB immediately
+    save_user_profile_yaml(db_path, user["id"], updated_yaml)
     if body.cv_markdown:
         save_user_cv_md(db_path, user["id"], body.cv_markdown)
         knowledge_dir = os.path.join(jobagent_dir, "knowledge", profile_id)
         os.makedirs(knowledge_dir, exist_ok=True)
         with open(os.path.join(knowledge_dir, "cv.md"), "w") as f:
             f.write(body.cv_markdown)
-    save_user_profile_yaml(db_path, user["id"], updated_yaml)
 
-    # Push to GitHub (fire-and-forget)
+    # GitHub push (fire-and-forget, non-blocking)
     try:
         await _push_file_to_github(
             f"agent/config/profiles/{profile_id}.yaml",
@@ -1344,17 +1478,30 @@ async def replace_cv(body: ReplaceCVRequest, user: dict = Depends(get_current_us
     except Exception:
         logger.exception("GitHub sync failed after replace-cv for %s (non-fatal)", profile_id)
 
-    analytics.capture(
+    # Mark as processing and enqueue background work (master_cv + analytics)
+    set_cv_processing_status(db_path, user["id"], "processing")
+    background_tasks.add_task(
+        _bg_safe_replace_cv,
         user["id"],
-        "profile_cv_replaced",
-        {
-            "skills_added_count": len(diff["skills_added"]),
-            "domains_added_count": len(diff["domains_added"]),
-            "fields_updated": diff["fields_updated"],
-        },
+        profile_id,
+        db_path,
+        jobagent_dir,
+        body.cv_markdown,
+        body.master_cv_json,
+        diff,
     )
 
-    return {"merged_profile": merged, "diff": diff}
+    from fastapi.responses import JSONResponse  # noqa: PLC0415
+
+    return JSONResponse(status_code=202, content={"status": "processing"})
+
+
+@router.post("/accept-merge")
+async def accept_merge(user: dict = Depends(get_current_user)):
+    """Clear cv_processing columns after user acknowledges the result."""
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    set_cv_processing_status(db_path, user["id"], None)
+    return {"ok": True}
 
 
 @router.post("/upload-cv", dependencies=[Depends(get_current_user)])

@@ -238,9 +238,8 @@ class TestCVReplaceAdditive:
                 },
             },
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        merged_skills = data["merged_profile"]["skills"]
+        assert resp.status_code == 202  # async; profile YAML merged synchronously
+        merged_skills = client.get("/api/onboard/profile").json()["profile"]["skills"]
         # Original: python, sql, product analytics; New: python, kafka, dbt
         assert "python" in merged_skills
         assert "sql" in merged_skills  # kept from existing
@@ -262,8 +261,8 @@ class TestCVReplaceAdditive:
                 },
             },
         )
-        assert resp.status_code == 200
-        merged = resp.json()["merged_profile"]
+        assert resp.status_code == 202  # async
+        merged = client.get("/api/onboard/profile").json()["profile"]
         # Existing weights win over extracted
         assert merged["seniority_weights"]["senior"] == 15
         assert merged["seniority_weights"]["staff"] == 5
@@ -283,8 +282,8 @@ class TestCVReplaceAdditive:
                 },
             },
         )
-        assert resp.status_code == 200
-        merged = resp.json()["merged_profile"]
+        assert resp.status_code == 202  # async: profile YAML merged synchronously before 202
+        merged = client.get("/api/onboard/profile").json()["profile"]
         assert merged["domains"]["saas"] == 15  # existing wins
         assert merged["domains"]["data"] == 12  # new domain added
 
@@ -303,8 +302,8 @@ class TestCVReplaceMinimalExtraction:
                 "extracted_profile": {},
             },
         )
-        assert resp.status_code == 200
-        merged = resp.json()["merged_profile"]
+        assert resp.status_code == 202  # async
+        merged = client.get("/api/onboard/profile").json()["profile"]
         # All existing data preserved
         assert "python" in merged["skills"]
         assert merged["domains"]["saas"] == 15
@@ -329,8 +328,8 @@ class TestCVReplacePreservesManualOverrides:
                 },
             },
         )
-        assert resp.status_code == 200
-        merged = resp.json()["merged_profile"]
+        assert resp.status_code == 202  # async
+        merged = client.get("/api/onboard/profile").json()["profile"]
         # Original manual skills preserved
         assert "python" in merged["skills"]
         assert "sql" in merged["skills"]
@@ -404,8 +403,8 @@ class TestExcludeCompaniesRoundTrip:
                 },
             },
         )
-        assert resp.status_code == 200
-        merged = resp.json()["merged_profile"]
+        assert resp.status_code == 202  # async
+        merged = client.get("/api/onboard/profile").json()["profile"]
         # exclude_companies preserved from existing
         assert "BigCorp" in merged.get("exclude_companies", [])
         assert "SlowCo" in merged.get("exclude_companies", [])

@@ -51,8 +51,28 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: cd agent && python -m pytest tests/ -x -q --tb=short -m "not smoke"
 
+  web-image-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install web image deps (mirrors Dockerfile)
+        run: pip install -r requirements-web.txt
+
+      - name: Verify API imports with web deps only
+        env:
+          DB_PATH: ":memory:"
+          SESSION_SECRET: "ci-check"
+        run: python -c "from api.main import app; print('OK')"
+
   deploy:
-    needs: [backend-tests, agent-tests]
+    needs: [backend-tests, agent-tests, web-image-check]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     if: "!contains(github.event.head_commit.message, '[skip deploy]')"

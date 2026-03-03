@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 import tempfile
@@ -20,7 +21,9 @@ from api.db.queries import (
     get_other_domain_jobs,
     update_job_domain,
     get_domain_corrections,
+    save_master_cv_json,
 )
+from shared.master_cv_extract import extract_master_cv_json
 from api.middleware.auth import get_current_admin, SESSION_COOKIE
 
 logger = structlog.get_logger(__name__)
@@ -614,3 +617,44 @@ async def db_import(admin: dict = Depends(get_current_admin)):
 
     logger.info("DB import from production completed", db_path=db_path, admin=admin["email"])
     return {"status": "ok", "message": "Database imported from production."}
+
+
+def _make_openai_client():
+    if os.environ.get("POSTHOG_API_KEY"):
+        from posthog.ai.openai import OpenAI  # noqa: PLC0415
+    else:
+        from openai import OpenAI  # noqa: PLC0415
+    return OpenAI()
+
+
+@router.post("/backfill-master-cv")
+def backfill_master_cv(
+    dry_run: bool = False,
+    admin: dict = Depends(get_current_admin),
+):
+    """Backfill master_cv_json for users who have cv_md but no master_cv_json.
+
+    ?dry_run=true returns the count without extracting.
+    """
+    db_path = _db_path()
+    with sqlite3.connect(db_path) as con:
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            "SELECT id, cv_md FROM users WHERE master_cv_json IS NULL AND cv_md IS NOT NULL AND cv_md != ''"
+        ).fetchall()
+
+    if dry_run:
+        return {"users_needing_backfill": len(rows)}
+
+    client = _make_openai_client()
+    backfilled = 0
+    for row in rows:
+        try:
+            master_cv = extract_master_cv_json(row["cv_md"], "backfill", client)
+            save_master_cv_json(db_path, row["id"], json.dumps(master_cv))
+            backfilled += 1
+        except Exception:
+            logger.exception("Backfill failed for user_id=%d", row["id"])
+
+    logger.info("Backfill complete", backfilled=backfilled, total=len(rows))
+    return {"backfilled": backfilled}
