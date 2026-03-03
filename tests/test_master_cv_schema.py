@@ -125,6 +125,59 @@ class TestValidateMasterCv:
         assert any("work" in e for e in errors)
 
 
+class TestV2NewFields:
+    """Step 1.3 — New v2 fields are additive; schema validation still passes."""
+
+    def test_work_context_field_passes_validation(self):
+        """work[].context is a new optional field."""
+        cv = _valid_cv()
+        cv["work"][0]["context"] = "Joined as founding PM. Team of 3 engineers."
+        errors = validate_master_cv(cv)
+        assert errors == []
+
+    def test_basics_summary_passes_validation(self):
+        """basics.summary is a new optional field."""
+        cv = _valid_cv()
+        cv["basics"]["summary"] = "10 years of PM experience in SaaS."
+        errors = validate_master_cv(cv)
+        assert errors == []
+
+    def test_basics_selected_impact_passes_validation(self):
+        """basics.selected_impact is a new optional list field."""
+        cv = _valid_cv()
+        cv["basics"]["selected_impact"] = [
+            "Grew ARR from $2M to $15M in 18 months",
+            "Built and led a 6-person PM org",
+        ]
+        errors = validate_master_cv(cv)
+        assert errors == []
+
+    def test_skills_narrative_passes_validation(self):
+        """skills[].narrative is a new optional string field."""
+        cv = _valid_cv()
+        cv["skills"][0]["narrative"] = "Used Python daily for data pipelines and API tooling."
+        errors = validate_master_cv(cv)
+        assert errors == []
+
+    def test_education_engineer_study_type_passes_validation(self):
+        """study_type='Engineer' is valid in v2."""
+        cv = _valid_cv()
+        cv["education"][0]["study_type"] = "Engineer"
+        errors = validate_master_cv(cv)
+        assert errors == []
+
+    def test_all_new_fields_together_pass_validation(self):
+        """All new v2 fields present simultaneously — no errors."""
+        cv = _valid_cv()
+        cv["basics"]["summary"] = "Experienced PM."
+        cv["basics"]["selected_impact"] = ["Built X from 0 to 1"]
+        cv["work"][0]["context"] = "Series A startup, 0→1 product."
+        cv["skills"][0]["narrative"] = "Deep Python expertise."
+        cv["education"][0]["study_type"] = "Engineer"
+        errors = validate_master_cv(cv)
+        assert errors == []
+
+
 class TestSchemaVersion:
     def test_version_constant(self):
         assert MASTER_CV_SCHEMA_VERSION == "1.0"
