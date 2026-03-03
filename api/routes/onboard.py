@@ -115,6 +115,98 @@ def _bg_safe_add_source(user_id: int, db_path: str, cv_text: str) -> None:
         set_cv_processing_status(db_path, user_id, "failed", error=str(exc))
 
 
+def _run_docx_upload_background(
+    user_id: int,
+    profile_id: str,
+    db_path: str,
+    jobagent_dir: str,
+    cv_text: str,
+) -> None:
+    """Full CV upload pipeline for .docx files.
+
+    Runs the slow LLM extraction + profile merge in the background so the
+    user can leave the modal immediately after 202.  Mirrors replace-cv but
+    starts from raw text rather than pre-extracted fields.
+    """
+    from ruamel.yaml import YAML  # noqa: PLC0415
+    import io as _io  # noqa: PLC0415
+    from api.profile_merge import merge_profiles, compute_diff  # noqa: PLC0415
+
+    try:
+        client = _make_openai_client()
+
+        # Step 1: LLM extraction (slow — that's why we're async)
+        master_cv = extract_master_cv_json(cv_text, "cv_upload", client)
+        extracted_profile = derive_profile_from_master_cv(master_cv)
+        extracted_profile.setdefault("seniority_weights", _derive_seniority_weights(extracted_profile))
+
+        # Step 2: Load existing profile YAML
+        yaml_path = os.path.join(jobagent_dir, "config", "profiles", f"{profile_id}.yaml")
+        if not os.path.exists(yaml_path):
+            stored_yaml = get_user_profile_yaml(db_path, user_id)
+            if not stored_yaml:
+                set_cv_processing_status(db_path, user_id, "failed", error="Profile not found")
+                return
+            os.makedirs(os.path.dirname(yaml_path), exist_ok=True)
+            with open(yaml_path, "w") as f:
+                f.write(stored_yaml)
+
+        ry = YAML()
+        ry.preserve_quotes = True
+        with open(yaml_path) as f:
+            raw = ry.load(f)
+
+        # Step 3: Merge and compute diff
+        existing_flat = _yaml_to_flat_profile(raw)
+        merged = merge_profiles(existing_flat, extracted_profile)
+        diff = compute_diff(existing_flat, merged)
+        merged["salary_min"] = existing_flat.get("salary_min", 60000)
+        merged["location_preference"] = existing_flat.get("location_preference", "b")
+
+        # Step 4: Save YAML to disk + DB
+        _apply_flat_to_yaml(raw, merged)
+        buf = _io.StringIO()
+        ry.dump(raw, buf)
+        updated_yaml = buf.getvalue()
+        with open(yaml_path, "w") as f:
+            f.write(updated_yaml)
+        save_user_profile_yaml(db_path, user_id, updated_yaml)
+
+        # Step 5: Save cv.md to DB + disk
+        save_user_cv_md(db_path, user_id, cv_text)
+        knowledge_dir = os.path.join(jobagent_dir, "knowledge", profile_id)
+        os.makedirs(knowledge_dir, exist_ok=True)
+        with open(os.path.join(knowledge_dir, "cv.md"), "w") as f:
+            f.write(cv_text)
+
+        # Step 6: Persist master_cv (merge with existing + index)
+        _persist_master_cv(db_path, user_id, profile_id, jobagent_dir, master_cv)
+
+        analytics.capture(
+            user_id,
+            "profile_cv_replaced",
+            {
+                "skills_added_count": len(diff.get("skills_added", [])),
+                "domains_added_count": len(diff.get("domains_added", [])),
+                "fields_updated": diff.get("fields_updated", []),
+            },
+        )
+
+        set_cv_processing_status(db_path, user_id, "done", result={"type": "replace", "diff": diff})
+    except Exception as exc:
+        logger.exception("Background docx-upload failed for user_id=%d", user_id)
+        set_cv_processing_status(db_path, user_id, "failed", error=str(exc))
+
+
+def _bg_safe_docx_upload(user_id: int, profile_id: str, db_path: str, jobagent_dir: str, cv_text: str) -> None:
+    """Wrapper that guarantees status='failed' even if _run_docx_upload_background raises."""
+    try:
+        _run_docx_upload_background(user_id, profile_id, db_path, jobagent_dir, cv_text)
+    except Exception as exc:
+        logger.exception("Unhandled error in docx-upload background task for user_id=%d", user_id)
+        set_cv_processing_status(db_path, user_id, "failed", error=str(exc))
+
+
 @router.post("/add-source")
 async def add_source(
     request: Request,
@@ -132,6 +224,7 @@ async def add_source(
     """
     content_type = request.headers.get("content-type", "")
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    is_docx = False
 
     if "application/json" in content_type:
         body = await request.json()
@@ -154,6 +247,7 @@ async def add_source(
             cv_text = extract_text_from_file(contents, getattr(file, "filename", "") or "")
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
+        is_docx = filename.endswith(".docx")
     else:
         raise HTTPException(
             status_code=422,
@@ -161,7 +255,12 @@ async def add_source(
         )
 
     set_cv_processing_status(db_path, user["id"], "processing")
-    background_tasks.add_task(_bg_safe_add_source, user["id"], db_path, cv_text)
+    profile_id = user.get("profile_id")
+    if is_docx and profile_id:
+        jobagent_dir = os.path.abspath(os.environ.get("JOBAGENT_DIR", "agent"))
+        background_tasks.add_task(_bg_safe_docx_upload, user["id"], profile_id, db_path, jobagent_dir, cv_text)
+    else:
+        background_tasks.add_task(_bg_safe_add_source, user["id"], db_path, cv_text)
 
     from fastapi.responses import JSONResponse  # noqa: PLC0415
 
