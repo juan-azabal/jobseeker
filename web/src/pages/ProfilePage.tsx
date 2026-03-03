@@ -171,10 +171,8 @@ export default function ProfilePage() {
 
       {profile ? (
         <>
-          <ProfileEditor key={profileVersion} profile={profile} cvMarkdown={cvMarkdown} onSaved={handleSaved} />
-
-          {/* ── Master CV section ──────────────────────────────────────── */}
-          <div className="mt-8 border-t border-zinc-800 pt-6">
+          {/* ── Career history (primary section) ──────────────────────── */}
+          <div className="mb-8">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-white">Career history</h2>
               <div className="flex gap-2">
@@ -232,6 +230,12 @@ export default function ProfilePage() {
                 No career history yet. Add your experience above.
               </p>
             )}
+          </div>
+
+          {/* ── Job preferences (secondary section) ───────────────────── */}
+          <div className="border-t border-zinc-800 pt-6">
+            <h2 className="mb-4 text-sm font-semibold text-white">Job preferences</h2>
+            <ProfileEditor key={profileVersion} profile={profile} cvMarkdown={cvMarkdown} onSaved={handleSaved} />
           </div>
         </>
       ) : (
