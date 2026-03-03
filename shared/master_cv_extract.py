@@ -9,7 +9,7 @@ from shared.master_cv import validate_master_cv
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "master-cv-extraction.md"
 _MODEL = "gpt-4o-mini"
-_MAX_TOKENS = 4000
+_MAX_TOKENS = 8000
 
 logger = logging.getLogger(__name__)
 

@@ -129,3 +129,19 @@ class TestExtractMasterCvJson:
 
         for entry in result["work"]:
             assert isinstance(entry["highlights"], list)
+
+    def test_max_tokens_is_8000(self):
+        """Step 1.1 — _MAX_TOKENS must be 8000 to avoid truncating long CVs."""
+        from shared import master_cv_extract
+
+        assert master_cv_extract._MAX_TOKENS == 8000
+
+    def test_llm_called_with_max_tokens_8000(self):
+        """Step 1.1 — LLM is called with max_tokens=8000."""
+        from shared.master_cv_extract import extract_master_cv_json
+
+        client = _make_fake_client(_valid_master_cv_json())
+        extract_master_cv_json("CV text...", "cv_upload", client)
+
+        call_kwargs = client.chat.completions.create.call_args
+        assert call_kwargs.kwargs.get("max_tokens") == 8000

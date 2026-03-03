@@ -1538,7 +1538,14 @@ async def replace_cv(
 
     # Synchronous merge: fast pure Python, updates profile YAML immediately
     existing_flat = _yaml_to_flat_profile(raw)
-    merged = merge_profiles(existing_flat, body.extracted_profile)
+    # Step 2.1: Unpack nested payload (frontend may send full generate-profile response)
+    incoming_profile = body.extracted_profile
+    nested_master_cv_json: dict | None = None
+    if "master_cv_json" in incoming_profile:
+        nested_master_cv_json = incoming_profile["master_cv_json"]
+    if "profile" in incoming_profile:
+        incoming_profile = incoming_profile["profile"]
+    merged = merge_profiles(existing_flat, incoming_profile)
     diff = compute_diff(existing_flat, merged)
 
     merged["salary_min"] = existing_flat.get("salary_min", 60000)
@@ -1578,6 +1585,8 @@ async def replace_cv(
         logger.exception("GitHub sync failed after replace-cv for %s (non-fatal)", profile_id)
 
     # Mark as processing and enqueue background work (master_cv + analytics)
+    # Step 2.2: nested master_cv_json takes precedence over top-level body.master_cv_json
+    effective_master_cv_json = body.master_cv_json or nested_master_cv_json
     set_cv_processing_status(db_path, user["id"], "processing")
     background_tasks.add_task(
         _bg_safe_replace_cv,
@@ -1586,7 +1595,7 @@ async def replace_cv(
         db_path,
         jobagent_dir,
         body.cv_markdown,
-        body.master_cv_json,
+        effective_master_cv_json,
         diff,
     )
 

@@ -193,3 +193,90 @@ class TestReplaceCvPersistsMasterCv:
         data = resp.json()
         assert "work" in data
         assert data["work"][0]["company"] == "Acme Corp"
+
+
+def _patch_bg_deps():
+    """Patch all background task dependencies so tests can run without LLM/ChromaDB."""
+    from contextlib import ExitStack
+    from unittest.mock import patch
+
+    stack = ExitStack()
+    stack.enter_context(patch("api.routes.onboard._make_openai_client", return_value=None))
+    stack.enter_context(patch("api.routes.onboard.index_master_cv"))
+    return stack
+
+
+class TestReplaceCvNestedPayload:
+    """Phase 2 — Step 2.3: replace-cv correctly handles nested generated-profile payload."""
+
+    def test_nested_extracted_profile_applies_merge(self, tmp_path, monkeypatch):
+        """Step 2.1 — extracted_profile = {profile: {...}, master_cv_json: {...}} is unpacked.
+
+        The inner 'profile' dict should be used for merge, not the wrapper.
+        The 'go' skill from the nested profile must appear in the saved YAML.
+        """
+        client, db_path, user_id = _make_client(tmp_path, monkeypatch)
+
+        # Frontend sends the full generate-profile response as extracted_profile
+        nested_payload = {
+            "profile": {**SAMPLE_PROFILE, "skills": ["python", "sql", "go"]},
+            "master_cv_json": SAMPLE_MASTER_CV,
+        }
+
+        with _patch_github(), _patch_bg_deps():
+            resp = client.patch(
+                "/api/onboard/replace-cv",
+                json={
+                    "cv_markdown": "# My CV",
+                    "extracted_profile": nested_payload,
+                },
+            )
+        assert resp.status_code == 202
+
+        # Profile merge should have used the inner profile — 'go' must be in saved YAML
+        from api.db.queries import get_user_profile_yaml
+        import yaml
+
+        raw_yaml = get_user_profile_yaml(db_path, user_id)
+        assert raw_yaml is not None
+        saved = yaml.safe_load(raw_yaml)
+        skills = saved.get("skills", [])
+        assert "go" in skills, f"'go' skill from nested profile not merged. skills={skills}"
+
+    def test_nested_master_cv_json_persisted(self, tmp_path, monkeypatch):
+        """Step 2.2 — master_cv_json inside nested extracted_profile is persisted."""
+        client, db_path, user_id = _make_client(tmp_path, monkeypatch)
+
+        nested_mcv = {
+            **SAMPLE_MASTER_CV,
+            "work": [
+                {
+                    "id": "work_nested",
+                    "company": "NestedCorp",
+                    "position": "CTO",
+                    "start_date": "2021-01",
+                    "end_date": None,
+                    "summary": "Led engineering",
+                    "highlights": ["Built scalable platform"],
+                    "skills_used": ["go"],
+                }
+            ],
+        }
+        nested_payload = {"profile": SAMPLE_PROFILE, "master_cv_json": nested_mcv}
+
+        with _patch_github(), _patch_bg_deps():
+            resp = client.patch(
+                "/api/onboard/replace-cv",
+                json={
+                    "cv_markdown": "# My CV",
+                    "extracted_profile": nested_payload,
+                },
+            )
+        assert resp.status_code == 202
+
+        # master_cv_json from the nested payload must be persisted
+        raw = get_master_cv_json(db_path, user_id)
+        assert raw is not None
+        saved = json.loads(raw)
+        companies = [e["company"] for e in saved.get("work", [])]
+        assert "NestedCorp" in companies, f"master_cv_json not persisted. companies={companies}"
