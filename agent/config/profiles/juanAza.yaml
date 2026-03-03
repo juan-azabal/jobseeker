@@ -7,17 +7,15 @@ user:
   - es
   - en
   home_locations:
-  - barcelona
-  - spain
-  - españa
-  - madrid
-  - valladolid
+  - Barcelona
+  - ES
   location_preference: b
 target:
-  level: principal
+  level: senior
   track: ic
   domains:
     data: 20
+    ecommerce: 5
     adtech: 16
     saas: 13
     media: 15
@@ -55,7 +53,7 @@ target:
     agency: -15
     ngo: -15
     scaleup: 15
-  role_type: Senior Product Manager
+  role_type: Senior Product Manager, Data Platform (Tracking & Analytics)
   role_function: product
   search_titles:
   - Principal Product Manager
@@ -120,6 +118,36 @@ skills:
 - data-contracts
 - technical acumen
 - innovation
+- Data platform management
+- Event-driven architectures
+- Data quality and observability
+- Data governance
+- AI-driven personalization
+- Revenue optimization
+- Ad monetization
+- Performance optimization
+- AI and NLP product development
+- Tracking and instrumentation
+- Data onboarding
+- Taxonomy design
+- Client advisory
+- Web development
+- SEO
+- Social distribution
+- Data Platforms & Tracking
+- Data Governance, Privacy & Compliance
+- consent management
+- data minimization
+- Personalization, Experimentation & Monetization
+- A/B testing
+- programmatic advertising
+- ARPU
+- Product Management & Stakeholder Leadership
+- cross-functional alignment
+- AI, ML & Language Model Products
+- IBM Watson
+- NLP
+- OpenAI
 knowledge:
   dir: knowledge/juan
   profile_files:
