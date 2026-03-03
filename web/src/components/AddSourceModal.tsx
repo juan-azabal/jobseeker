@@ -1,6 +1,7 @@
 /** Modal for adding a new CV source (file upload or paste text).
- *  .docx uploads → replace-cv flow (profile update + diff).
- *  .pdf uploads and paste text → add-source flow (career history only).
+ *  All paths return 202 immediately and close the modal.
+ *  The backend detects .docx and runs the full profile-merge pipeline
+ *  in a background task; .pdf and paste text enrich career history only.
  */
 
 import { useState, useRef } from 'react';
@@ -10,77 +11,26 @@ interface Props {
   onClose: () => void;
 }
 
-type Mode = 'choose' | 'file' | 'text' | 'loading' | 'error';
+type Mode = 'choose' | 'file' | 'text' | 'loading';
 
 export default function AddSourceModal({ onAdded, onClose }: Props) {
   const [mode, setMode] = useState<Mode>('choose');
-  const [loadingLabel, setLoadingLabel] = useState('Processing…');
   const [pasteText, setPasteText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  /** .docx → full CV replace flow (3 steps). Returns true on success. */
-  const handleDocxReplace = async (file: File): Promise<boolean> => {
-    setLoadingLabel('Parsing CV…');
-    const form = new FormData();
-    form.append('file', file);
-    const uploadResp = await fetch('/api/onboard/upload-cv', { method: 'POST', body: form });
-    if (!uploadResp.ok) {
-      const d = await uploadResp.json().catch(() => ({}));
-      setError(d.detail || 'Upload failed. Please try again.');
-      return false;
-    }
-    const { markdown } = await uploadResp.json();
-
-    setLoadingLabel('Extracting profile…');
-    const extractResp = await fetch('/api/onboard/generate-profile', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cv_markdown: markdown }),
-    });
-    if (!extractResp.ok) {
-      const d = await extractResp.json().catch(() => ({}));
-      setError(d.detail || 'Profile generation failed. Please try again.');
-      return false;
-    }
-    const extracted = await extractResp.json();
-
-    setLoadingLabel('Merging…');
-    const mergeResp = await fetch('/api/onboard/replace-cv', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        cv_markdown: markdown,
-        extracted_profile: extracted.profile,
-        master_cv_json: extracted.master_cv_json,
-      }),
-    });
-    if (!mergeResp.ok) {
-      const d = await mergeResp.json().catch(() => ({}));
-      setError(d.detail || 'Merge failed. Please try again.');
-      return false;
-    }
-    return true;
-  };
-
   const handleFile = async (file: File) => {
     setMode('loading');
     setError(null);
+    const form = new FormData();
+    form.append('file', file);
     try {
-      if (file.name.toLowerCase().endsWith('.docx')) {
-        const ok = await handleDocxReplace(file);
-        if (!ok) { setMode('file'); return; }
-      } else {
-        setLoadingLabel('Processing…');
-        const form = new FormData();
-        form.append('file', file);
-        const resp = await fetch('/api/onboard/add-source', { method: 'POST', body: form });
-        if (!resp.ok) {
-          const d = await resp.json().catch(() => ({}));
-          setError(d.detail || 'Upload failed. Please try again.');
-          setMode('file');
-          return;
-        }
+      const resp = await fetch('/api/onboard/add-source', { method: 'POST', body: form });
+      if (!resp.ok) {
+        const d = await resp.json().catch(() => ({}));
+        setError(d.detail || 'Upload failed. Please try again.');
+        setMode('file');
+        return;
       }
       onAdded();
     } catch {
@@ -192,12 +142,7 @@ export default function AddSourceModal({ onAdded, onClose }: Props) {
         )}
 
         {mode === 'loading' && (
-          <div className="py-6 text-center">
-            <p className="text-sm text-zinc-400">{loadingLabel}</p>
-            {loadingLabel !== 'Processing…' && (
-              <p className="mt-1 text-xs text-zinc-600">This may take a moment…</p>
-            )}
-          </div>
+          <p className="py-6 text-center text-sm text-zinc-400">Uploading…</p>
         )}
       </div>
     </div>

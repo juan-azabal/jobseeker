@@ -137,13 +137,7 @@ def test_add_source_merges_skills(authed_client):
     ):
         resp = client.post(
             "/api/onboard/add-source",
-            files={
-                "file": (
-                    "cv.docx",
-                    io.BytesIO(b"PK\x03\x04"),
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                )
-            },
+            files={"file": ("cv.pdf", io.BytesIO(b"%PDF"), "application/pdf")},
         )
     assert resp.status_code == 202
     saved = json.loads(get_master_cv_json(db_path, user_id))
