@@ -72,7 +72,7 @@ def _make_client(tmp_path, monkeypatch):
 
 class TestAddSourceTextInput:
     def test_json_text_body_accepted(self, tmp_path, monkeypatch):
-        """POST /add-source with JSON {text: ...} → 200."""
+        """POST /add-source with JSON {text: ...} → 202 (async)."""
         client, db_path, user_id = _make_client(tmp_path, monkeypatch)
 
         with (
@@ -84,13 +84,12 @@ class TestAddSourceTextInput:
                 "/api/onboard/add-source",
                 json={"text": "LinkedIn summary: Senior PM at Text Corp..."},
             )
-        assert resp.status_code == 200
+        assert resp.status_code == 202  # async
         data = resp.json()
-        assert "profile" in data
-        assert "master_cv" in data
+        assert data["status"] == "processing"
 
     def test_json_text_saves_master_cv(self, tmp_path, monkeypatch):
-        """POST /add-source with text → master_cv_json persisted in DB."""
+        """POST /add-source with text → master_cv_json persisted in DB (background runs sync)."""
         client, db_path, user_id = _make_client(tmp_path, monkeypatch)
 
         with (
@@ -102,7 +101,7 @@ class TestAddSourceTextInput:
                 "/api/onboard/add-source",
                 json={"text": "LinkedIn summary text..."},
             )
-        assert resp.status_code == 200
+        assert resp.status_code == 202  # async
 
         raw = get_master_cv_json(db_path, user_id)
         assert raw is not None
@@ -127,13 +126,13 @@ class TestAddSourceTextInput:
         ):
             resp = client.post("/api/onboard/add-source", json={"text": text_content})
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202  # async
         assert len(extract_calls) == 1
         assert extract_calls[0][0] == text_content
         assert extract_calls[0][1] == "add_source"
 
     def test_file_upload_still_works(self, tmp_path, monkeypatch):
-        """Original file upload path still returns 200."""
+        """Original file upload path still returns 202 (async)."""
         client, db_path, user_id = _make_client(tmp_path, monkeypatch)
 
         with (
@@ -147,7 +146,7 @@ class TestAddSourceTextInput:
                 files={"file": ("cv.docx", b"PK\x03\x04fake_docx_bytes", "application/octet-stream")},
             )
         # May fail on text extraction without a real docx, but the route should accept the file
-        assert resp.status_code in (200, 400)
+        assert resp.status_code in (202, 400)
 
     def test_missing_text_field_returns_422(self, tmp_path, monkeypatch):
         """POST /add-source with empty JSON body → 422."""

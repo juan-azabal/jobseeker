@@ -109,7 +109,7 @@ class TestReplaceCvPersistsMasterCv:
                     "master_cv_json": SAMPLE_MASTER_CV,
                 },
             )
-        assert resp.status_code == 200
+        assert resp.status_code == 202  # async: endpoint now returns 202
 
         raw = get_master_cv_json(db_path, user_id)
         assert raw is not None
@@ -137,7 +137,7 @@ class TestReplaceCvPersistsMasterCv:
                     "extracted_profile": SAMPLE_PROFILE,
                 },
             )
-        assert resp.status_code == 200
+        assert resp.status_code == 202  # async
 
         raw = get_master_cv_json(db_path, user_id)
         assert raw is not None
@@ -168,7 +168,7 @@ class TestReplaceCvPersistsMasterCv:
                     "master_cv_json": incoming_mcv,
                 },
             )
-        assert resp.status_code == 200
+        assert resp.status_code == 202  # async
 
         raw = get_master_cv_json(db_path, user_id)
         saved = json.loads(raw)
