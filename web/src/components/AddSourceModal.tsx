@@ -42,7 +42,6 @@ export default function AddSourceModal({ onAdded, onClose }: Props) {
   const handlePaste = async () => {
     if (!pasteText.trim()) return;
     setMode('loading');
-    setLoadingLabel('Processing…');
     setError(null);
     try {
       const resp = await fetch('/api/onboard/add-source', {
