@@ -461,6 +461,14 @@ Parser Enrichment + CV Pipeline Optimization (complete: 2026-03-02)
 - Phase 5: Scorer rubric v2.1 — `requirement_evidence_map` (5 entries max) + `cv_strategy` fields; plan.py consumes scorer enrichments; UI shows "Your fit — by requirement" + CV strategy above Generate CV button
 - GATE: 716 backend tests + 598 agent tests passing; TypeScript clean; no breaking changes for old jobs
 
+Career History UX — Async CV processing (complete: 2026-03-02)
+- Phase 1: Bug fixes — replace-cv persists master_cv_json; frontend payload sends extracted_profile + master_cv_json separately; add-source accepts JSON text body (`{"text": "..."}`)
+- Phase 2: Async processing via BackgroundTasks — migration 022 (cv_processing_status + cv_processing_result + cv_processing_started_at columns on users); `set/get_cv_processing_status` query helpers; replace-cv and add-source both return 202 immediately; background task wrapper (`_bg_safe_*`) guarantees status="failed" on unhandled exceptions; 5-minute timeout guard in GET /profile; `POST /api/onboard/accept-merge` clears processing state
+- Phase 3: Unified CV input flow — Replace CV separate flow removed from ProfilePage; AddSourceModal routes .docx uploads through replace-cv (upload-cv → generate-profile → replace-cv) for full profile merge + diff; .pdf and paste text go through add-source; ProfilePage layout refactored with career history as primary section
+- Frontend: Polling (5s) while processing; amber banner for "processing", red banner for "failed"; CVReplaceSummary shown from cvProcessing.result.diff when done
+- Tests: `tests/test_replace_cv_async.py` (5), `tests/test_add_source_async.py` (5), `tests/test_cv_processing_status.py` (new), `tests/test_add_source_text.py` (updated 200→202), `tests/test_replace_cv_master.py` (updated 200→202), `tests/test_profile_e2e.py` (updated 200→202), `tests/test_onboard_add_source_api.py` (updated 200→202)
+- GATE: 892 backend tests passing
+
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
 - Phase R — Refactor & Test Coverage
@@ -603,6 +611,10 @@ Parser Enrichment + CV Pipeline Optimization (complete: 2026-03-02)
 - Auto-search site params (2026-03-01): LinkedIn → `results_wanted=15`, `is_remote=False`, `linkedin_fetch_description=True`; Indeed → `results_wanted=25`, `country_indeed` from profile home_locations[1]. Google dropped (JobSpy Issue #302 — consistently 0 results). `LINKEDIN_DELAY_SECS=2` between consecutive LinkedIn queries.
 - Auto-search + scoring decoupled (2026-03-01): `search_titles` controls WHAT gets scraped. `seniority_weights`/`domains` control scoring. They are independent. Adding "Product Owner" to search_titles does not affect how Product Owner roles score.
 - `onboard.py` generates search_titles (2026-03-01): `_build_search_titles()` derives `["{Level} {role_type}", "{role_type}"]` from extracted fields. Users extend via profile editing.
+- Async CV processing (2026-03-02): replace-cv and add-source return 202 immediately; background task runs via FastAPI `BackgroundTasks` (no Redis/Celery). `_bg_safe_*` wrappers guarantee `status="failed"` even when the background function is fully patched in tests. TestClient runs BackgroundTasks synchronously after response — test assertions on DB state are safe immediately after 202.
+- cv_processing state machine (2026-03-02): NULL → "processing" (on 202) → "done" | "failed" (after background task). `POST /api/onboard/accept-merge` clears all three columns (sets status=NULL). Timeout guard in `GET /profile`: if status="processing" and started_at > 5 min ago → auto-fail (prevents stuck "processing" banners).
+- AddSourceModal routing (2026-03-02): .docx uploads go through upload-cv → generate-profile → replace-cv (3 API calls, full profile merge + diff). .pdf uploads and paste text go through add-source (career history enrichment only). The distinction: .docx is a full CV (profile fields + career history); .pdf/.txt are supplementary sources.
+- Frontend cv_processing polling (2026-03-02): `useEffect` with `setInterval(5000)` runs while `cvProcessing.status === 'processing'`. Cleans up on status change. When status transitions to "done" with a `diff`, CVReplaceSummary renders. When status is "failed", dismissible red banner shown. `POST /api/onboard/accept-merge` called when user dismisses diff or banner.
 
 ### Known Bugs
 
