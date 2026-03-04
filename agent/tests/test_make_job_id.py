@@ -97,3 +97,59 @@ class TestMakeJobIdNormalization:
         from scraper import make_job_id
 
         assert make_job_id("PM", "Acme") != make_job_id("PM", "Other Corp")
+
+
+class TestGeoSuffixNormalization:
+    """Greenhouse-style titles like 'Senior PM | Canada | Remote' must dedup
+    with the same role in a different geo before hashing."""
+
+    def test_cross_geo_same_id(self):
+        """Same role at same company in different geos → identical job_id."""
+        from scraper import make_job_id
+
+        assert make_job_id("Senior PM | Canada | Remote", "Grafana Labs") == make_job_id(
+            "Senior PM | Spain | Remote", "Grafana Labs"
+        )
+
+    def test_geo_suffix_remote_stripped(self):
+        """'| Country | Remote' suffix stripped before hashing."""
+        from scraper import make_job_id
+
+        assert make_job_id("Senior PM | Canada | Remote", "Acme") == make_job_id("Senior PM", "Acme")
+
+    def test_geo_suffix_hybrid_stripped(self):
+        """'| Region | Hybrid' suffix stripped."""
+        from scraper import make_job_id
+
+        assert make_job_id("Staff Engineer | EMEA | Hybrid", "Acme") == make_job_id("Staff Engineer", "Acme")
+
+    def test_geo_suffix_onsite_stripped(self):
+        """'| Region | On-site' suffix stripped."""
+        from scraper import make_job_id
+
+        assert make_job_id("Senior PM | EMEA | On-site", "Acme") == make_job_id("Senior PM", "Acme")
+
+    def test_geo_suffix_office_stripped(self):
+        """'| Country | Office' suffix stripped."""
+        from scraper import make_job_id
+
+        assert make_job_id("PM | Germany | Office", "Acme") == make_job_id("PM", "Acme")
+
+    def test_single_pipe_not_stripped(self):
+        """Only one pipe segment → not a geo suffix → unchanged."""
+        from scraper import make_job_id
+
+        # "PM | Canada" with no workmode should NOT be stripped
+        assert make_job_id("PM | Canada", "Acme") != make_job_id("PM", "Acme")
+
+    def test_unknown_workmode_not_stripped(self):
+        """'| Country | Full-time' is not in workmode whitelist → not stripped."""
+        from scraper import make_job_id
+
+        assert make_job_id("PM | Canada | Full-time", "Acme") != make_job_id("PM", "Acme")
+
+    def test_multiword_region_stripped(self):
+        """Multi-word region like 'United States' is stripped correctly."""
+        from scraper import make_job_id
+
+        assert make_job_id("Senior PM | United States | Remote", "Acme") == make_job_id("Senior PM", "Acme")

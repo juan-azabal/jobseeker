@@ -43,6 +43,14 @@ def _normalize_for_id(text: str) -> str:
     # Strip gender/diversity parenthetical suffixes (e.g. (f/m/d), (h/f), (all genders))
     s = re.sub(r"\s*\([fmhwd/]+\)\s*$", "", s)
     s = re.sub(r"\s*\(all\s+genders?\)\s*$", "", s)
+    # Strip Greenhouse-style cross-geo suffix: "| Country/Region | WorkMode"
+    # e.g. "Senior PM | Canada | Remote" → "Senior PM"
+    # Only strips when the last segment is a known work-mode keyword.
+    s = re.sub(
+        r"\s*\|\s*[^|]+\s*\|\s*(remote|hybrid|onsite|on-site|office)\s*$",
+        "",
+        s,
+    )
     # Strip common legal entity suffixes from company names
     for suffix in [
         ", inc.",
