@@ -77,7 +77,9 @@ FIELD_TO_GROUP: dict[str, str] = {
 _LIST_FIELDS = {"departments", "locations_structured", "emails"}
 
 # Fields that are fixed per job (not merged — always taken from best-rank source)
-_IDENTITY_FIELDS = {"id", "title", "company", "source", "sources"}
+# title_variants is also excluded from the generic loop: it is set explicitly
+# in _merge_group_of_jobs() by collecting all original titles from the group.
+_IDENTITY_FIELDS = {"id", "title", "company", "source", "sources", "title_variants"}
 
 
 def _strip_html(text: str) -> str:
@@ -193,6 +195,9 @@ def _merge_group_of_jobs(jobs: list[RawJob]) -> RawJob:
     best_source = min(jobs_by_source, key=_source_priority)
     base = jobs_by_source[best_source]
 
+    # Collect all unique original titles (preserves cross-geo variant record)
+    all_titles = sorted(set(j.title for j in jobs))
+
     # Collect all fields to merge
     kwargs: dict = {
         "id": base.id,
@@ -200,6 +205,7 @@ def _merge_group_of_jobs(jobs: list[RawJob]) -> RawJob:
         "company": base.company,
         "source": base.source,
         "sources": sorted(jobs_by_source.keys(), key=_source_priority),
+        "title_variants": all_titles,
     }
 
     # Get all field names from the model (excluding computed and identity fields)
