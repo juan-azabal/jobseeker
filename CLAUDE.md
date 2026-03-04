@@ -80,12 +80,14 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `agent/knowledge/{user_id}/cv.md` — CV knowledge base (per user, read-only)
   - `agent/output/` — job results JSON (gitignored)
   - `agent/prompts/` — LLM prompts (parser-prompt, scoring-rubric, onboard-extraction)
+  - `agent/conftest.py` — adds repo root to sys.path so `shared/` is importable in agent tests (mirrors CI PYTHONPATH)
   - `agent/scripts/` — reparse_all, rescore_all, build_ingest_payload, list_active_profiles, check_active
   - `agent/schemas/` — JSON output contracts (parsed_job, scored_job, digest_context, gap_history_entry)
   - `agent/patterns/` — interface contracts per module
   - `agent/docs/decisions/` — ADRs (001–007)
-- Tests: `tests/` (backend, 683 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 517 tests)
+- Tests: `tests/` (backend, 683 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 617 tests)
   - `agent/tests/fixtures.py` — shared BASELINE_PROFILE fixture (fixed dict, not from juan.yaml)
+  - `agent/tests/test_cross_geo_regression.py` — 5 regression tests: cross-geo Greenhouse variants dedup to single job
   - `agent/tests/test_notifier_v2.py` — v2 rag_score compat in _build_context (P15 fix)
   - `agent/tests/test_ranked_jobs_v2.py` — hybrid score in ranked_jobs + print_summary mode label (P16/P18 fix)
   - `agent/tests/test_gap_tracker_v2.py` — grade points stored in gap history for v2 jobs (P17 fix)
@@ -506,6 +508,8 @@ Career History UX — Async CV processing (complete: 2026-03-02)
 - WTTJ geo filter (Phase 15): _build_geo_filter() builds Algolia filter including only target countries + fulltime remote + partial-in-target. Partial remote from non-target countries excluded at scrape time. Aligned with derive_target_countries() output.
 - WTTJ geographic filter (Phase 0.1): offices.country_code is a filterable Algolia attribute (verified live). Filter: PM_filter AND (country_code:X OR ... OR remote:fulltime OR remote:partial). target_countries explicit list in profile YAML (not derived from country_weights to avoid name→ISO complexity). Default: [ES] + remote.
 - make_job_id migration (Phase 0.2): ID hash changes mean new IDs for existing jobs. Chosen option A: accept one-time re-run cost. Clear seen_ids/<profile>.txt after deploy. migrate_job_ids.py handles SQLite in-place UPDATE; collision resolution keeps record with more non-null parsed fields.
+- Cross-geo dedup (2026-03-04): `_normalize_for_id()` now strips Greenhouse-style `| Country/Region | WorkMode` suffix before hashing. Workmode whitelist: `remote|hybrid|onsite|on-site|office`. Single-pipe or unknown-workmode titles are unchanged. Merged record stores all original titles in `RawJob.title_variants` (populated by `merger._merge_group_of_jobs()`, excluded from the generic field-group loop via `_IDENTITY_FIELDS`).
+- agent/conftest.py (2026-03-04): adds repo root to sys.path at pytest session start so `shared/` is importable from agent tests. Mirrors `PYTHONPATH=$GITHUB_WORKSPACE` in CI. Without it, `from shared.master_cv_scoring import build_scoring_context` raised `ModuleNotFoundError` inside scorer.py's `except Exception: pass` block, silently skipping master CV enrichment in tests.
 - nan sanitization (Phase 0.3): _sanitize_str() in scraper.py handles float NaN, None, and string literal 'nan'. Applied to all string fields in run_scraper(). ats_scraper.py and wttj_scraper.py already avoided this via explicit str() conversion, but wttj already had proper handling.
 - Non-target geo rejection (Phase 0.3): limited value until Phase 1 adds structured country field (currently ~75% empty locations). Filter conservative: empty/unrecognised location → pass. ~30 EU/major country fragments in _COUNTRY_FRAGMENTS dict. reject_if_requires_relocation_outside read from preferences YAML.
 - Smoke test (Phase 0.4): uses AGENT_OUTPUT_DIR env var (defaults to agent/output/). Skips when no files present. pytest.ini in agent/ registers 'smoke' marker.
