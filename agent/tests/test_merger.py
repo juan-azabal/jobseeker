@@ -286,3 +286,58 @@ class TestSourcesTracking:
 
         # greenhouse has highest priority → its job_url wins
         assert "greenhouse" in result[0].job_url
+
+
+class TestTitleVariants:
+    """title_variants captures all original titles when geo-variant jobs merge."""
+
+    def test_single_job_no_title_variants(self):
+        """Single job passes through; title_variants stays None."""
+        from merger import merge_jobs
+
+        job = _job("greenhouse", title="Senior PM")
+        result = merge_jobs([job])
+
+        assert result[0].title_variants is None
+
+    def test_merged_jobs_title_variants_collected(self):
+        """Two jobs with same id but different titles → title_variants has both."""
+        from merger import merge_jobs
+        from scraper import make_job_id
+
+        title_ca = "Senior PM | Canada | Remote"
+        title_es = "Senior PM | Spain | Remote"
+        company = "Grafana Labs"
+        # After geo-suffix stripping, both produce the same id
+        shared_id = make_job_id(title_ca, company)
+
+        job_ca = RawJob(id=shared_id, title=title_ca, company=company, source="greenhouse")
+        job_es = RawJob(id=shared_id, title=title_es, company=company, source="greenhouse")
+
+        result = merge_jobs([job_ca, job_es])
+
+        assert len(result) == 1
+        merged = result[0]
+        assert merged.title_variants is not None
+        assert title_ca in merged.title_variants
+        assert title_es in merged.title_variants
+
+    def test_same_title_no_duplicate_variants(self):
+        """Same title from two sources → title_variants deduped."""
+        from merger import merge_jobs
+        from scraper import make_job_id
+
+        title = "Senior PM"
+        company = "Acme"
+        shared_id = make_job_id(title, company)
+
+        job_gh = RawJob(id=shared_id, title=title, company=company, source="greenhouse")
+        job_li = RawJob(id=shared_id, title=title, company=company, source="linkedin")
+
+        result = merge_jobs([job_gh, job_li])
+
+        assert len(result) == 1
+        # Same title from two sources → appears once (or None if deduplicated to single entry)
+        variants = result[0].title_variants
+        assert variants is not None
+        assert variants.count(title) == 1

@@ -83,6 +83,9 @@ class RawJob(BaseModel):
 
     # ── Merge tracking ────────────────────────────────────────────────────────
     sources: list[str] = Field(default_factory=list)
+    # All original titles collected when cross-geo variants merge into one record.
+    # None for single-source jobs; populated by merger when len(group) > 1.
+    title_variants: list[str] | None = None
     # Category reference from WTTJ Algolia (new_profession.sub_category_reference)
     source_category: str | None = None
 
