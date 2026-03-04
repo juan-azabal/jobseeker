@@ -111,29 +111,8 @@ jobs:
               continue
             fi
 
-            # --- Sync to Railway (so next profile benefits from parsed data) ---
-            if [ -n "$RAILWAY_URL" ] && [ -n "$INGEST_API_KEY" ]; then
-              for f in output/jobs_*.json; do
-                [ -f "$f" ] || continue
-                echo "Syncing $(basename $f)..."
-                tmpfile=$(mktemp --suffix=.json)
-                effective_profile=$(python3 scripts/build_ingest_payload.py "$f" "$tmpfile" "$profile")
-                response=$(curl -s -w "\n%{http_code}" -X POST "$RAILWAY_URL/api/ingest" \
-                  -H "Content-Type: application/json" \
-                  -H "X-Ingest-Key: $INGEST_API_KEY" \
-                  --data-binary "@$tmpfile")
-                rm -f "$tmpfile"
-                http_code=$(echo "$response" | tail -1)
-                body=$(echo "$response" | head -1)
-                echo "  HTTP $http_code (profile=${effective_profile:-none}): $body"
-                if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
-                  echo "⚠  Sync failed for $profile (HTTP $http_code) — continuing"
-                  any_failed=true
-                fi
-              done
-            else
-              echo "Railway secrets not set — skipping sync"
-            fi
+            # Note: Railway sync (POST /api/ingest) is handled inside the agent
+            # pipeline at Step 10b (_sync_to_railway via httpx). No curl sync needed here.
 
             # --- Optional: reparse + rescore cached jobs with v1.4/v2 ---
             if [ "$mode" = "reparse_rescore" ]; then

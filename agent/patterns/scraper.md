@@ -53,6 +53,7 @@ RawJob(
     team=str | None,
     # Merge tracking
     sources=list[str],          # filled during merge; starts empty
+    title_variants=list[str] | None,  # original titles when cross-geo variants merge; None for single-source jobs
     source_category=str | None,
 )
 
@@ -71,7 +72,15 @@ job_id = make_job_id(title, company)
 ```
 
 `make_job_id()` hashes `normalized_title|normalized_company` with MD5, returns first 12 hex chars.
-Normalization removes gender suffixes, legal entity suffixes, punctuation variants.
+
+`_normalize_for_id()` applies these transforms in order:
+1. Lowercase + strip
+2. Strip gender/diversity suffixes: `(f/m/d)`, `(h/f)`, `(all genders)`
+3. Strip Greenhouse-style cross-geo suffix: `| Country/Region | WorkMode`
+   — workmode whitelist: `remote|hybrid|onsite|on-site|office`
+   — e.g. `"Senior PM | Canada | Remote"` → `"Senior PM"` (same ID as `"Senior PM | Spain | Remote"`)
+4. Strip legal entity suffixes from company names: Inc., Ltd, GmbH, B.V., LLC, Corp, AG, S.L., S.A.
+5. Replace remaining punctuation with spaces, collapse whitespace
 
 ## Existing Implementations
 
@@ -121,6 +130,7 @@ Special rules:
 - **description**: prefers longer plain text over HTML, then longer length
 - **List fields** (`departments`, `locations_structured`, `emails`): union across all sources
 - **`sources`**: list of all contributing source names, ordered by SOURCE_RANK
+- **`title_variants`**: sorted list of all unique original titles from the merged group; None for single-source jobs. Populated explicitly, not via the field-group loop.
 
 ## Adding a New Scraper
 
@@ -137,3 +147,4 @@ Special rules:
 - All scrapers run before prefilter — dedup happens at the collection stage
 - Descriptions should be raw text or markdown; HTML is acceptable but less preferred
 - `remote_type` replaces the old `is_remote` bool; `is_remote` is now a computed property
+- Cross-geo Greenhouse variants (`"Senior PM | Canada | Remote"` / `"Senior PM | Spain | Remote"`) produce the same `job_id` and are merged into one record with `title_variants` preserving both originals
