@@ -1,143 +1,115 @@
 """
 Email digest notifier using Gmail SMTP + Jinja2.
 
-Usage (called from main.py with --notify):
-    from notifier import send_digest
-    sent = send_digest(jobs, rejected_stats, run_meta)
+Fetches today's scored jobs from GET /api/digest/{profile_id} (Railway API)
+and renders them into the HTML email template. Zero local scoring logic —
+all tiers and scores come from the same code path used by the web app.
 
-Template variables populated by _build_context():
+Usage (called from pipeline.py with --notify):
+    from notifier import send_digest
+    sent = send_digest(railway_url, profile_id, ingest_key,
+                       rejected_stats, run_meta, profile)
+
+Template variables populated by _build_context_from_api():
 
   Header:
-    date          str  — "20 Feb 2026"
-    headline      str  — e.g. "ClickHouse · remote data platform"
-    n_apply       int  — Tier A count (score >= 50)
-    n_review      int  — Tier B count (score 30-49)
-    n_skip        int  — Tier C count (score < 30)
+    date          str  — "04 Mar 2026"
+    headline      str  — e.g. "Acme · remote · 82"
+    n_apply       int  — Tier A count
+    n_review      int  — Tier B count
+    n_skip        int  — Tier C count
     n_prefiltered int  — total jobs rejected by prefilter
 
   Tiers (lists of flattened job dicts):
-    tier_a  — score >= 50  (full card: strength, gap)
-    tier_b  — score 30-49  (compact row)
-    tier_c  — score < 30   (single line)
+    tier_a  — score > 60  (full card)
+    tier_b  — score > 40  (compact row)
+    tier_c  — score ≤ 40  (single line)
 
   Each job dict in a tier has:
     title         str
     company       str
     location      str  — raw location string, may be empty
     location_type str  — "remote" | "hybrid" | "onsite" | "unknown"
-    requires_reloc bool
+    requires_reloc bool — geo_restricted OR eligibility_warning present
     salary_display str  — "~€120K" or "" if unknown
-    score         int  — display score (RAG if available, else heuristic)
-    strength      str  — first RAG strength claim, or top matched skill
-    gap           str  — first RAG gap, or "–" if none
-    url           str
+    score         int  — from API (same as web app)
+    strength      str  — always "" (not returned by digest API)
+    gap           str  — always "" (not returned by digest API)
+    url           str  — external job URL
+    platform_link str  — /jobs/{job_id} on the platform
 
   Footer:
-    rejected_stats  dict — {total, us_only, no_pm_keyword, deal_breaker, title_excluded, ...}
+    rejected_stats  dict — {total, us_only, no_pm_keyword, deal_breaker, ...}
     run_meta        dict — {n_searches, n_watchlist, duration_s, cost_usd}
-
-DO NOT regenerate the template — design is final.
 """
 
 import os
 from datetime import date
 from pathlib import Path
 
+import httpx
 from jinja2 import Environment, FileSystemLoader
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 TEMPLATE_NAME = os.getenv("DIGEST_TEMPLATE", "email_digest.html.j2")
 
-
-def _is_reloc(job, home_locations=None, home_regions=None) -> bool:
-    """Return True if role requires relocating.
-
-    Remote jobs: checks restriction/title/location for country pinning.
-    Non-remote: checks if job location matches user's home locations.
-    """
-    from reloc import is_remote_requiring_reloc as _is_remote_requiring_reloc
-
-    parsed = job.get("parsed") or {}
-    loc_type = parsed.get("location_type", "unknown")
-    job_loc = (job.get("location") or "").lower()
-    _home = [loc.lower() for loc in (home_locations or [])]
-    _regions = [r.lower() for r in (home_regions or [])]
-    if loc_type == "remote":
-        return _is_remote_requiring_reloc(job, home_locations=_home, home_regions=_regions)
-    if any(c in job_loc for c in _home):
-        return False
-    return True
-
-
-def _salary_display(salary_eur: float) -> str:
-    """Format salary for display. Returns empty string if unknown."""
-    if salary_eur and salary_eur > 0:
-        return f"~€{int(salary_eur / 1000)}K"
-    return ""
-
-
 _APP_BASE_URL_DEFAULT = "https://jobseeker-production.up.railway.app"
 
 
-def _flatten_job(job, home_locations=None, home_regions=None) -> dict:
-    """Convert a raw pipeline job dict into the flat schema the template expects."""
-    parsed = job.get("parsed") or {}
-    rag = job.get("rag_score") or {}
+def fetch_digest(railway_url: str, profile_id: str, ingest_key: str) -> dict | None:
+    """GET /api/digest/{profile_id} from the Railway API.
 
-    # Strength: first RAG strength claim, or top matched skill as fallback
-    strength = ""
-    rag_strengths = rag.get("strengths") or []
-    if rag_strengths:
-        strength = rag_strengths[0].get("claim", "")
-    if not strength:
-        skills = parsed.get("truly_required") or parsed.get("must_have_skills") or []
-        strength = skills[0] if skills else ""
+    Returns the parsed JSON response dict, or None on any failure.
+    Upgrades http:// to https:// automatically.
+    """
+    url = railway_url.rstrip("/")
+    if url.startswith("http://"):
+        url = "https://" + url[len("http://") :]
+    endpoint = f"{url}/api/digest/{profile_id}"
+    try:
+        resp = httpx.get(
+            endpoint,
+            headers={"X-Ingest-Key": ingest_key},
+            timeout=30.0,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        print(f"⚠  fetch_digest failed ({exc})")
+        return None
 
-    # Gap: first RAG gap, or empty
-    gap = ""
-    rag_gaps = rag.get("gaps") or []
-    if rag_gaps:
-        gap = rag_gaps[0].get("gap", "")
 
-    salary_eur = job.get("_salary_eur", 0) or 0
+def _format_salary(min_amount, max_amount, currency) -> str:
+    """Format salary range for display. Returns '' if no data."""
+    amount = max_amount or min_amount
+    if not amount:
+        return ""
+    if currency and currency.upper() == "EUR":
+        return f"~€{int(amount / 1000)}K"
+    if currency and currency.upper() == "USD":
+        return f"~${int(amount / 1000)}K"
+    return f"~{int(amount / 1000)}K"
 
-    # Platform link: prefer /jobs/{job_id} hash, fall back to external URL
+
+def _flatten_api_job(job: dict) -> dict:
+    """Map a digest API job dict to the flat schema the email template expects."""
     app_base_url = os.getenv("APP_BASE_URL", _APP_BASE_URL_DEFAULT)
     job_id = job.get("job_id") or ""
-    if job_id:
-        platform_link = f"{app_base_url}/jobs/{job_id}"
-    else:
-        platform_link = job.get("job_url", "#")
+    platform_link = f"{app_base_url}/jobs/{job_id}" if job_id else job.get("url", "#")
 
     return {
         "title": job.get("title", ""),
         "company": job.get("company", ""),
         "location": job.get("location") or "",
-        "location_type": parsed.get("location_type") or "unknown",
-        "requires_reloc": _is_reloc(job, home_locations, home_regions),
-        "salary_display": _salary_display(salary_eur),
-        "score": job.get("_display_score", 0),
-        "strength": strength,
-        "gap": gap,
-        "url": job.get("job_url", "#"),
+        "location_type": job.get("location_type") or "unknown",
+        "requires_reloc": bool(job.get("geo_restricted") or job.get("eligibility_warning")),
+        "salary_display": _format_salary(job.get("salary_min"), job.get("salary_max"), job.get("salary_currency")),
+        "score": job.get("score", 0),
+        "strength": "",  # not returned by digest API
+        "gap": "",  # not returned by digest API
+        "url": job.get("url", "#"),
         "platform_link": platform_link,
     }
-
-
-def _sort_key(job_flat: dict):
-    """Sort: no-reloc first, then score desc, then salary desc (parsed from display)."""
-    reloc = 1 if job_flat["requires_reloc"] else 0
-    score = -job_flat["score"]
-    # Extract numeric salary from display string for tie-breaking
-    sal_str = job_flat["salary_display"]
-    sal = 0
-    if sal_str:
-        import re
-
-        m = re.search(r"(\d+)", sal_str)
-        if m:
-            sal = -int(m.group(1))
-    return (reloc, score, sal)
 
 
 def _build_headline(tier_a: list) -> str:
@@ -151,71 +123,21 @@ def _build_headline(tier_a: list) -> str:
     return f"{company} · {loc_type} · {score}"
 
 
-def _build_context(jobs, rejected_stats, run_meta, profile=None):
-    """Build Jinja2 template context from pipeline data."""
-    from salary import extract_max_salary_eur as _extract_max_salary_eur
-    from scoring import heuristic_score as _heuristic_score
+def _build_context_from_api(data: dict, rejected_stats: dict, run_meta: dict) -> dict:
+    """Build Jinja2 template context from the /api/digest response."""
+    jobs = data.get("jobs") or []
+    tier_a = [_flatten_api_job(j) for j in jobs if j.get("tier") == "A"]
+    tier_b = [_flatten_api_job(j) for j in jobs if j.get("tier") == "B"]
+    tier_c = [_flatten_api_job(j) for j in jobs if j.get("tier") == "C"]
 
-    home_locations = None
-    home_regions = None
-    if profile:
-        from geo import derive_home_regions
-
-        home_locations = profile.get("user", {}).get("home_locations")
-        home_regions = derive_home_regions([loc.lower() for loc in (home_locations or [])])
-
-    parsed_jobs = [j for j in jobs if j.get("parsed")]
-
-    # Ensure scoring fields exist
-    for j in parsed_jobs:
-        if "_salary_eur" not in j:
-            j["_salary_eur"] = _extract_max_salary_eur(j)
-        if "_display_score" not in j:
-            from shared.scoring_core import grade_to_points as _grade_to_points
-
-            j["_fit_score"] = _heuristic_score(j)
-            rag = j.get("rag_score")
-            if rag is None:
-                j["_display_score"] = j["_fit_score"]
-            elif "score" in rag:
-                j["_display_score"] = rag["score"]
-            else:
-                tech_pts = _grade_to_points(rag.get("technical_depth"))
-                prof_pts = _grade_to_points(rag.get("profile_evidence"))
-                j["_display_score"] = min(100, max(0, j["_fit_score"] + tech_pts + prof_pts))
-
-    # Split tiers and flatten
-    tier_a_raw = sorted(
-        [j for j in parsed_jobs if j["_display_score"] >= 50],
-        key=lambda j: (
-            1 if _is_reloc(j, home_locations, home_regions) else 0,
-            -j["_display_score"],
-            -j.get("_salary_eur", 0),
-        ),
-    )
-    tier_b_raw = sorted(
-        [j for j in parsed_jobs if 30 <= j["_display_score"] < 50],
-        key=lambda j: (
-            1 if _is_reloc(j, home_locations, home_regions) else 0,
-            -j["_display_score"],
-            -j.get("_salary_eur", 0),
-        ),
-    )
-    tier_c_raw = sorted([j for j in parsed_jobs if j["_display_score"] < 30], key=lambda j: -j["_display_score"])
-
-    tier_a = [_flatten_job(j, home_locations, home_regions) for j in tier_a_raw]
-    tier_b = [_flatten_job(j, home_locations, home_regions) for j in tier_b_raw]
-    tier_c = [_flatten_job(j, home_locations, home_regions) for j in tier_c_raw]
-
-    headline = _build_headline(tier_a)
-    n_prefiltered = rejected_stats.get("total", 0) - rejected_stats.get("passed", 0)
-    platform_url = os.getenv("APP_BASE_URL", _APP_BASE_URL_DEFAULT)
     n_apply = len(tier_a)
     n_review = len(tier_b)
+    n_prefiltered = rejected_stats.get("total", 0) - rejected_stats.get("passed", 0)
+    platform_url = os.getenv("APP_BASE_URL", _APP_BASE_URL_DEFAULT)
 
     return {
         "date": run_meta.get("date", date.today().strftime("%d %b %Y")),
-        "headline": headline,
+        "headline": _build_headline(tier_a),
         "n_apply": n_apply,
         "n_review": n_review,
         "n_skip": len(tier_c),
@@ -231,23 +153,26 @@ def _build_context(jobs, rejected_stats, run_meta, profile=None):
 
 
 def send_digest(
-    jobs: list,
+    railway_url: str,
+    profile_id: str,
+    ingest_key: str,
     rejected_stats: dict,
     run_meta: dict,
-    profile: dict = None,
+    profile: dict | None = None,
 ) -> bool:
-    """Render and send the HTML email digest via Gmail SMTP.
+    """Fetch digest from API and send HTML email via Gmail SMTP.
 
     Args:
-        jobs:           All parsed jobs from the pipeline (_salary_eur and
-                        _display_score should already be set by print_summary).
+        railway_url:    Base URL of the Railway API.
+        profile_id:     User profile ID — used in GET /api/digest/{profile_id}.
+        ingest_key:     Value for X-Ingest-Key header.
         rejected_stats: Counts by rejection reason from prefilter_jobs().
         run_meta:       {"duration_s", "cost_usd", "n_searches", "n_watchlist", "date"}.
-        profile:        User profile dict. Email recipient is read from profile["user"]["email"].
-                        Falls back to NOTIFY_EMAIL env var if not set in profile.
+        profile:        User profile dict. Recipient from profile["user"]["email"],
+                        falls back to NOTIFY_EMAIL env var.
 
     Returns:
-        True if sent successfully, False otherwise. Never raises.
+        True if email sent, False on any failure. Never raises.
     """
     import smtplib
     from email.mime.multipart import MIMEMultipart
@@ -256,7 +181,6 @@ def send_digest(
     gmail_address = os.getenv("GMAIL_ADDRESS")
     gmail_password = os.getenv("GMAIL_APP_PASSWORD")
 
-    # Prefer email from profile; fall back to NOTIFY_EMAIL env var for backward compat
     to_email = None
     if profile:
         to_email = (profile.get("user") or {}).get("email")
@@ -267,26 +191,28 @@ def send_digest(
         print("⚠  GMAIL_ADDRESS or GMAIL_APP_PASSWORD not set — skipping email notification")
         return False
     if not to_email:
-        print("⚠  No recipient email (set user.email in profile or NOTIFY_EMAIL env var) — skipping")
+        print("⚠  No recipient email (set user.email in profile or NOTIFY_EMAIL) — skipping")
         return False
 
-    # Render template
+    data = fetch_digest(railway_url, profile_id, ingest_key)
+    if data is None:
+        print("⚠  Could not fetch digest from API — skipping email")
+        return False
+
     try:
         env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
         template = env.get_template(TEMPLATE_NAME)
-        context = _build_context(jobs, rejected_stats, run_meta, profile=profile)
+        context = _build_context_from_api(data, rejected_stats, run_meta)
         html_body = template.render(**context)
     except Exception as e:
         print(f"⚠  Email template render failed: {e}")
         return False
 
-    # Build subject
     n_apply = context["n_apply"]
     run_date = context["date"]
     headline = context["headline"]
     subject = f"JobSeeker · {n_apply} nuevos roles · {headline} — {run_date}"
 
-    # Send via Gmail SMTP
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject

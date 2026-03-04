@@ -479,12 +479,14 @@ def run_pipeline(
 
     _append_seen_ids(all_parsed, path=paths["seen_ids"])
 
+    email_sent = False
     if opts.send_email:
         try:
             email_sent = _send_digest(profile_id, paths, profile, prefilter_stats, duration_s, cost_usd)
             if not email_sent:
-                logger.warning("email_skipped", reason="seen_ids_already_updated")
-                print("⚠  Email not sent (seen_ids already updated — sync will persist them)")
+                logger.warning("email_skipped", profile_id=profile_id)
+                print("⚠  Email not sent — check GMAIL_*, RAILWAY_URL, and INGEST_API_KEY env vars")
         except Exception as e:
             logger.error("email_error", error=str(e), exc_info=True)
             print(f"⚠  Email notify error (pipeline succeeded): {e}")
+        _capture(profile_id, "agent_email_sent", {"profile_id": profile_id, "sent": email_sent})

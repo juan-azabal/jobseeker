@@ -1,131 +1,346 @@
-"""Tests for notifier._build_context() compatibility with v2 rag_score.
+"""Tests for notifier.py — API-based email digest (Phase 20b rewrite).
 
-P15: rag["score"] KeyError when job has v2 rag_score dict (no "score" key).
+Covers:
+  - fetch_digest(): GET /api/digest/{profile_id}
+  - _flatten_api_job(): maps API fields to template schema
+  - _build_context_from_api(): builds Jinja2 context from digest response
+  - _build_headline(): unchanged helper
+  - Template toggle (DIGEST_TEMPLATE env var)
+  - Template rendering (visual regression, unchanged from Phase 20/20b)
 """
 
-import sys
 import os
+import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from notifier import _build_context
+import httpx
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
-# Minimal globals that _heuristic_score needs to function without a real profile.
-_PATCH_SCORING = {
-    "_DOMAIN_SCORES": {"saas": 10, "data": 15},
-    "_SENIORITY_SCORES": {"principal": 15, "senior": 8},
-    "_PROFILE_SKILLS": ["analytics", "kafka"],
-    "_HOME_LOCATIONS": ["barcelona"],
-    "_HOME_REGIONS": [],
-    "_COUNTRY_WEIGHTS": {},  # isolate from stale global state
+
+# ── Fixtures ──────────────────────────────────────────────────────────────────
+
+_DIGEST_JOB = {
+    "job_id": "abc123",
+    "title": "Head of Product",
+    "company": "Acme",
+    "location": "Remote",
+    "location_type": "remote",
+    "url": "https://ext.com/job/1",
+    "score": 82,
+    "tier": "A",
+    "geo_restricted": False,
+    "eligibility_warning": None,
+    "salary_min": 80000.0,
+    "salary_max": 120000.0,
+    "salary_currency": "EUR",
+    "salary_interval": "yearly",
+    "first_seen": "2026-03-04",
 }
 
+_DIGEST_RESPONSE = {
+    "jobs": [_DIGEST_JOB],
+    "summary": {"tier_a": 1, "tier_b": 0, "tier_c": 0, "total": 1},
+    "profile_id": "juan",
+    "date": "2026-03-04",
+}
 
-def _make_job(job_id="abc123", rag_score=None):
-    """Minimal job dict compatible with _build_context."""
+_RUN_META = {"date": "04 Mar 2026", "duration_s": 120, "cost_usd": 0.12, "n_searches": 5, "n_watchlist": 3}
+_REJECTED_STATS = {"total": 10, "passed": 1}
+
+
+def _make_mock_response(data: dict):
+    mock = MagicMock()
+    mock.raise_for_status.return_value = None
+    mock.json.return_value = data
+    return mock
+
+
+def _make_digest_jobs(tier_a=1, tier_b=1, tier_c=0):
+    jobs = []
+    for i in range(tier_a):
+        jobs.append({**_DIGEST_JOB, "job_id": f"a{i}", "company": f"CoA{i}", "score": 75, "tier": "A"})
+    for i in range(tier_b):
+        jobs.append(
+            {
+                **_DIGEST_JOB,
+                "job_id": f"b{i}",
+                "company": f"CoB{i}",
+                "score": 45,
+                "tier": "B",
+                "location_type": "hybrid",
+                "salary_min": None,
+                "salary_max": None,
+                "salary_currency": None,
+            }
+        )
+    for i in range(tier_c):
+        jobs.append(
+            {
+                **_DIGEST_JOB,
+                "job_id": f"c{i}",
+                "company": f"CoC{i}",
+                "score": 25,
+                "tier": "C",
+                "location_type": "onsite",
+                "salary_min": None,
+                "salary_max": None,
+                "salary_currency": None,
+            }
+        )
     return {
-        "id": job_id,
-        "title": "Head of Product",
-        "company": "Acme",
-        "location": "Remote",
-        "url": "https://example.com/job/1",
-        "parsed": {
-            "domain": "saas",
-            "seniority": "principal",
-            "location_type": "remote",
-            "skills": [],
-            "must_have_skills": [],
-            "nice_to_have_skills": [],
-            "technical_stack": [],
-            "responsibilities_summary": "",
-            "red_flags": [],
-        },
-        "raw": {"description": ""},
-        "rag_score": rag_score,
+        "jobs": jobs,
+        "summary": {"tier_a": tier_a, "tier_b": tier_b, "tier_c": tier_c, "total": tier_a + tier_b + tier_c},
+        "profile_id": "juan",
+        "date": "2026-03-04",
     }
 
 
-RUN_META = {"date": "26 Feb 2026"}
-REJECTED_STATS = {"total": 10, "passed": 1}
+# ── TestFetchDigest ───────────────────────────────────────────────────────────
 
 
-class TestBuildContextV2RagScore:
-    """_build_context must not crash with v2 rag_score."""
+class TestFetchDigest:
+    """fetch_digest(): GET /api/digest/{profile_id} via httpx."""
 
-    def test_v2_rag_score_no_crash(self):
-        """v2 rag_score (no 'score' key) must not raise KeyError."""
-        job = _make_job(rag_score={"technical_depth": "A", "profile_evidence": "B"})
-        with patch.multiple("scoring", **_PATCH_SCORING):
-            ctx = _build_context([job], REJECTED_STATS, RUN_META)
-        assert isinstance(ctx, dict)
+    def test_returns_json_on_success(self):
+        from notifier import fetch_digest
 
-    def test_v2_rag_score_computes_hybrid_score(self):
-        """v2 rag_score → _display_score = _fit_score + grade_to_points(tech) + grade_to_points(prof)."""
-        job = _make_job(rag_score={"technical_depth": "A", "profile_evidence": "B"})
-        with patch.multiple("scoring", **_PATCH_SCORING):
-            ctx = _build_context([job], REJECTED_STATS, RUN_META)
-        all_jobs = ctx["tier_a"] + ctx["tier_b"] + ctx["tier_c"]
-        assert len(all_jobs) == 1
-        # _fit_score = saas(10) + principal(15) + remote(10) + no skills = 35
-        # grade_to_points(A)=20, grade_to_points(B)=12 → hybrid = 35+20+12 = 67
-        assert all_jobs[0]["score"] == 67
+        with patch("httpx.get", return_value=_make_mock_response(_DIGEST_RESPONSE)):
+            result = fetch_digest("https://example.com", "juan", "secret")
+        assert result == _DIGEST_RESPONSE
 
-    def test_v1_rag_score_still_works(self):
-        """v1 rag_score (has numeric 'score') must continue to be used as display score."""
-        job = _make_job(rag_score={"score": 78, "tier": "A", "reasoning": "..."})
-        with patch.multiple("scoring", **_PATCH_SCORING):
-            ctx = _build_context([job], REJECTED_STATS, RUN_META)
-        all_jobs = ctx["tier_a"] + ctx["tier_b"] + ctx["tier_c"]
-        assert len(all_jobs) == 1
-        assert all_jobs[0]["score"] == 78
+    def test_returns_none_on_connection_error(self):
+        from notifier import fetch_digest
 
-    def test_no_rag_score_uses_fit_score(self):
-        """No rag_score → _display_score = _fit_score."""
-        job = _make_job(rag_score=None)
-        with patch.multiple("scoring", **_PATCH_SCORING):
-            ctx = _build_context([job], REJECTED_STATS, RUN_META)
-        all_jobs = ctx["tier_a"] + ctx["tier_b"] + ctx["tier_c"]
-        assert len(all_jobs) == 1
-        assert all_jobs[0]["score"] == 35  # same heuristic
+        with patch("httpx.get", side_effect=httpx.ConnectError("boom")):
+            result = fetch_digest("https://example.com", "juan", "secret")
+        assert result is None
 
-    def test_mixed_v1_v2_no_crash(self):
-        """Mix of v1 and v2 jobs in the same digest must not crash."""
-        job_v1 = _make_job("id1", rag_score={"score": 80, "tier": "A"})
-        job_v2 = _make_job("id2", rag_score={"technical_depth": "B", "profile_evidence": "C"})
-        job_none = _make_job("id3", rag_score=None)
-        with patch.multiple("scoring", **_PATCH_SCORING):
-            ctx = _build_context([job_v1, job_v2, job_none], REJECTED_STATS, RUN_META)
-        all_jobs = ctx["tier_a"] + ctx["tier_b"] + ctx["tier_c"]
-        assert len(all_jobs) == 3
+    def test_returns_none_on_http_error(self):
+        from notifier import fetch_digest
 
-    def test_v2_job_appears_in_correct_tier(self):
-        """v2 job with A+A grades: hybrid = 35+20+20=75 → tier_a (≥50)."""
-        job = _make_job(rag_score={"technical_depth": "A", "profile_evidence": "A"})
-        with patch.multiple("scoring", **_PATCH_SCORING):
-            ctx = _build_context([job], REJECTED_STATS, RUN_META)
-        assert len(ctx["tier_a"]) == 1
-        assert ctx["tier_a"][0]["score"] == 75
+        mock = MagicMock()
+        mock.raise_for_status.side_effect = httpx.HTTPStatusError("404", request=MagicMock(), response=MagicMock())
+        with patch("httpx.get", return_value=mock):
+            result = fetch_digest("https://example.com", "juan", "secret")
+        assert result is None
+
+    def test_uses_ingest_key_header(self):
+        from notifier import fetch_digest
+
+        with patch("httpx.get", return_value=_make_mock_response(_DIGEST_RESPONSE)) as mock_get:
+            fetch_digest("https://example.com", "juan", "mykey")
+        headers = mock_get.call_args[1]["headers"]
+        assert headers["X-Ingest-Key"] == "mykey"
+
+    def test_upgrades_http_to_https(self):
+        from notifier import fetch_digest
+
+        with patch("httpx.get", return_value=_make_mock_response(_DIGEST_RESPONSE)) as mock_get:
+            fetch_digest("http://example.com", "juan", "key")
+        url_called = mock_get.call_args[0][0]
+        assert url_called.startswith("https://")
+
+    def test_calls_correct_endpoint(self):
+        from notifier import fetch_digest
+
+        with patch("httpx.get", return_value=_make_mock_response(_DIGEST_RESPONSE)) as mock_get:
+            fetch_digest("https://example.com", "juan", "key")
+        url_called = mock_get.call_args[0][0]
+        assert url_called == "https://example.com/api/digest/juan"
+
+
+# ── TestFlattenApiJob ─────────────────────────────────────────────────────────
+
+
+class TestFlattenApiJob:
+    """_flatten_api_job(): maps API digest fields to template flat schema."""
+
+    def test_platform_link_uses_job_id(self):
+        from notifier import _flatten_api_job
+
+        with patch.dict(os.environ, {"APP_BASE_URL": "https://example.com"}):
+            result = _flatten_api_job({**_DIGEST_JOB, "job_id": "abc123"})
+        assert result["platform_link"] == "https://example.com/jobs/abc123"
+
+    def test_platform_link_fallback_no_job_id(self):
+        from notifier import _flatten_api_job
+
+        result = _flatten_api_job({**_DIGEST_JOB, "job_id": None, "url": "https://ext.com/job"})
+        assert result["platform_link"] == "https://ext.com/job"
+
+    def test_salary_display_eur(self):
+        from notifier import _flatten_api_job
+
+        result = _flatten_api_job({**_DIGEST_JOB, "salary_max": 120000.0, "salary_currency": "EUR"})
+        assert result["salary_display"] == "~€120K"
+
+    def test_salary_display_empty_when_no_salary(self):
+        from notifier import _flatten_api_job
+
+        result = _flatten_api_job({**_DIGEST_JOB, "salary_min": None, "salary_max": None, "salary_currency": None})
+        assert result["salary_display"] == ""
+
+    def test_requires_reloc_from_geo_restricted(self):
+        from notifier import _flatten_api_job
+
+        result = _flatten_api_job({**_DIGEST_JOB, "geo_restricted": True, "eligibility_warning": None})
+        assert result["requires_reloc"] is True
+
+    def test_requires_reloc_from_eligibility_warning(self):
+        from notifier import _flatten_api_job
+
+        result = _flatten_api_job({**_DIGEST_JOB, "geo_restricted": False, "eligibility_warning": "UK only"})
+        assert result["requires_reloc"] is True
+
+    def test_not_reloc_when_both_false(self):
+        from notifier import _flatten_api_job
+
+        result = _flatten_api_job({**_DIGEST_JOB, "geo_restricted": False, "eligibility_warning": None})
+        assert result["requires_reloc"] is False
+
+    def test_strength_and_gap_are_empty(self):
+        """strength/gap not returned by digest API — always empty strings."""
+        from notifier import _flatten_api_job
+
+        result = _flatten_api_job(_DIGEST_JOB)
+        assert result["strength"] == ""
+        assert result["gap"] == ""
+
+    def test_score_passed_through(self):
+        from notifier import _flatten_api_job
+
+        result = _flatten_api_job({**_DIGEST_JOB, "score": 75})
+        assert result["score"] == 75
+
+    def test_required_keys_present(self):
+        from notifier import _flatten_api_job
+
+        result = _flatten_api_job(_DIGEST_JOB)
+        required = {
+            "title",
+            "company",
+            "location",
+            "location_type",
+            "requires_reloc",
+            "salary_display",
+            "score",
+            "strength",
+            "gap",
+            "url",
+            "platform_link",
+        }
+        assert required.issubset(result.keys())
+
+
+# ── TestBuildContextFromApi ───────────────────────────────────────────────────
+
+
+class TestBuildContextFromApi:
+    """_build_context_from_api(): builds Jinja2 template context from digest response."""
+
+    def test_tiers_split_correctly(self):
+        from notifier import _build_context_from_api
+
+        data = _make_digest_jobs(tier_a=2, tier_b=3, tier_c=1)
+        ctx = _build_context_from_api(data, _REJECTED_STATS, _RUN_META)
+        assert len(ctx["tier_a"]) == 2
+        assert len(ctx["tier_b"]) == 3
+        assert len(ctx["tier_c"]) == 1
+
+    def test_n_apply_n_review_n_skip(self):
+        from notifier import _build_context_from_api
+
+        data = _make_digest_jobs(tier_a=2, tier_b=1, tier_c=3)
+        ctx = _build_context_from_api(data, _REJECTED_STATS, _RUN_META)
+        assert ctx["n_apply"] == 2
+        assert ctx["n_review"] == 1
+        assert ctx["n_skip"] == 3
+
+    def test_preheader_format(self):
+        from notifier import _build_context_from_api
+
+        data = _make_digest_jobs(tier_a=2, tier_b=1, tier_c=0)
+        ctx = _build_context_from_api(data, _REJECTED_STATS, _RUN_META)
+        assert ctx["preheader"] == "2 para aplicar, 1 para revisar"
+
+    def test_n_prefiltered_computed_from_rejected_stats(self):
+        from notifier import _build_context_from_api
+
+        data = _make_digest_jobs(tier_a=1, tier_b=1, tier_c=0)
+        ctx = _build_context_from_api(data, {"total": 10, "passed": 2}, _RUN_META)
+        assert ctx["n_prefiltered"] == 8
+
+    def test_platform_url_env(self):
+        from notifier import _build_context_from_api
+
+        data = _make_digest_jobs(tier_a=1, tier_b=0, tier_c=0)
+        with patch.dict(os.environ, {"APP_BASE_URL": "https://custom.app"}):
+            ctx = _build_context_from_api(data, _REJECTED_STATS, _RUN_META)
+        assert ctx["platform_url"] == "https://custom.app"
+
+    def test_required_template_keys_present(self):
+        from notifier import _build_context_from_api
+
+        data = _make_digest_jobs(tier_a=1, tier_b=0, tier_c=0)
+        ctx = _build_context_from_api(data, _REJECTED_STATS, _RUN_META)
+        required = {
+            "date",
+            "headline",
+            "n_apply",
+            "n_review",
+            "n_skip",
+            "n_prefiltered",
+            "tier_a",
+            "tier_b",
+            "tier_c",
+            "rejected_stats",
+            "run_meta",
+            "platform_url",
+            "preheader",
+        }
+        assert required.issubset(ctx.keys())
+
+
+# ── TestBuildHeadline ─────────────────────────────────────────────────────────
+
+
+class TestBuildHeadline:
+    """_build_headline(): unchanged helper."""
+
+    def test_build_headline_uses_score(self):
+        from notifier import _build_headline
+
+        tier_a = [{"company": "Acme", "location_type": "remote", "score": 82}]
+        result = _build_headline(tier_a)
+        assert "Acme" in result
+        assert "remote" in result
+        assert "82" in result
+
+    def test_build_headline_empty_tier_a(self):
+        from notifier import _build_headline
+
+        result = _build_headline([])
+        assert "No top" in result
+
+
+# ── TestDigestTemplateToggle ──────────────────────────────────────────────────
 
 
 class TestDigestTemplateToggle:
-    """Step 20.0: v1 backup + DIGEST_TEMPLATE env var."""
+    """DIGEST_TEMPLATE env var selects the template file."""
 
     def test_v1_template_backup_exists(self):
-        """email_digest_v1.html.j2 must exist and match original."""
         v1 = TEMPLATES_DIR / "email_digest_v1.html.j2"
         assert v1.exists(), "email_digest_v1.html.j2 backup not found"
-        v2 = TEMPLATES_DIR / "email_digest.html.j2"
-        # Content should be at least as long (not an empty file)
         assert v1.stat().st_size > 0
 
     def test_digest_template_env_default(self):
-        """DIGEST_TEMPLATE env var defaults to email_digest.html.j2."""
         import importlib
         import notifier
 
@@ -135,7 +350,6 @@ class TestDigestTemplateToggle:
             assert notifier.TEMPLATE_NAME == "email_digest.html.j2"
 
     def test_digest_template_env_override(self):
-        """DIGEST_TEMPLATE env var overrides the template name."""
         import importlib
         import notifier
 
@@ -144,117 +358,11 @@ class TestDigestTemplateToggle:
             assert notifier.TEMPLATE_NAME == "email_digest_v1.html.j2"
 
 
-class TestFlattenJobPlatformLink:
-    """Step 20.1: _flatten_job() platform_link field."""
-
-    def _job(self, job_id=None, job_url="https://ext.com/job"):
-        j = _make_job()
-        j["job_id"] = job_id
-        j["job_url"] = job_url
-        return j
-
-    def test_platform_link_uses_job_id(self):
-        """platform_link = APP_BASE_URL/jobs/{job_id} when job_id present."""
-        from notifier import _flatten_job
-
-        job = self._job(job_id="abc123hash")
-        with patch("notifier._is_reloc", return_value=False):
-            with patch.dict(os.environ, {"APP_BASE_URL": "https://example.com"}):
-                result = _flatten_job(job)
-        assert result["platform_link"] == "https://example.com/jobs/abc123hash"
-
-    def test_platform_link_fallback_no_job_id(self):
-        """platform_link falls back to job_url when job_id is missing."""
-        from notifier import _flatten_job
-
-        job = self._job(job_id=None, job_url="https://ext.com/job")
-        with patch("notifier._is_reloc", return_value=False):
-            result = _flatten_job(job)
-        assert result["platform_link"] == "https://ext.com/job"
-
-    def test_platform_link_fallback_empty_job_id(self):
-        """platform_link falls back to job_url when job_id is empty string."""
-        from notifier import _flatten_job
-
-        job = self._job(job_id="", job_url="https://ext.com/job")
-        with patch("notifier._is_reloc", return_value=False):
-            result = _flatten_job(job)
-        assert result["platform_link"] == "https://ext.com/job"
-
-
-class TestBuildContextPlatformUrl:
-    """Step 20.1: _build_context() includes platform_url."""
-
-    def test_platform_url_in_context(self):
-        """_build_context() must include platform_url key."""
-        job = _make_job()
-        with patch.multiple("scoring", **_PATCH_SCORING):
-            ctx = _build_context([job], REJECTED_STATS, RUN_META)
-        assert "platform_url" in ctx
-
-    def test_platform_url_default(self):
-        """platform_url defaults to Railway production URL."""
-        job = _make_job()
-        with patch.multiple("scoring", **_PATCH_SCORING):
-            with patch.dict(os.environ, {}, clear=False):
-                os.environ.pop("APP_BASE_URL", None)
-                ctx = _build_context([job], REJECTED_STATS, RUN_META)
-        assert ctx["platform_url"] == "https://jobseeker-production.up.railway.app"
-
-    def test_platform_url_env_override(self):
-        """platform_url uses APP_BASE_URL env var when set."""
-        job = _make_job()
-        with patch.multiple("scoring", **_PATCH_SCORING):
-            with patch.dict(os.environ, {"APP_BASE_URL": "https://staging.example.com"}):
-                ctx = _build_context([job], REJECTED_STATS, RUN_META)
-        assert ctx["platform_url"] == "https://staging.example.com"
-
-
-class TestNotifierRebrand:
-    """Step 20.2: JobSeeker rebrand + preheader."""
-
-    def test_subject_contains_jobseeker(self):
-        """Email subject must say 'JobSeeker', not 'JobAgent'."""
-        import notifier
-
-        job = _make_job(rag_score={"score": 65, "tier": "A"})
-        with patch.multiple("scoring", **_PATCH_SCORING):
-            ctx = _build_context([job], REJECTED_STATS, RUN_META)
-        n_apply = ctx["n_apply"]
-        run_date = ctx["date"]
-        headline = ctx["headline"]
-        subject = f"JobSeeker · {n_apply} nuevos roles · {headline} — {run_date}"
-        assert "JobSeeker" in subject
-        assert "JobAgent" not in subject
-
-    def test_preheader_in_context(self):
-        """_build_context() must include 'preheader' key."""
-        job = _make_job(rag_score={"score": 65, "tier": "A"})
-        with patch.multiple("scoring", **_PATCH_SCORING):
-            ctx = _build_context([job], REJECTED_STATS, RUN_META)
-        assert "preheader" in ctx
-
-    def test_preheader_format(self):
-        """preheader = '{n_apply} para aplicar, {n_review} para revisar'."""
-        job_a = _make_job("id1", rag_score={"score": 65, "tier": "A"})
-        job_b = _make_job("id2", rag_score={"score": 40, "tier": "B"})
-        with patch.multiple("scoring", **_PATCH_SCORING):
-            ctx = _build_context([job_a, job_b], REJECTED_STATS, RUN_META)
-        assert ctx["preheader"] == f"{ctx['n_apply']} para aplicar, {ctx['n_review']} para revisar"
-
-    def test_build_headline_uses_score(self):
-        """_build_headline returns '{company} · {loc_type} · {score}'."""
-        from notifier import _build_headline
-
-        tier_a = [{"company": "Acme", "location_type": "remote", "score": 82}]
-        result = _build_headline(tier_a)
-        assert "Acme" in result
-        assert "remote" in result
-        assert "82" in result
+# ── Template rendering helpers + tests (unchanged from Phase 20/20b) ──────────
 
 
 def _render_template(extra_context=None):
-    """Helper: render the current email_digest.html.j2 with minimal context."""
+    """Helper: render email_digest.html.j2 with minimal well-formed context."""
     from jinja2 import Environment, FileSystemLoader
 
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=False)
@@ -318,91 +426,66 @@ class TestTemplateRender20_3a:
     """Step 20.3a: head, preheader, header, footer template changes."""
 
     def test_color_scheme_meta_present(self):
-        """Template must have color-scheme meta tag."""
-        html = _render_template()
-        assert "color-scheme" in html
+        assert "color-scheme" in _render_template()
 
     def test_supported_color_schemes_meta_present(self):
-        """Template must have supported-color-schemes meta tag."""
-        html = _render_template()
-        assert "supported-color-schemes" in html
+        assert "supported-color-schemes" in _render_template()
 
     def test_title_is_jobseeker(self):
-        """<title> must say 'JobSeeker · Digest', not 'JobAgent Digest'."""
         html = _render_template()
         assert "JobSeeker" in html
         assert "JobAgent Digest" not in html
 
     def test_preheader_div_present(self):
-        """Preheader div with display:none must be present."""
         html = _render_template()
         assert "display:none" in html
         assert "1 para aplicar, 1 para revisar" in html
 
     def test_violet_accent_in_header(self):
-        """Accent color must be violet #8b5cf6, not orange #e97316."""
         html = _render_template()
         assert "#8b5cf6" in html
         assert "#e97316" not in html
 
     def test_dashboard_cta_in_header(self):
-        """Header must contain dashboard CTA linking to platform_url/jobs."""
-        html = _render_template()
-        assert "https://example.com/jobs" in html
+        assert "https://example.com/jobs" in _render_template()
 
     def test_footer_branding(self):
-        """Footer must contain 'JobSeeker' branding line."""
-        html = _render_template()
-        assert "JobSeeker" in html
+        assert "JobSeeker" in _render_template()
 
     def test_footer_juan_azabal(self):
-        """Footer must contain 'Built by Juan Azabal'."""
-        html = _render_template()
-        assert "Juan Azabal" in html
+        assert "Juan Azabal" in _render_template()
 
 
 class TestTemplateRender20_3b:
     """Step 20.3b: Tier A cards use platform links."""
 
     def test_tier_a_primary_link_is_platform(self):
-        """Tier A primary CTA must link to platform_link, not job.url."""
         html = _render_template()
         assert "https://example.com/jobs/abc" in html
         assert "Ver en JobSeeker" in html
 
     def test_tier_a_secondary_link_is_external(self):
-        """Tier A secondary 'Oferta original' link must be the external URL."""
         html = _render_template()
         assert "Oferta original" in html
         assert "https://ext.com/job1" in html
 
     def test_tier_a_ver_todos_cta_present(self):
-        """'Ver todos en el dashboard' CTA must appear after Tier A."""
-        html = _render_template()
-        assert "Ver todos en el dashboard" in html
+        assert "Ver todos en el dashboard" in _render_template()
 
     def test_tier_a_ver_todos_links_to_platform(self):
-        """'Ver todos' CTA links to platform_url/jobs."""
-        html = _render_template()
-        # platform_url is https://example.com, so /jobs link appears
-        assert "https://example.com/jobs" in html
+        assert "https://example.com/jobs" in _render_template()
 
 
 class TestTemplateRender20_3c:
     """Step 20.3c: Tier B and C platform links."""
 
     def test_tier_b_links_to_platform(self):
-        """Tier B 'Ver →' links must use platform_link."""
-        html = _render_template()
-        assert "https://example.com/jobs/def" in html
+        assert "https://example.com/jobs/def" in _render_template()
 
     def test_tier_b_ver_mas_link_present(self):
-        """'Ver más en el dashboard' text link must appear after Tier B."""
-        html = _render_template()
-        assert "Ver más en el dashboard" in html
+        assert "Ver más en el dashboard" in _render_template()
 
     def test_tier_c_links_to_platform(self):
-        """Tier C links must use platform_link (not job.url directly)."""
         ctx_override = {
             "tier_b": [],
             "tier_c": [
@@ -421,5 +504,4 @@ class TestTemplateRender20_3c:
                 }
             ],
         }
-        html = _render_template(ctx_override)
-        assert "https://example.com/jobs/ghi" in html
+        assert "https://example.com/jobs/ghi" in _render_template(ctx_override)

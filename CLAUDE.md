@@ -69,7 +69,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `agent/prefilter.py` — keyword filter + US-only detection (no API calls)
   - `agent/parser.py` — gpt-4o-mini: structured JSON extraction from JD; pre-seeded with structured fields
   - `agent/scorer.py` — gpt-4o: RAG scoring against full CV via ChromaDB
-  - `agent/notifier.py` — Gmail SMTP digest sender (Jinja2 template)
+  - `agent/notifier.py` — Gmail SMTP digest sender: `fetch_digest()` → GET /api/digest, `_flatten_api_job()`, `_build_context_from_api()`, `send_digest()` — zero local scoring
   - `agent/user_config.py` — profile loading + seniority weight computation
   - `agent/geo.py` — geographic region detection (country-converter, babel, pytz)
   - `agent/vectorstore.py` — ChromaDB knowledge base for scoring
@@ -85,10 +85,10 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `agent/schemas/` — JSON output contracts (parsed_job, scored_job, digest_context, gap_history_entry)
   - `agent/patterns/` — interface contracts per module
   - `agent/docs/decisions/` — ADRs (001–007)
-- Tests: `tests/` (backend, 683 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 617 tests)
+- Tests: `tests/` (backend, 683 tests), `web/src/*.test.tsx` (frontend), `agent/tests/` (agent, 625 tests)
   - `agent/tests/fixtures.py` — shared BASELINE_PROFILE fixture (fixed dict, not from juan.yaml)
   - `agent/tests/test_cross_geo_regression.py` — 5 regression tests: cross-geo Greenhouse variants dedup to single job
-  - `agent/tests/test_notifier_v2.py` — v2 rag_score compat in _build_context (P15 fix)
+  - `agent/tests/test_notifier_v2.py` — API-based notifier tests: fetch_digest, _flatten_api_job, _build_context_from_api, template render regression
   - `agent/tests/test_ranked_jobs_v2.py` — hybrid score in ranked_jobs + print_summary mode label (P16/P18 fix)
   - `agent/tests/test_gap_tracker_v2.py` — grade points stored in gap history for v2 jobs (P17 fix)
   - `tests/test_profile_merge.py` — 20 unit tests for merge_profiles() pure function (Phase 18)
@@ -423,12 +423,14 @@ Phase 15 — Geo Filtering (complete: 2026-02-27)
 
 Phase 20b — Email Digest API Architecture (complete: 2026-03-01)
 - GET /api/digest/{profile_id}: new endpoint in api/routes/digest.py (X-Ingest-Key auth, same scoring as list_jobs)
-- Step 10b: _sync_to_railway() in agent/main.py POSTs to /api/ingest before email (wakes Railway, ensures today's data)
-- notifier.py rewritten: fetch_digest() + _flatten_api_job() + _format_salary() + _build_context_from_api(); zero scoring logic
-- Eliminated: dual scoring, tier threshold divergence (was 50/30 vs 60/40), _is_reloc(), all from-main-import, _sort_key()
+- Step 10b: _sync_to_railway() in agent/pipeline.py POSTs to /api/ingest before email (wakes Railway, ensures today's data)
+- notifier.py rewritten: fetch_digest() + _flatten_api_job() + _format_salary() + _build_context_from_api(); zero local scoring
+- Eliminated: dual scoring, tier threshold divergence (was 50/30 vs 60/40), _is_reloc(), all from-main-import, _sort_key(), _build_context()
 - Removed strength/gap from template: list API doesn't return; old values were inconsistent with RAG output
 - API parity: 2 parity tests verify score/tier identical between digest and web list_jobs(period='today')
-- GATE 20b: 659 backend tests + 523 agent tests passing (1 pre-existing scorer failure)
+- GHA curl sync removed: pipeline already does Step 10b; curl block was duplicate and required curl + build_ingest_payload.py
+- PostHog: agent_email_sent event (profile_id, sent: bool) emitted after email step in run_pipeline()
+- GATE 20b: 659 backend tests + 625 agent tests passing
 
 Scoring data extraction (complete: 2026-03-01)
 - Scoring data extraction: pure data constants in shared/scoring_data.py, logic in shared/scoring_core.py (~370 lines). Re-exports preserve all import paths.
@@ -499,6 +501,8 @@ Career History UX — Async CV processing (complete: 2026-03-02)
 - Strength/gap removed from email (Phase 20b): list API doesn't return. Old values were inconsistent with RAG output anyway. Clean removal.
 - httpx over requests (Phase 20b): httpx already in requirements.txt root (0.28.1). requests only in agent/requirements.txt. Avoids implicit transitive dependency.
 - Digest rollback v2 (Phase 20b): v1 template is reference-only. It requires variables (strength, gap, local scores) that the new notifier doesn't produce. Full rollback = git revert of all 20b commits. DIGEST_TEMPLATE env var no longer provides true rollback.
+- Notifier signature mismatch fix (2026-03-04): `pipeline.py:_send_digest()` calls `send_digest(railway_url, profile_id, ingest_key, ...)` but old `notifier.py` expected `send_digest(jobs, rejected_stats, run_meta, profile)` — email never sent. Fix: notifier rewritten to match pipeline signature. `fetch_digest()` calls GET `/api/digest/{profile_id}` instead of receiving jobs from caller. GHA curl sync block removed (pipeline does it at Step 10b; curl was a duplicate).
+- `agent_email_sent` PostHog event (2026-03-04): fires from `run_pipeline()` after email step with `{"profile_id": ..., "sent": bool}`. Separate from `agent_pipeline_complete` (which fires before email since `_log_completion()` computes `duration_s/cost_usd` needed for `run_meta` in `_send_digest()`).
 - first_seen filter limitation (Phase 20b): jobs discovered by user A yesterday and re-ingested today for user B have first_seen=yesterday → excluded from "today" digest in both email and web. Consistent but functionally incomplete. Fix: consider last_seen or ingested_at filter.
 - Repo cleanup (2026-02-27): Plan files moved to Planes/ (gitignored). Merged worktrees pruned (amazing-austin, competent-neumann, suspicious-jones, trusting-montalcini). Dead code removed: UserMenu.tsx component, update_user_profile_id() function in queries.py. Ruff clean. File copy consistency audited (see docs/copy-sync-report.md) — all dual copies in sync.
 - Geo filtering architecture (Phase 15): three-layer detection chain. L1=resolve_location_country() on structured location field (highest confidence). L2=geonamescache city mention in description near context words ("based in", "office in" etc). L3=US visa/auth language ("e-verify", "remote within the us", "must be authorized to work in the u.s"). Conservative: unresolved location + no signals → pass. Remote fulltime always passes regardless of location. "nan" added to sentinel pass-through list (geonamescache resolves it to "CN" via city name match).
@@ -597,7 +601,7 @@ Career History UX — Async CV processing (complete: 2026-03-02)
 - Enriched field naming (Phase 4): DB column is `company_size` (plan name); raw dict field is `company_employees_label` (RawJob model name). Ingest maps `company_employees_label → company_size` at upsert_job boundary.
 - Enriched upsert strategy (Phase 4): COALESCE(excluded.field, jobs.field) for all enriched scalar fields — new value wins if non-null, existing value preserved if new is null. `sources` (JSON array) always updated — reflects scraper origins from the current pipeline run, not accumulated history.
 - Enriched API null omission (Phase 4): `_ENRICHED_FIELDS` constant in list_jobs and get_job strips keys where value is None. Prevents sending `"company_industry": null` for every job that has no industry data.
-- `_grade_to_points()` in agent (P16 fix): added to `agent/main.py` as module-level helper, mirrors `api/grade_mapping.py:grade_to_points()`. Used by `ranked_jobs()`, `_auto_skip_reloc()`, and `notifier._build_context()`. If grade thresholds change, update both copies.
+- `_grade_to_points()` in agent (P16 fix): added to `agent/main.py` as module-level helper, mirrors `api/grade_mapping.py:grade_to_points()`. Used by `ranked_jobs()` and `_auto_skip_reloc()`. If grade thresholds change, update both copies. (Note: `notifier._build_context()` was removed in 2026-03-04 rewrite — scoring now done by API.)
 - v2 `_display_score` logic: three branches in all three scoring sites — `rag is None` → heuristic; `"score" in rag` (v1) → stored numeric; else (v2) → `min(100, max(0, _fit_score + grade_to_points(tech) + grade_to_points(prof)))`.
 - Gap tracker v2 score (P17 fix): `gap_tracker.py` uses inline `_gp` dict (not imported from main to avoid circular import). v2 score = sum of grade points only (no heuristic component — profile not available at Step 5b). Ranges: A+A=40, B+C=17, unknown+unknown=20.
 - `print_summary()` mode label (P18 fix): `has_v2 = any("technical_depth" in (j.get("rag_score") or {}))`. v2 takes priority: "hybrid score" > "RAG score" > "heuristic fit".
