@@ -1,8 +1,8 @@
 {
-  "_comment": "Jinja2 template context passed to templates/email_digest.html.j2. Built by notifier._build_context(). All job dicts in tiers are flattened via _flatten_job() — never raw pipeline dicts.",
+  "_comment": "Jinja2 template context passed to templates/email_digest.html.j2. Built by notifier._build_context_from_api(). All job dicts in tiers are flattened via _flatten_api_job() — never raw API dicts.",
 
-  "date": "21 Feb 2026",
-  "headline": "Acme Corp · remote",
+  "date": "04 Mar 2026",
+  "headline": "Acme Corp · remote · 82",
   "n_apply": 3,
   "n_review": 5,
   "n_skip": 8,
@@ -10,7 +10,7 @@
 
   "tier_a": [
     {
-      "_comment": "score >= 50. Sorted: no-reloc first, score desc, salary desc.",
+      "_comment": "score > 60 (assigned by API, same path as list_jobs). No local scoring.",
       "title": "Principal PM - Data Platform",
       "company": "Acme Corp",
       "location": "Remote, Europe",
@@ -18,44 +18,44 @@
       "requires_reloc": false,
       "salary_display": "~€130K",
       "score": 82,
-      "strength": "Led event tracking platform at 2B events/day scale",
-      "gap": "No Elasticsearch experience",
-      "stories": "H4, H1, H5",
-      "url": "https://example.com/jobs/123"
+      "strength": "",
+      "gap": "",
+      "url": "https://example.com/jobs/123",
+      "platform_link": "https://jobseeker-production.up.railway.app/jobs/abc123def456"
     }
   ],
 
   "tier_b": [
     {
-      "_comment": "30 <= score < 50. Same sort order as tier_a.",
+      "_comment": "40 < score ≤ 60 (assigned by API). Same sort order as tier_a.",
       "title": "Senior PM - Analytics",
       "company": "Other Corp",
       "location": "Barcelona, Spain",
       "location_type": "hybrid",
       "requires_reloc": false,
       "salary_display": "~€95K",
-      "score": 42,
-      "strength": "SQL, A/B testing",
+      "score": 55,
+      "strength": "",
       "gap": "",
-      "stories": "",
-      "url": "https://example.com/jobs/456"
+      "url": "https://example.com/jobs/456",
+      "platform_link": "https://jobseeker-production.up.railway.app/jobs/def456ghi789"
     }
   ],
 
   "tier_c": [
     {
-      "_comment": "score < 30. Sorted: score desc.",
+      "_comment": "score ≤ 40 (assigned by API). Sorted: score desc.",
       "title": "Product Manager - Growth",
       "company": "Startup Inc",
       "location": "London, UK",
       "location_type": "onsite",
       "requires_reloc": true,
       "salary_display": "",
-      "score": 18,
+      "score": 35,
       "strength": "",
       "gap": "",
-      "stories": "",
-      "url": "https://example.com/jobs/789"
+      "url": "https://example.com/jobs/789",
+      "platform_link": "https://jobseeker-production.up.railway.app/jobs/ghi789jkl012"
     }
   ],
 
@@ -78,6 +78,6 @@
     "n_watchlist": 12,
     "duration_s": 94,
     "cost_usd": 0.052,
-    "date": "21 Feb 2026"
+    "date": "04 Mar 2026"
   }
 }
