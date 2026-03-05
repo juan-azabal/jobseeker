@@ -1,0 +1,64 @@
+user:
+  id: Noura
+  name: Noura Mroueh
+  email: nouramroue@gmail.com
+  active: true
+  languages:
+  - English
+  - Spanish
+  - French
+  - Arabic
+  - Catalan
+  home_locations:
+  - Barcelona
+  - ES
+  location_preference: b
+target:
+  level: mid
+  track: ic
+  role_type: Product Manager
+  role_function: product
+  domains: {}
+  seniority_weights:
+    mid: 15
+scoring:
+  rag_threshold: 25
+  salary_min: 60000
+skills:
+- Product Management
+- AI
+- Data Analysis
+- UX/UI
+- Product Strategy
+- Product Roadmap
+- User Journey Mapping
+- E-commerce
+- Category Management
+- Growth Strategy
+- Supply Chain Management
+- Cost Reduction
+- Negotiation
+- Project Management
+- Client Management
+- Product Metrics
+- Analytics
+- Design Thinking
+- Market Research
+- Stakeholder Management
+- AI & Data Analytics
+- SQL
+- A/B Testing
+- UX/UI Design
+- UX
+- UI
+- Human-Centric Design
+knowledge:
+  dir: knowledge/Noura
+  profile_files:
+  - cv.md
+  collection_name: Noura_profile
+stories: {}
+preferences: config/profiles/Noura-preferences.yaml
+searches: config/profiles/Noura-searches.yaml
+watchlist: config/watchlist.yaml
+seen_ids: config/seen_ids/Noura.txt
