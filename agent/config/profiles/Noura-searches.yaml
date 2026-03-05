@@ -1,0 +1,21 @@
+searches:
+- term: Product Manager
+  location: Spain
+  sites:
+  - indeed
+  - google
+  results_wanted: 20
+  hours_old: 72
+- term: Product Manager remote
+  location: Spain
+  sites:
+  - linkedin
+  results_wanted: 15
+  hours_old: 72
+- term: Product Manager Product Management
+  location: Spain
+  sites:
+  - linkedin
+  results_wanted: 15
+  hours_old: 72
+is_remote: true
