@@ -1,13 +1,7 @@
 prefilter:
   deal_breakers:
-  - junior
   - intern
   - internship
-  - entry level
-  - entry-level
-  - associate product manager
-  - 0-2 years
-  - 1-3 years
   title_must_contain_one_of:
   - product manager
   - product lead
