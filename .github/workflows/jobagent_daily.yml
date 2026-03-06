@@ -25,25 +25,22 @@ jobs:
     outputs:
       profiles: ${{ steps.set-profiles.outputs.profiles }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install PyYAML
-        run: pip install pyyaml
-
       - name: Resolve active profiles
         id: set-profiles
         env:
           TARGET_PROFILE: ${{ github.event.inputs.profile }}
+          RAILWAY_URL: ${{ secrets.RAILWAY_URL }}
+          INGEST_API_KEY: ${{ secrets.INGEST_API_KEY }}
         run: |
           if [ -n "$TARGET_PROFILE" ]; then
             echo "Single-profile run: $TARGET_PROFILE"
             echo "profiles=[\"$TARGET_PROFILE\"]" >> "$GITHUB_OUTPUT"
           else
-            profiles=$(python agent/scripts/list_active_profiles.py)
+            case "$RAILWAY_URL" in http://*) RAILWAY_URL="https://${RAILWAY_URL#http://}";; esac
+            profiles=$(curl -sf \
+              -H "X-Ingest-Key: $INGEST_API_KEY" \
+              "$RAILWAY_URL/api/agent/profiles" \
+              | python3 -c "import json,sys; print(json.dumps([p[\'profile_id\'] for p in json.load(sys.stdin)]))")
             echo "Active profiles: $profiles"
             echo "profiles=$profiles" >> "$GITHUB_OUTPUT"
           fi
