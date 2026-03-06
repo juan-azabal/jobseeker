@@ -6,12 +6,17 @@ Also provides timezone abbreviation detection and location→language mapping.
 And city-to-country resolution via geonamescache for accurate geo filtering.
 """
 
+import logging
 import re
 from datetime import datetime
 
 import country_converter as coco
 import geonamescache
 import pytz
+
+# Suppress "X not found in regex" noise from country_converter — these are
+# expected for city names (e.g. "Barcelona") and multi-part strings.
+logging.getLogger("country_converter").setLevel(logging.ERROR)
 
 _cc = coco.CountryConverter()
 _gc = geonamescache.GeonamesCache()
@@ -115,13 +120,30 @@ def resolve_location_country(location: str | None) -> str | None:
     if iso2 and iso2 != "not found":
         return str(iso2)
 
+    # Handle semicolon-separated lists (e.g. "Alberta; British Columbia; Calgary")
+    # Try each segment and return the first resolvable country.
+    if ";" in loc:
+        for segment in loc.split(";"):
+            result = resolve_location_country(segment.strip())
+            if result:
+                return result
+        return None
+
     # Layer 2: geonamescache city search on each comma-separated token
     tokens = [t.strip() for t in loc.split(",") if t.strip()]
     best_match: tuple[int, str] | None = None  # (population, country_code)
-    for token in tokens:
-        # US state abbreviation check before geonamescache (short codes cause false matches)
+    for i, token in enumerate(tokens):
+        # US state abbreviation check — but only when no later token is a country code.
+        # This prevents "CT" (Catalonia region) in "Barcelona, CT, ES" from being
+        # misclassified as Connecticut when "ES" (Spain) follows.
         if token.lower() in _US_STATE_ABBREVS:
-            return "US"
+            has_country_ahead = any(
+                _cc.convert(tokens[j], to="ISO2") not in ("not found", None) for j in range(i + 1, len(tokens))
+            )
+            if not has_country_ahead:
+                return "US"
+            # Region code, not a US state — skip this token
+            continue
 
         # Also try country-converter on each token (catches "France" in "Paris, France")
         iso2 = _cc.convert(token, to="ISO2")

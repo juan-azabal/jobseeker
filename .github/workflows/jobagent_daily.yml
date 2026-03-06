@@ -25,25 +25,22 @@ jobs:
     outputs:
       profiles: ${{ steps.set-profiles.outputs.profiles }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install PyYAML
-        run: pip install pyyaml
-
       - name: Resolve active profiles
         id: set-profiles
         env:
           TARGET_PROFILE: ${{ github.event.inputs.profile }}
+          RAILWAY_URL: ${{ secrets.RAILWAY_URL }}
+          INGEST_API_KEY: ${{ secrets.INGEST_API_KEY }}
         run: |
           if [ -n "$TARGET_PROFILE" ]; then
             echo "Single-profile run: $TARGET_PROFILE"
             echo "profiles=[\"$TARGET_PROFILE\"]" >> "$GITHUB_OUTPUT"
           else
-            profiles=$(python agent/scripts/list_active_profiles.py)
+            case "$RAILWAY_URL" in http://*) RAILWAY_URL="https://${RAILWAY_URL#http://}";; esac
+            profiles=$(curl -sf \
+              -H "X-Ingest-Key: $INGEST_API_KEY" \
+              "$RAILWAY_URL/api/agent/profiles" \
+              | python3 -c "import json,sys; print(json.dumps([p[\'profile_id\'] for p in json.load(sys.stdin)]))")
             echo "Active profiles: $profiles"
             echo "profiles=$profiles" >> "$GITHUB_OUTPUT"
           fi
@@ -127,7 +124,7 @@ jobs:
               fi
             fi
 
-            # Clean output for next profile (seen_ids stay on disk)
+            # Clean output for next profile
             rm -f output/jobs_*.json
           done
 
@@ -136,26 +133,6 @@ jobs:
             echo "⚠  One or more profiles had errors (see above)"
             exit 1
           fi
-
-      - name: Upload seen IDs
-        if: always()
-        run: |
-          mkdir -p /tmp/seen-ids-staging
-          git status --short agent/config/seen_ids/ \
-            | awk '{print $2}' \
-            | while read -r f; do
-                [ -f "$f" ] && cp "$f" /tmp/seen-ids-staging/
-              done
-          count=$(ls /tmp/seen-ids-staging/ 2>/dev/null | wc -l)
-          echo "Staged $count seen_ids file(s)"
-
-      - name: Upload seen IDs artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: seen-ids
-          path: /tmp/seen-ids-staging/
-          if-no-files-found: ignore
 
       - name: Upload results artifact
         if: always()
@@ -166,54 +143,9 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
-  # ── Job 3: Persist seen_ids to repo ────────────────────────────────────────
-  persist-seen-ids:
-    needs: digest
-    runs-on: ubuntu-latest
-    if: always()
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download seen-ids artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: seen-ids
-          path: /tmp/seen-ids-download
-        continue-on-error: true  # artifact may not exist if all profiles failed
-
-      - name: Apply seen IDs to repo
-        run: |
-          if [ ! -d /tmp/seen-ids-download ]; then
-            echo "No seen-ids artifact — nothing to apply"
-            exit 0
-          fi
-          find /tmp/seen-ids-download -name "*.txt" | while read -r f; do
-            cp "$f" agent/config/seen_ids/
-            echo "Applied: $(basename $f)"
-          done
-          count=$(find /tmp/seen-ids-download -name "*.txt" | wc -l)
-          echo "Total: $count seen_ids file(s) applied"
-
-      - name: Commit and push
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add agent/config/seen_ids/
-          if git diff --cached --quiet; then
-            echo "No changes to seen_ids — nothing to commit"
-            exit 0
-          fi
-          git commit -m "update seen jobs [skip ci]"
-          git pull --no-rebase -X ours origin "${{ github.ref_name }}"
-          git push
-
-  # ── Job 4: Health check ────────────────────────────────────────────────────
+  # ── Job 3: Health check ────────────────────────────────────────────────────
   verify-health:
-    needs: [digest, persist-seen-ids]
+    needs: [digest]
     runs-on: ubuntu-latest
     if: always()
     steps:

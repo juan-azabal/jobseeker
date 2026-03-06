@@ -219,19 +219,11 @@ def _is_relevant_title(title_lower, title_keywords, title_exclude):
     return True, None
 
 
-def load_seen_ids(path="config/seen_ids.txt"):
-    """Load set of job IDs that have already appeared in a digest."""
-    if not os.path.exists(path):
-        return set()
-    with open(path, "r") as f:
-        return {line.strip() for line in f if line.strip()}
-
-
 def prefilter_jobs(
     jobs,
     config_path,
     applied_path,
-    seen_path,
+    seen_ids: set[str] | None = None,
     home_locations=None,
     profile_role_function=None,
     target_countries: list[str] | None = None,
@@ -242,7 +234,7 @@ def prefilter_jobs(
         jobs: List of job dicts.
         config_path: Path to preferences YAML.
         applied_path: Path to applied.yaml.
-        seen_path: Path to seen_ids.txt.
+        seen_ids: Set of already-seen job IDs. Loaded from Railway DB by the caller.
         home_locations: User's home locations (used when target_countries not provided).
         profile_role_function: Profile role function (e.g. "product") for soft gate.
         target_countries: ISO2 codes for geo filtering (e.g. ["ES", "NL"]).
@@ -251,7 +243,7 @@ def prefilter_jobs(
     prefs = load_preferences(config_path)
     pf = prefs["prefilter"]
     applied = load_applied(applied_path)
-    seen_ids = load_seen_ids(seen_path)
+    seen_ids = seen_ids or set()
 
     deal_breakers = [db.lower() for db in pf.get("deal_breakers", [])]
     title_keywords = [kw.lower() for kw in pf.get("title_must_contain_one_of", [])]

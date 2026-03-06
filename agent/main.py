@@ -9,18 +9,31 @@ Usage:
   python main.py --profile ID # only score profile ID (scraping still uses all active profiles)
 """
 
+import os
 import sys
 
 import structlog
 
 from logging_setup import configure_logging
-from user_config import load_profile, list_profiles, is_profile_active, resolve_profile_paths
+from user_config import is_profile_active, resolve_profile_paths
+from profile_client import fetch_profiles, fetch_profile
 from scoring import load_heuristic_config as _load_heuristic_config
 
 from pipeline import run_pipeline, PipelineOptions, _to_dicts, _log_merge_stats
 
 configure_logging()
 logger = structlog.get_logger("agent.main")
+
+
+def _get_api_config() -> tuple[str, str]:
+    """Return (railway_url, ingest_key) from env. Raises if missing."""
+    railway_url = os.environ.get("RAILWAY_URL", "").strip()
+    ingest_key = os.environ.get("INGEST_API_KEY", "").strip()
+    if not railway_url:
+        raise RuntimeError("RAILWAY_URL env var is required")
+    if not ingest_key:
+        raise RuntimeError("INGEST_API_KEY env var is required")
+    return railway_url, ingest_key
 
 
 def _union_target_countries(profiles: list[tuple[str, dict]]) -> list[str]:
@@ -88,16 +101,17 @@ def main():
         if idx + 1 < len(args):
             requested_profile = args[idx + 1]
 
-    # Load all active profiles (used for unified scraping)
-    all_profile_ids = list_profiles(active_only=True)
+    # Load all active profiles from Railway DB via API
+    railway_url, ingest_key = _get_api_config()
+    all_profile_ids = fetch_profiles(railway_url, ingest_key)
     if not all_profile_ids:
-        print("ERROR: No active profiles found in config/profiles/.")
+        print("ERROR: No profiles found in Railway DB (GET /api/agent/profiles returned empty).")
         return
 
     all_profiles: list[tuple[str, dict]] = []
     for pid in all_profile_ids:
         try:
-            p = load_profile(pid)
+            p = fetch_profile(railway_url, ingest_key, pid)
             if is_profile_active(p):
                 all_profiles.append((pid, p))
         except Exception as e:

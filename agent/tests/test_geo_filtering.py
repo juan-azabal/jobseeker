@@ -498,7 +498,7 @@ class TestEndToEndGeoFiltering:
             job_dicts,
             config_path=prefs_file,
             applied_path=empty_applied,
-            seen_path=empty_seen,
+            seen_ids=None,
             home_locations=home_locations,
             target_countries=target_countries,
         )

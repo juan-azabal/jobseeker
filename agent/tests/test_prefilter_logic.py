@@ -8,7 +8,7 @@ import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from prefilter import _is_non_target_geo, _is_relevant_title, load_applied, load_seen_ids, prefilter_jobs
+from prefilter import _is_non_target_geo, _is_relevant_title, load_applied, prefilter_jobs
 
 
 # ---------------------------------------------------------------------------
@@ -193,28 +193,6 @@ class TestLoadApplied:
 
 
 # ---------------------------------------------------------------------------
-# load_seen_ids
-# ---------------------------------------------------------------------------
-
-
-class TestLoadSeenIds:
-    def test_missing_file_returns_empty(self):
-        assert load_seen_ids("/nonexistent/seen.txt") == set()
-
-    def test_loads_ids(self, tmp_path):
-        f = tmp_path / "seen.txt"
-        f.write_text("id1\nid2\n\nid3\n")
-        ids = load_seen_ids(str(f))
-        assert ids == {"id1", "id2", "id3"}
-
-    def test_strips_whitespace(self, tmp_path):
-        f = tmp_path / "seen.txt"
-        f.write_text("  id1  \nid2\n")
-        ids = load_seen_ids(str(f))
-        assert ids == {"id1", "id2"}
-
-
-# ---------------------------------------------------------------------------
 # prefilter_jobs (integration)
 # ---------------------------------------------------------------------------
 
@@ -239,10 +217,6 @@ class TestPrefilterJobs:
     def empty_applied(self, tmp_path):
         return str(tmp_path / "nonexistent-applied.yaml")
 
-    @pytest.fixture
-    def empty_seen(self, tmp_path):
-        return str(tmp_path / "nonexistent-seen.txt")
-
     def _make_job(self, **overrides):
         base = {
             "id": "j1",
@@ -254,60 +228,57 @@ class TestPrefilterJobs:
         base.update(overrides)
         return base
 
-    def test_passes_good_pm_job(self, prefs_file, empty_applied, empty_seen):
+    def test_passes_good_pm_job(self, prefs_file, empty_applied):
         jobs = [self._make_job()]
-        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, empty_seen)
+        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied)
         assert len(passed) == 1
 
-    def test_rejects_non_pm_title(self, prefs_file, empty_applied, empty_seen):
+    def test_rejects_non_pm_title(self, prefs_file, empty_applied):
         jobs = [self._make_job(title="Data Engineer")]
-        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, empty_seen)
+        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied)
         assert len(passed) == 0
         assert stats["no_pm_keyword"] == 1
 
-    def test_rejects_excluded_company(self, prefs_file, empty_applied, empty_seen):
+    def test_rejects_excluded_company(self, prefs_file, empty_applied):
         jobs = [self._make_job(company="BadCo")]
-        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, empty_seen)
+        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied)
         assert len(passed) == 0
         assert stats["excluded_company"] == 1
 
-    def test_rejects_deal_breaker(self, prefs_file, empty_applied, empty_seen):
+    def test_rejects_deal_breaker(self, prefs_file, empty_applied):
         jobs = [self._make_job(title="Intern Product Manager")]
-        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, empty_seen)
+        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied)
         assert len(passed) == 0
         assert stats["deal_breaker"] == 1
 
-    def test_rejects_non_target_geo(self, prefs_file, empty_applied, empty_seen):
+    def test_rejects_non_target_geo(self, prefs_file, empty_applied):
         jobs = [self._make_job(location="San Francisco, CA")]
-        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, empty_seen, target_countries=["ES"])
+        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, target_countries=["ES"])
         assert len(passed) == 0
         assert stats["non_target_geo"] == 1
 
-    def test_seen_ids_filtered(self, prefs_file, empty_applied, tmp_path):
-        seen_file = tmp_path / "seen.txt"
-        seen_file.write_text("j1\n")
+    def test_seen_ids_filtered(self, prefs_file, empty_applied):
         jobs = [self._make_job()]
-        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, str(seen_file))
+        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, seen_ids={"j1"})
         assert len(passed) == 0
         assert stats["already_seen"] == 1
 
-    def test_us_target_accepts_ny_job(self, prefs_file, empty_applied, empty_seen):
+    def test_us_target_accepts_ny_job(self, prefs_file, empty_applied):
         # When target_countries includes US, a New York job passes geo filter
         jobs = [self._make_job(location="New York, NY")]
         passed, rejected, stats = prefilter_jobs(
             jobs,
             prefs_file,
             empty_applied,
-            empty_seen,
             target_countries=["US"],
         )
         assert len(passed) == 1
 
-    def test_stats_totals(self, prefs_file, empty_applied, empty_seen):
+    def test_stats_totals(self, prefs_file, empty_applied):
         jobs = [
             self._make_job(id="j1"),
             self._make_job(id="j2", title="Data Engineer"),
         ]
-        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied, empty_seen)
+        passed, rejected, stats = prefilter_jobs(jobs, prefs_file, empty_applied)
         assert stats["total"] == 2
         assert stats["passed"] == 1

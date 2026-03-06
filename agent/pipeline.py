@@ -20,6 +20,7 @@ from merger import merge_jobs
 from ats_scraper import run_watchlist_scraper
 from wttj_scraper import run_wttj_scraper
 from prefilter import prefilter_jobs
+from profile_client import fetch_seen_ids, post_seen_ids
 from parser import parse_all
 from jobcache import load_cache, save_cache, split_by_cache, update_cache, cache_stats
 from scoring import heuristic_gate as _heuristic_gate
@@ -68,22 +69,6 @@ def _capture(profile_id: str, event: str, props: dict) -> None:
 def _to_dicts(jobs: list[RawJob]) -> list[dict]:
     """Convert list[RawJob] → list[dict] for downstream pipeline compatibility."""
     return [dict(j.model_dump(), is_remote=j.is_remote) for j in jobs]
-
-
-def _append_seen_ids(jobs: list, path: str) -> None:
-    """Append job IDs from this run to seen_ids file so future runs skip them."""
-    existing: set = set()
-    if os.path.exists(path):
-        with open(path) as f:
-            existing = {line.strip() for line in f if line.strip()}
-    new_ids = [j["id"] for j in jobs if j.get("id") and j["id"] not in existing]
-    if not new_ids:
-        return
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "a") as f:
-        for job_id in new_ids:
-            f.write(job_id + "\n")
-    print(f"   Seen IDs: +{len(new_ids)} appended to {path} ({len(existing) + len(new_ids)} total)")
 
 
 def save_results(jobs: list, folder: str = "output", profile_id: str | None = None) -> str:
@@ -154,7 +139,7 @@ def _log_merge_stats(raw_jobs: list[RawJob]) -> None:
 
 
 def _run_prefilter(
-    jobs: list, profile: dict, paths: dict, target_countries: list, geo_rejected_at_scrape: int
+    jobs: list, profile: dict, paths: dict, target_countries: list, geo_rejected_at_scrape: int, seen_ids: set
 ) -> tuple[list, list, dict]:
     """Step 2: apply all filters. Returns (passed, rejected, prefilter_stats)."""
     home_locations = profile.get("user", {}).get("home_locations", [])
@@ -163,7 +148,7 @@ def _run_prefilter(
         jobs,
         config_path=paths["preferences"],
         applied_path=paths["applied"],
-        seen_path=paths["seen_ids"],
+        seen_ids=seen_ids,
         home_locations=home_locations,
         profile_role_function=role_function,
         target_countries=target_countries or None,
@@ -443,10 +428,23 @@ def run_pipeline(
         print(f"\n(Using pre-scraped pool: {len(jobs)} jobs)")
     else:
         jobs, geo_rejected = _scrape_all(profile, paths, target_countries)
+    railway_url = os.environ.get("RAILWAY_URL", "")
+    ingest_key = os.environ.get("INGEST_API_KEY", "")
+
     if not jobs:
         return _early_exit(profile_id, opts.mode, start_time, "no_jobs")
 
-    passed, rejected, prefilter_stats = _run_prefilter(jobs, profile, paths, target_countries, geo_rejected)
+    # Step 1d: load seen_ids from Railway DB for prefilter dedup
+    seen_ids: set[str] = set()
+    if railway_url and ingest_key:
+        try:
+            seen_ids = fetch_seen_ids(railway_url, ingest_key, profile_id)
+            logger.info("seen_ids_loaded", profile_id=profile_id, count=len(seen_ids))
+        except RuntimeError as e:
+            logger.warning("seen_ids_load_failed", profile_id=profile_id, error=str(e))
+            print(f"⚠  Failed to load seen IDs from Railway (will show all jobs): {e}")
+
+    passed, rejected, prefilter_stats = _run_prefilter(jobs, profile, paths, target_countries, geo_rejected, seen_ids)
     _emit_geo_events(profile_id, rejected, prefilter_stats, geo_rejected)
     if not passed:
         return _early_exit(profile_id, opts.mode, start_time, "all_filtered")
@@ -472,12 +470,20 @@ def run_pipeline(
         save_results(rejected, folder="output/rejected", profile_id=profile_id)
 
     # Step 10b: sync to Railway before email so GET /api/digest/{profile_id} has today's data.
-    railway_url = os.environ.get("RAILWAY_URL", "")
-    ingest_key = os.environ.get("INGEST_API_KEY", "")
     if railway_url and ingest_key:
         _sync_to_railway(all_parsed, profile_id, railway_url, ingest_key)
 
-    _append_seen_ids(all_parsed, path=paths["seen_ids"])
+    # Step 10c: persist seen IDs to Railway DB (replaces file-based seen_ids)
+    if railway_url and ingest_key:
+        new_ids = [j["id"] for j in all_parsed if j.get("id")]
+        if new_ids:
+            try:
+                added = post_seen_ids(railway_url, ingest_key, profile_id, new_ids)
+                logger.info("seen_ids_synced", profile_id=profile_id, count=added)
+                print(f"   Seen IDs: +{added} new IDs persisted to Railway DB")
+            except RuntimeError as e:
+                logger.warning("seen_ids_sync_failed", profile_id=profile_id, error=str(e))
+                print(f"⚠  Seen IDs sync failed (non-fatal): {e}")
 
     email_sent = False
     if opts.send_email:
