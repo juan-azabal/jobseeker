@@ -29,6 +29,7 @@ from api.routes.ingest import router as ingest_router
 from api.routes.admin import router as admin_router
 from api.routes.waitlist import router as waitlist_router
 from api.routes.digest import router as digest_router
+from api.routes.agent import router as agent_router
 
 configure_logging()
 logger = structlog.get_logger(__name__)
@@ -154,6 +155,7 @@ app.include_router(ingest_router)
 app.include_router(admin_router)
 app.include_router(waitlist_router)
 app.include_router(digest_router)
+app.include_router(agent_router)
 
 
 # --- Static file serving (production SPA) ---
