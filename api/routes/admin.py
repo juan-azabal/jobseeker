@@ -211,14 +211,27 @@ async def reset_seen_ids(body: ResetSeenIdsRequest, admin: dict = Depends(get_cu
             headers=headers,
         )
 
-    if put_resp.status_code in (200, 201):
-        logger.info("seen_ids reset for %s by admin %s", body.profile_id, admin["email"])
-        return {"status": "reset", "profile_id": body.profile_id}
+    if put_resp.status_code not in (200, 201):
+        raise HTTPException(
+            status_code=502,
+            detail=f"GitHub API PUT returned {put_resp.status_code}: {put_resp.text[:200]}",
+        )
 
-    raise HTTPException(
-        status_code=502,
-        detail=f"GitHub API PUT returned {put_resp.status_code}: {put_resp.text[:200]}",
+    # Also clear seen_job_ids DB table (new source of truth — replaces file over time)
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    con = sqlite3.connect(db_path)
+    con.execute("DELETE FROM seen_job_ids WHERE profile_id = ?", (body.profile_id,))
+    db_deleted = con.total_changes
+    con.commit()
+    con.close()
+
+    logger.info(
+        "seen_ids reset for %s by admin %s (db_deleted=%d)",
+        body.profile_id,
+        admin["email"],
+        db_deleted,
     )
+    return {"status": "reset", "profile_id": body.profile_id, "db_deleted": db_deleted}
 
 
 @router.get("/embedding-diagnostics")
