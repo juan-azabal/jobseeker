@@ -6,12 +6,17 @@ Also provides timezone abbreviation detection and location→language mapping.
 And city-to-country resolution via geonamescache for accurate geo filtering.
 """
 
+import logging
 import re
 from datetime import datetime
 
 import country_converter as coco
 import geonamescache
 import pytz
+
+# Suppress "X not found in regex" noise from country_converter — these are
+# expected for city names (e.g. "Barcelona") and multi-part strings.
+logging.getLogger("country_converter").setLevel(logging.ERROR)
 
 _cc = coco.CountryConverter()
 _gc = geonamescache.GeonamesCache()

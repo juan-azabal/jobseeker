@@ -9,12 +9,17 @@ Note: This is the API-side copy. The agent has its own copy at agent/geo.py.
 Both are functionally identical. If you change one, update the other.
 """
 
+import logging
 import re
 from datetime import datetime
 
 import country_converter as coco
 import geonamescache
 import pytz
+
+# Suppress "X not found in regex" noise from country_converter -- these are
+# expected for city names (e.g. "Barcelona") and multi-part strings.
+logging.getLogger("country_converter").setLevel(logging.ERROR)
 
 _cc = coco.CountryConverter()
 _gc = geonamescache.GeonamesCache()
