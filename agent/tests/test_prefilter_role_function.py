@@ -39,11 +39,6 @@ def empty_applied(tmp_path):
     return str(tmp_path / "nonexistent-applied.yaml")
 
 
-@pytest.fixture()
-def empty_seen(tmp_path):
-    return str(tmp_path / "nonexistent-seen.txt")
-
-
 def _make_job(role_function=None, **overrides):
     base = {
         "id": "j1",
@@ -59,76 +54,70 @@ def _make_job(role_function=None, **overrides):
 
 
 class TestRoleFunctionPrefilter:
-    def test_mismatch_is_filtered(self, prefs_file, empty_applied, empty_seen):
+    def test_mismatch_is_filtered(self, prefs_file, empty_applied):
         """PM profile + Engineering job → filtered out."""
         jobs = [_make_job(role_function="engineering")]
         passed, rejected, stats = prefilter_jobs(
             jobs,
             prefs_file,
             empty_applied,
-            empty_seen,
             profile_role_function="product",
         )
         assert len(passed) == 0
         assert len(rejected) == 1
         assert "role_function" in rejected[0]["reject_reason"]
 
-    def test_match_is_kept(self, prefs_file, empty_applied, empty_seen):
+    def test_match_is_kept(self, prefs_file, empty_applied):
         """PM profile + PM job → kept."""
         jobs = [_make_job(role_function="product")]
         passed, rejected, stats = prefilter_jobs(
             jobs,
             prefs_file,
             empty_applied,
-            empty_seen,
             profile_role_function="product",
         )
         assert len(passed) == 1
 
-    def test_no_job_role_function_kept(self, prefs_file, empty_applied, empty_seen):
+    def test_no_job_role_function_kept(self, prefs_file, empty_applied):
         """Job without role_function → gate disabled → kept."""
         jobs = [_make_job()]  # no role_function
         passed, rejected, stats = prefilter_jobs(
             jobs,
             prefs_file,
             empty_applied,
-            empty_seen,
             profile_role_function="product",
         )
         assert len(passed) == 1
 
-    def test_no_profile_role_function_kept(self, prefs_file, empty_applied, empty_seen):
+    def test_no_profile_role_function_kept(self, prefs_file, empty_applied):
         """Profile without role_function → gate disabled → kept."""
         jobs = [_make_job(role_function="engineering")]
         passed, rejected, stats = prefilter_jobs(
             jobs,
             prefs_file,
             empty_applied,
-            empty_seen,
             # profile_role_function not passed (None)
         )
         assert len(passed) == 1
 
-    def test_case_insensitive_match(self, prefs_file, empty_applied, empty_seen):
+    def test_case_insensitive_match(self, prefs_file, empty_applied):
         """role_function match is case-insensitive."""
         jobs = [_make_job(role_function="Product")]
         passed, rejected, stats = prefilter_jobs(
             jobs,
             prefs_file,
             empty_applied,
-            empty_seen,
             profile_role_function="product",
         )
         assert len(passed) == 1
 
-    def test_mismatch_counted_in_stats(self, prefs_file, empty_applied, empty_seen):
+    def test_mismatch_counted_in_stats(self, prefs_file, empty_applied):
         """Mismatch increments role_function_mismatch in stats."""
         jobs = [_make_job(role_function="marketing")]
         passed, rejected, stats = prefilter_jobs(
             jobs,
             prefs_file,
             empty_applied,
-            empty_seen,
             profile_role_function="product",
         )
         assert stats.get("role_function_mismatch", 0) == 1

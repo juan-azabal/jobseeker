@@ -171,7 +171,7 @@ class TestPrefilterForDE:
             jobs,
             config_path=os.path.join(FIXTURES_DIR, "de-preferences.yaml"),
             applied_path="/dev/null",
-            seen_path="/dev/null",
+            seen_ids=None,
             home_locations=["new york", "us"],
         )
         assert len(passed) == 1
@@ -183,7 +183,7 @@ class TestPrefilterForDE:
             jobs,
             config_path=os.path.join(FIXTURES_DIR, "de-preferences.yaml"),
             applied_path="/dev/null",
-            seen_path="/dev/null",
+            seen_ids=None,
             home_locations=["new york", "us"],
         )
         assert len(passed) == 0

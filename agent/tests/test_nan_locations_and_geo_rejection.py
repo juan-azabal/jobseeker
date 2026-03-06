@@ -197,7 +197,6 @@ def _run_prefilter(jobs, reject_outside="Spain", accept_onsite_cities=None):
     with tempfile.TemporaryDirectory() as tmp:
         prefs_path = _make_prefs_file(reject_outside, accept_onsite_cities, tmp)
         applied_path = _make_applied_file(tmp)
-        seen_path = _make_seen_file(tmp)
         from prefilter import prefilter_jobs
 
         home_locations = ["Spain", "Barcelona"]
@@ -208,7 +207,6 @@ def _run_prefilter(jobs, reject_outside="Spain", accept_onsite_cities=None):
             jobs,
             config_path=prefs_path,
             applied_path=applied_path,
-            seen_path=seen_path,
             home_locations=home_locations,
             target_countries=target_countries,
         )
