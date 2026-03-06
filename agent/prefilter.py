@@ -219,14 +219,6 @@ def _is_relevant_title(title_lower, title_keywords, title_exclude):
     return True, None
 
 
-def load_seen_ids(path="config/seen_ids.txt"):
-    """Load set of job IDs that have already appeared in a digest."""
-    if not os.path.exists(path):
-        return set()
-    with open(path, "r") as f:
-        return {line.strip() for line in f if line.strip()}
-
-
 def prefilter_jobs(
     jobs,
     config_path,

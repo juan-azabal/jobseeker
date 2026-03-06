@@ -8,7 +8,7 @@ import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from prefilter import _is_non_target_geo, _is_relevant_title, load_applied, load_seen_ids, prefilter_jobs
+from prefilter import _is_non_target_geo, _is_relevant_title, load_applied, prefilter_jobs
 
 
 # ---------------------------------------------------------------------------
@@ -190,28 +190,6 @@ class TestLoadApplied:
         f.write_text("")
         result = load_applied(str(f))
         assert result["applied_companies"] == []
-
-
-# ---------------------------------------------------------------------------
-# load_seen_ids
-# ---------------------------------------------------------------------------
-
-
-class TestLoadSeenIds:
-    def test_missing_file_returns_empty(self):
-        assert load_seen_ids("/nonexistent/seen.txt") == set()
-
-    def test_loads_ids(self, tmp_path):
-        f = tmp_path / "seen.txt"
-        f.write_text("id1\nid2\n\nid3\n")
-        ids = load_seen_ids(str(f))
-        assert ids == {"id1", "id2", "id3"}
-
-    def test_strips_whitespace(self, tmp_path):
-        f = tmp_path / "seen.txt"
-        f.write_text("  id1  \nid2\n")
-        ids = load_seen_ids(str(f))
-        assert ids == {"id1", "id2"}
 
 
 # ---------------------------------------------------------------------------
