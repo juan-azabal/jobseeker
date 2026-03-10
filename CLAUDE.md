@@ -27,7 +27,8 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
 ## Structure
 - Backend: `api/`
   - `api/main.py` — FastAPI app
-  - `api/routes/` — one file per resource (auth, jobs, onboard, ingest, admin, digest)
+  - `api/routes/` — one file per resource (auth, jobs, onboard, ingest, admin, digest, agent)
+  - `api/routes/agent.py` — machine-to-machine endpoints for GHA pipeline (X-Ingest-Key auth): GET /api/agent/profiles (active profiles), GET /api/agent/profile/{id} (profile YAML), GET/POST/DELETE /api/agent/seen-ids/{id}
   - `api/middleware/auth.py` — session auth + admin guards (`get_current_user`, `get_current_admin`)
   - `api/middleware/staging.py` — blocks non-admin requests in ENVIRONMENT=staging (returns 403)
   - `api/db/` — SQLite init, migrations (001–016), queries
@@ -202,7 +203,7 @@ Steps 9-12: Summary, save snapshot, mark seen, email digest (if --notify)
 
 ### GHA Pipeline (sequential, 4 jobs)
 ```
-list-profiles → digest (sequential loop per profile) → persist-seen-ids → verify-health
+list-profiles (Railway API, YAML fallback) → digest → persist-seen-ids → verify-health
 ```
 Each profile runs fully (scrape→parse→score→sync to Railway) before the next starts, so subsequent profiles skip re-parsing overlapping jobs. `timeout-minutes: 60`.
 
@@ -479,6 +480,7 @@ Career History UX — Async CV processing (complete: 2026-03-02)
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
+- Agent profile listing (2026-03-10): list-profiles GHA job calls GET /api/agent/profiles (Railway DB) instead of reading YAML files from repo. Active profile = user has profile_id + profile_yaml in DB AND yaml.user.active != false. Fallback to agent/scripts/list_active_profiles.py if Railway unreachable. get_active_profile_ids() in api/db/queries.py is the single source of truth for this filter.
 - Staging gate middleware (Phase Staging): `StagingGateMiddleware` is registered after `CorrelationIdMiddleware` so the correlation ID is already set when 403 is returned. Non-admin users on staging see 403 on every request. Admin users and health check routes pass through. `/api/health` is whitelisted (no auth check).
 - Staging DB snapshot (Phase Staging): `download_prod_snapshot()` re-raises `httpx.TimeoutException` so the admin route can return 502 (upstream unreachable) vs 400 (bad response). Startup auto-seed catches all exceptions so a failed download never aborts startup.
 - DB export authentication (Phase Staging): uses `X-API-Key` header (same `DB_EXPORT_API_KEY` as `INGEST_API_KEY` pattern) rather than admin session cookie — the staging service needs to call it without a browser session.
