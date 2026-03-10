@@ -11,7 +11,7 @@ import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
-from api.db.queries import get_profile_yaml_by_profile_id
+from api.db.queries import get_active_profile_ids, get_profile_yaml_by_profile_id
 
 logger = structlog.get_logger(__name__)
 
@@ -42,21 +42,16 @@ def _connect(db_path: str) -> sqlite3.Connection:
 
 @router.get("/profiles", dependencies=[Depends(_verify_ingest_key)])
 def list_profiles(db: str = Depends(_db_path)):
-    """Return all users with a non-null profile_yaml.
+    """Return active profile IDs for the GHA pipeline.
 
-    Response: [{"profile_id": "...", "email": "..."}, ...]
+    A profile is active when the user has profile_id + profile_yaml in DB
+    AND yaml.user.active is not false.
+
+    Response: [{"profile_id": "..."}, ...]
     Replaces: reading YAML file names from agent/config/profiles/
     """
-    con = _connect(db)
-    rows = con.execute(
-        """SELECT profile_id, email FROM users
-           WHERE profile_id IS NOT NULL
-             AND profile_yaml IS NOT NULL
-             AND profile_yaml != ''
-           ORDER BY email"""
-    ).fetchall()
-    con.close()
-    return [dict(r) for r in rows]
+    profile_ids = get_active_profile_ids(db)
+    return [{"profile_id": pid} for pid in profile_ids]
 
 
 @router.get("/profile/{profile_id}", dependencies=[Depends(_verify_ingest_key)])

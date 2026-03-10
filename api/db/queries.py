@@ -2,6 +2,8 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import yaml
+
 
 def _connect(db_path: str) -> sqlite3.Connection:
     con = sqlite3.connect(db_path)
@@ -796,3 +798,36 @@ def get_domain_corrections(db_path: str) -> list[dict]:
     ).fetchall()
     con.close()
     return [{"from": row["parsed_domain"], "to": row["domain_override"], "count": row["cnt"]} for row in rows]
+
+
+# ── Agent pipeline ────────────────────────────────────────────────────────
+
+
+def get_active_profile_ids(db_path: str) -> list[str]:
+    """Return profile_ids for all onboarded users with active profiles.
+
+    A user is considered active if:
+    - profile_id IS NOT NULL (has been onboarded)
+    - profile_yaml IS NOT NULL (has profile data)
+    - profile_yaml does not contain 'active: false' in user block
+    """
+    con = _connect(db_path)
+    rows = con.execute(
+        """SELECT profile_id, profile_yaml FROM users
+           WHERE profile_id IS NOT NULL
+             AND profile_yaml IS NOT NULL
+             AND profile_yaml != ''"""
+    ).fetchall()
+    con.close()
+
+    result = []
+    for row in rows:
+        try:
+            parsed = yaml.safe_load(row["profile_yaml"])
+            if isinstance(parsed, dict) and parsed.get("user", {}).get("active", True) is False:
+                continue
+        except Exception:
+            pass  # include on YAML parse error
+        result.append(row["profile_id"])
+
+    return sorted(result)

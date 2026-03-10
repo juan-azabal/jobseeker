@@ -77,7 +77,6 @@ class TestListProfiles:
         profiles = r.json()
         assert len(profiles) == 1
         assert profiles[0]["profile_id"] == "noura"
-        assert profiles[0]["email"] == "noura@example.com"
 
     def test_excludes_users_without_profile_yaml(self, client_with_user):
         r = client_with_user.get("/api/agent/profiles", headers={"X-Ingest-Key": INGEST_KEY})
