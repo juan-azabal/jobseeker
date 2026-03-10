@@ -1,13 +1,7 @@
 prefilter:
   deal_breakers:
-  - junior
   - intern
   - internship
-  - entry level
-  - entry-level
-  - associate product manager
-  - 0-2 years
-  - 1-3 years
   title_must_contain_one_of:
   - product manager
   - product lead
@@ -15,11 +9,6 @@ prefilter:
   - principal pm
   - staff pm
   - senior pm
-  - director of product
-  - head of product
-  - group product manager
-  - vp product
-  - vp of product
   title_exclude:
   - business development
   - crm manager
@@ -38,10 +27,6 @@ prefilter:
   - GetApp
   - Software Advice
   - G2
-  - Trioteca
-  - Planteka
-  - Colvin
-  - La Cyca Projects & Services
   location:
     accept_remote: true
     accept_hybrid: true
@@ -53,6 +38,6 @@ scoring:
   manual_review: 50
   auto_reject: 50
 salary:
-  min_eur: 50000
-  max_eur: 90000
+  min_eur: 60000
+  max_eur: 100000
   currency: EUR

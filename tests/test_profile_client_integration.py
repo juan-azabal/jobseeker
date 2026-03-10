@@ -45,7 +45,7 @@ def client(tmp_path, monkeypatch):
 
 
 def test_list_profiles_shape(client):
-    """GET /api/agent/profiles returns list of {profile_id, email} dicts."""
+    """GET /api/agent/profiles returns list of {profile_id} dicts."""
     r = client.get("/api/agent/profiles", headers={"X-Ingest-Key": INGEST_KEY})
     assert r.status_code == 200
     data = r.json()
@@ -53,7 +53,6 @@ def test_list_profiles_shape(client):
     assert len(data) == 1
     # profile_client.fetch_profiles reads data[i]["profile_id"]
     assert data[0]["profile_id"] == "noura"
-    assert "email" in data[0]
 
 
 def test_get_profile_shape(client):

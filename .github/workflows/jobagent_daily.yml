@@ -40,7 +40,11 @@ jobs:
             profiles=$(curl -sf \
               -H "X-Ingest-Key: $INGEST_API_KEY" \
               "$RAILWAY_URL/api/agent/profiles" \
-              | python3 -c "import json,sys; print(json.dumps([p[\'profile_id\'] for p in json.load(sys.stdin)]))")
+              | python3 -c 'import json,sys; print(json.dumps([p["profile_id"] for p in json.load(sys.stdin)]))') \
+              || {
+                echo "⚠ Railway API unreachable — falling back to local YAML profiles"
+                profiles=$(python agent/scripts/list_active_profiles.py)
+              }
             echo "Active profiles: $profiles"
             echo "profiles=$profiles" >> "$GITHUB_OUTPUT"
           fi
