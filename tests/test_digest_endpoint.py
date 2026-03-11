@@ -117,11 +117,7 @@ def client_with_profile(tmp_path, monkeypatch):
     )
     # d3 is unscored (heuristic path)
 
-    monkeypatch.setattr("api.routes.digest.load_profile_data", lambda pid: MINIMAL_PROFILE)
-    monkeypatch.setattr(
-        "api.routes.digest._load_user_geo",
-        lambda pid: (["spain", "barcelona"], ["europe", "eu"]),
-    )
+    monkeypatch.setattr("api.routes.digest.load_profile_data", lambda uid: MINIMAL_PROFILE)
 
     return TestClient(app), user["id"]
 

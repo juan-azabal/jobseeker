@@ -249,7 +249,7 @@ def embedding_diagnostics(admin: dict = Depends(get_current_admin)):
     from api.skill_matcher import match_skills
 
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
-    profile = load_profile_data(admin.get("profile_id"))
+    profile = load_profile_data(admin.get("id"))
     if not profile or not profile.get("skills"):
         raise HTTPException(status_code=400, detail="Admin has no profile or no skills configured")
 

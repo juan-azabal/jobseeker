@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from api.db.queries import get_jobs, get_profile_id_by_user_id
 from api.routes.ingest import _verify_ingest_key
-from api.routes.jobs import _load_user_geo, _score_and_tier_jobs
+from api.routes.jobs import _score_and_tier_jobs
 from api.scoring import load_profile_data
 
 logger = structlog.get_logger(__name__)
@@ -81,8 +81,9 @@ def get_digest(user_id: int):
 
     jobs = get_jobs(db_path, date_from=today, user_id=user_id)
 
-    profile = load_profile_data(profile_id)
-    home_locations, home_regions = _load_user_geo(profile_id)
+    profile = load_profile_data(user_id)
+    home_locations = profile.get("home_locations", []) if profile else []
+    home_regions = profile.get("home_regions", []) if profile else []
 
     jobs = _score_and_tier_jobs(jobs, profile, home_locations, home_regions, user_id=user_id)
 

@@ -131,10 +131,8 @@ def parity_setup(tmp_path, monkeypatch):
         scored_v2=1,
     )
 
-    monkeypatch.setattr("api.routes.digest.load_profile_data", lambda pid: MINIMAL_PROFILE)
-    monkeypatch.setattr("api.routes.digest._load_user_geo", lambda pid: (["spain", "barcelona"], ["europe", "eu"]))
-    monkeypatch.setattr("api.routes.jobs.load_profile_data", lambda pid: MINIMAL_PROFILE)
-    monkeypatch.setattr("api.routes.jobs._load_user_geo", lambda pid: (["spain", "barcelona"], ["europe", "eu"]))
+    monkeypatch.setattr("api.routes.digest.load_profile_data", lambda uid: MINIMAL_PROFILE)
+    monkeypatch.setattr("api.routes.jobs.load_profile_data", lambda uid: MINIMAL_PROFILE)
 
     create_session(db_path, "parity_tok", user["id"], "2099-01-01T00:00:00")
 

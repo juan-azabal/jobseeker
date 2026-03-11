@@ -4,7 +4,6 @@ Core logic in shared/scoring_core.py. API adds: semantic domain fallback, semant
 """
 
 import os
-from pathlib import Path
 
 import yaml
 
@@ -77,71 +76,27 @@ def compute_tier(score: int) -> str:
     return "C"
 
 
-def _load_profile_yaml_from_db(profile_id: str, profile_path: Path) -> dict | None:
-    """Fetch profile YAML from the DB when the local file is missing.
-
-    Writes the YAML back to disk so subsequent calls within the same process
-    hit the filesystem (avoids repeated DB lookups per request).
-
-    Returns the parsed YAML dict on success, None on any failure.
-    """
-    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
-    try:
-        from api.db.queries import get_profile_yaml_by_profile_id  # avoid circular import
-
-        stored_yaml = get_profile_yaml_by_profile_id(db_path, profile_id)
-        if not stored_yaml:
-            return None
-        profile_path.parent.mkdir(parents=True, exist_ok=True)
-        profile_path.write_text(stored_yaml)
-        logger.info(
-            "Restored profile YAML from DB for profile_id=%r → %s",
-            profile_id,
-            profile_path,
-        )
-        return yaml.safe_load(stored_yaml)
-    except Exception as exc:
-        logger.error(
-            "Failed to restore profile YAML from DB for profile_id=%r: %s",
-            profile_id,
-            exc,
-        )
-        return None
-
-
-def load_profile_data(profile_id: str | None) -> dict | None:
-    """Load profile YAML and return scoring-relevant fields.
+def load_profile_data(user_id: int | None) -> dict | None:
+    """Load profile YAML from DB and return scoring-relevant fields.
 
     Returns dict with keys: domains, seniority, skills, home_locations,
     home_regions, languages, location_preference, country_weights,
-    company_type_weights.
-    Returns None if profile_id is missing or file not found.
+    company_type_weights, role_function, role_type.
+    Returns None if user_id is None or no profile_yaml found in DB.
     """
-    if not profile_id:
+    if not user_id:
         return None
 
-    jobagent_dir = os.environ.get("JOBAGENT_DIR", "agent")
-    profile_path = Path(jobagent_dir) / "config" / "profiles" / f"{profile_id}.yaml"
-
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
     try:
-        raw = yaml.safe_load(profile_path.read_text())
-    except FileNotFoundError:
-        raw = _load_profile_yaml_from_db(profile_id, profile_path)
-        if raw is None:
-            logger.warning(
-                "Profile YAML not found for profile_id=%r at %s and not in DB — "
-                "heuristic scoring disabled for this user",
-                profile_id,
-                profile_path,
-            )
+        from api.db.queries import get_profile_yaml_by_user_id  # avoid circular import
+
+        stored_yaml = get_profile_yaml_by_user_id(db_path, user_id)
+        if not stored_yaml:
             return None
+        raw = yaml.safe_load(stored_yaml)
     except Exception as exc:
-        logger.error(
-            "Failed to load profile YAML for profile_id=%r at %s: %s",
-            profile_id,
-            profile_path,
-            exc,
-        )
+        logger.error("Failed to load profile YAML for user_id=%r: %s", user_id, exc)
         return None
 
     user_block = raw.get("user", {})
@@ -153,7 +108,7 @@ def load_profile_data(profile_id: str | None) -> dict | None:
 
         home_regions = derive_home_regions(home_locations)
     except Exception as exc:
-        logger.warning("derive_home_regions failed for profile_id=%r: %s", profile_id, exc)
+        logger.warning("derive_home_regions failed for user_id=%r: %s", user_id, exc)
         home_regions = []
 
     # Normalize domain names to canonical enum values, merging aliases.
