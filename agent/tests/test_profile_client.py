@@ -1,7 +1,7 @@
 """Tests for agent/profile_client.py."""
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
 
 from agent.profile_client import fetch_profiles, fetch_profile, fetch_seen_ids, post_seen_ids
 
@@ -26,16 +26,17 @@ def _mock_response(json_data, status_code=200):
 # ---------------------------------------------------------------------------
 
 
-def test_fetch_profiles_returns_ids():
+def test_fetch_profiles_returns_tuples():
+    """fetch_profiles returns [(user_id, profile_id), ...] tuples."""
     with patch("httpx.get") as mock_get:
         mock_get.return_value = _mock_response(
             [
-                {"profile_id": "juan", "email": "juan@example.com"},
-                {"profile_id": "noura", "email": "noura@example.com"},
+                {"user_id": 1, "profile_id": "juan"},
+                {"user_id": 2, "profile_id": "noura"},
             ]
         )
         ids = fetch_profiles(RAILWAY_URL, INGEST_KEY)
-    assert ids == ["juan", "noura"]
+    assert ids == [(1, "juan"), (2, "noura")]
 
 
 def test_fetch_profiles_empty():
@@ -61,24 +62,34 @@ def test_fetch_profiles_network_error_raises():
 
 
 # ---------------------------------------------------------------------------
-# fetch_profile
+# fetch_profile (integer user_id)
 # ---------------------------------------------------------------------------
 
 
 def test_fetch_profile_returns_parsed_dict():
     yaml_str = "user:\n  name: Noura\nskills:\n  - Python\n"
     with patch("httpx.get") as mock_get:
-        mock_get.return_value = _mock_response({"profile_id": "noura", "profile_yaml": yaml_str})
-        profile = fetch_profile(RAILWAY_URL, INGEST_KEY, "noura")
+        mock_get.return_value = _mock_response({"user_id": 2, "profile_id": "noura", "profile_yaml": yaml_str})
+        profile = fetch_profile(RAILWAY_URL, INGEST_KEY, 2)
     assert profile["user"]["name"] == "Noura"
     assert "Python" in profile["skills"]
+
+
+def test_fetch_profile_calls_integer_url():
+    """fetch_profile hits /api/agent/profile/{user_id} with integer in URL."""
+    yaml_str = "user:\n  name: Noura\nskills: []\n"
+    with patch("httpx.get") as mock_get:
+        mock_get.return_value = _mock_response({"user_id": 42, "profile_id": "noura", "profile_yaml": yaml_str})
+        fetch_profile(RAILWAY_URL, INGEST_KEY, 42)
+    called_url = mock_get.call_args[0][0]
+    assert called_url == f"{RAILWAY_URL}/api/agent/profile/42"
 
 
 def test_fetch_profile_404_raises():
     with patch("httpx.get") as mock_get:
         mock_get.return_value = _mock_response({"detail": "not found"}, status_code=404)
         with pytest.raises(RuntimeError, match="HTTP 404"):
-            fetch_profile(RAILWAY_URL, INGEST_KEY, "ghost")
+            fetch_profile(RAILWAY_URL, INGEST_KEY, 99)
 
 
 def test_fetch_profile_network_error_raises():
@@ -86,25 +97,33 @@ def test_fetch_profile_network_error_raises():
 
     with patch("httpx.get", side_effect=httpx.ConnectTimeout("timeout")):
         with pytest.raises(RuntimeError, match="network error"):
-            fetch_profile(RAILWAY_URL, INGEST_KEY, "noura")
+            fetch_profile(RAILWAY_URL, INGEST_KEY, 2)
 
 
 # ---------------------------------------------------------------------------
-# fetch_seen_ids
+# fetch_seen_ids (integer user_id)
 # ---------------------------------------------------------------------------
 
 
 def test_fetch_seen_ids_returns_set():
     with patch("httpx.get") as mock_get:
-        mock_get.return_value = _mock_response({"profile_id": "juan", "job_ids": ["a", "b", "c"]})
-        ids = fetch_seen_ids(RAILWAY_URL, INGEST_KEY, "juan")
+        mock_get.return_value = _mock_response({"user_id": 1, "job_ids": ["a", "b", "c"]})
+        ids = fetch_seen_ids(RAILWAY_URL, INGEST_KEY, 1)
     assert ids == {"a", "b", "c"}
+
+
+def test_fetch_seen_ids_calls_integer_url():
+    with patch("httpx.get") as mock_get:
+        mock_get.return_value = _mock_response({"user_id": 7, "job_ids": []})
+        fetch_seen_ids(RAILWAY_URL, INGEST_KEY, 7)
+    called_url = mock_get.call_args[0][0]
+    assert called_url == f"{RAILWAY_URL}/api/agent/seen-ids/7"
 
 
 def test_fetch_seen_ids_empty():
     with patch("httpx.get") as mock_get:
-        mock_get.return_value = _mock_response({"profile_id": "juan", "job_ids": []})
-        ids = fetch_seen_ids(RAILWAY_URL, INGEST_KEY, "juan")
+        mock_get.return_value = _mock_response({"user_id": 1, "job_ids": []})
+        ids = fetch_seen_ids(RAILWAY_URL, INGEST_KEY, 1)
     assert ids == set()
 
 
@@ -112,24 +131,32 @@ def test_fetch_seen_ids_http_error_raises():
     with patch("httpx.get") as mock_get:
         mock_get.return_value = _mock_response({}, status_code=500)
         with pytest.raises(RuntimeError, match="HTTP 500"):
-            fetch_seen_ids(RAILWAY_URL, INGEST_KEY, "juan")
+            fetch_seen_ids(RAILWAY_URL, INGEST_KEY, 1)
 
 
 # ---------------------------------------------------------------------------
-# post_seen_ids
+# post_seen_ids (integer user_id)
 # ---------------------------------------------------------------------------
 
 
 def test_post_seen_ids_returns_added_count():
     with patch("httpx.post") as mock_post:
         mock_post.return_value = _mock_response({"added": 3})
-        added = post_seen_ids(RAILWAY_URL, INGEST_KEY, "juan", ["x", "y", "z"])
+        added = post_seen_ids(RAILWAY_URL, INGEST_KEY, 1, ["x", "y", "z"])
     assert added == 3
+
+
+def test_post_seen_ids_calls_integer_url():
+    with patch("httpx.post") as mock_post:
+        mock_post.return_value = _mock_response({"added": 1})
+        post_seen_ids(RAILWAY_URL, INGEST_KEY, 42, ["x"])
+    called_url = mock_post.call_args[0][0]
+    assert called_url == f"{RAILWAY_URL}/api/agent/seen-ids/42"
 
 
 def test_post_seen_ids_empty_list_skips_request():
     with patch("httpx.post") as mock_post:
-        added = post_seen_ids(RAILWAY_URL, INGEST_KEY, "juan", [])
+        added = post_seen_ids(RAILWAY_URL, INGEST_KEY, 1, [])
     mock_post.assert_not_called()
     assert added == 0
 
@@ -138,7 +165,7 @@ def test_post_seen_ids_http_error_raises():
     with patch("httpx.post") as mock_post:
         mock_post.return_value = _mock_response({}, status_code=403)
         with pytest.raises(RuntimeError, match="HTTP 403"):
-            post_seen_ids(RAILWAY_URL, INGEST_KEY, "juan", ["x"])
+            post_seen_ids(RAILWAY_URL, INGEST_KEY, 1, ["x"])
 
 
 def test_post_seen_ids_network_error_raises():
@@ -146,4 +173,4 @@ def test_post_seen_ids_network_error_raises():
 
     with patch("httpx.post", side_effect=httpx.ConnectError("refused")):
         with pytest.raises(RuntimeError, match="network error"):
-            post_seen_ids(RAILWAY_URL, INGEST_KEY, "juan", ["x"])
+            post_seen_ids(RAILWAY_URL, INGEST_KEY, 1, ["x"])
