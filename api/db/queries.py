@@ -580,6 +580,20 @@ def get_profile_yaml_by_profile_id(db_path: str, profile_id: str) -> str | None:
     return row["profile_yaml"] if row else None
 
 
+def get_profile_yaml_by_user_id(db_path: str, user_id: int) -> str | None:
+    """Return the stored profile YAML for the given user_id.
+
+    Returns None if no matching user or YAML not yet persisted.
+    """
+    con = _connect(db_path)
+    row = con.execute(
+        "SELECT profile_yaml FROM users WHERE id = ? AND profile_yaml IS NOT NULL LIMIT 1",
+        (user_id,),
+    ).fetchone()
+    con.close()
+    return row["profile_yaml"] if row else None
+
+
 # ── Skill embeddings cache ────────────────────────────────────────────────
 
 
@@ -819,9 +833,20 @@ def get_active_profile_ids(db_path: str) -> list[str]:
     - profile_yaml IS NOT NULL (has profile data)
     - profile_yaml does not contain 'active: false' in user block
     """
+    return [p["profile_id"] for p in get_active_profiles(db_path)]
+
+
+def get_active_profiles(db_path: str) -> list[dict]:
+    """Return dicts with user_id and profile_id for all active onboarded users.
+
+    A user is active when:
+    - profile_id IS NOT NULL
+    - profile_yaml IS NOT NULL and non-empty
+    - profile_yaml.user.active is not False
+    """
     con = _connect(db_path)
     rows = con.execute(
-        """SELECT profile_id, profile_yaml FROM users
+        """SELECT id, profile_id, profile_yaml FROM users
            WHERE profile_id IS NOT NULL
              AND profile_yaml IS NOT NULL
              AND profile_yaml != ''"""
@@ -836,6 +861,6 @@ def get_active_profile_ids(db_path: str) -> list[str]:
                 continue
         except Exception:
             pass  # include on YAML parse error
-        result.append(row["profile_id"])
+        result.append({"user_id": row["id"], "profile_id": row["profile_id"]})
 
-    return sorted(result)
+    return sorted(result, key=lambda p: p["profile_id"])
