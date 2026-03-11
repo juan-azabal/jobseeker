@@ -318,6 +318,14 @@ def get_user_id_by_profile_id(db_path: str, profile_id: str) -> int | None:
     return row["id"] if row else None
 
 
+def get_profile_id_by_user_id(db_path: str, user_id: int) -> str | None:
+    """Return the profile_id label for a given user_id, or None if not found."""
+    con = _connect(db_path)
+    row = con.execute("SELECT profile_id FROM users WHERE id = ?", (user_id,)).fetchone()
+    con.close()
+    return row["profile_id"] if row else None
+
+
 # ── User status ───────────────────────────────────────────────────────────
 
 

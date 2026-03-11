@@ -219,11 +219,16 @@ async def reset_seen_ids(body: ResetSeenIdsRequest, admin: dict = Depends(get_cu
 
     # Also clear seen_job_ids DB table (new source of truth — replaces file over time)
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
-    con = sqlite3.connect(db_path)
-    con.execute("DELETE FROM seen_job_ids WHERE profile_id = ?", (body.profile_id,))
-    db_deleted = con.total_changes
-    con.commit()
-    con.close()
+    from api.db.queries import get_user_id_by_profile_id
+
+    uid = get_user_id_by_profile_id(db_path, body.profile_id)
+    db_deleted = 0
+    if uid is not None:
+        con = sqlite3.connect(db_path)
+        con.execute("DELETE FROM seen_job_ids WHERE user_id = ?", (uid,))
+        db_deleted = con.total_changes
+        con.commit()
+        con.close()
 
     logger.info(
         "seen_ids reset for %s by admin %s (db_deleted=%d)",
