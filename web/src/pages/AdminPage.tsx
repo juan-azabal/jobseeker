@@ -253,7 +253,7 @@ export default function AdminPage() {
       const r = await fetch('/api/admin/reset-seen-ids', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile_id: profileId }),
+        body: JSON.stringify({ user_id: userId }),
       });
       if (r.ok) alert(`Seen IDs cleared for ${profileId}`);
       else alert('Clear failed');
