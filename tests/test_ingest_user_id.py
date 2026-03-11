@@ -92,7 +92,7 @@ def ingest_client(tmp_path, monkeypatch):
     return TestClient(app), user["id"], "testuid"
 
 
-class TestIngestRouteBackwardCompat:
+class TestIngestRoute:
     def test_ingest_with_user_id_works(self, ingest_client):
         """Payload with user_id (int) stores per-user score."""
         client, uid, _ = ingest_client
@@ -105,20 +105,24 @@ class TestIngestRouteBackwardCompat:
         assert r.status_code == 200
         assert r.json()["scored"] == 1
 
-    def test_ingest_with_profile_id_backward_compat(self, ingest_client):
-        """Payload with profile_id (str) still works and stores per-user score."""
+    def test_ingest_with_profile_id_only_skips_score(self, ingest_client):
+        """Payload with profile_id only (no user_id) is accepted but not scored.
+
+        profile_id backward compat removed in Phase 2.3 — the HTTP route only
+        accepts user_id. Sending profile_id is a no-op (ignored by Pydantic).
+        """
         client, uid, pid = ingest_client
         job = {**_BASE_JOB, "id": "route-pid-001"}
         r = client.post(
             "/api/ingest",
-            json={"jobs": [job], "profile_id": pid},
+            json={"jobs": [job], "profile_id": pid},  # no user_id
             headers={"X-Ingest-Key": INGEST_KEY},
         )
         assert r.status_code == 200
-        assert r.json()["scored"] == 1
+        assert r.json()["scored"] == 0  # profile_id ignored — no per-user scoring
 
-    def test_user_id_takes_priority_over_profile_id(self, ingest_client):
-        """When both user_id and profile_id provided, user_id is used."""
+    def test_user_id_scores_even_with_extra_profile_id(self, ingest_client):
+        """user_id is used for scoring regardless of extra profile_id field."""
         client, uid, _ = ingest_client
         job = {**_BASE_JOB, "id": "route-both-001"}
         r = client.post(
@@ -129,8 +133,8 @@ class TestIngestRouteBackwardCompat:
         assert r.status_code == 200
         assert r.json()["scored"] == 1
 
-    def test_ingest_without_either_skips_score(self, ingest_client):
-        """Payload with no user_id or profile_id still stores job, skips score."""
+    def test_ingest_without_user_id_skips_score(self, ingest_client):
+        """Payload with no user_id still stores job, skips score."""
         client, _, _ = ingest_client
         job = {**_BASE_JOB, "id": "route-none-001"}
         r = client.post(
