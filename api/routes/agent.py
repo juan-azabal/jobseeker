@@ -119,11 +119,11 @@ def add_seen_ids(user_id: int, payload: SeenIdsPayload, db: str = Depends(_db_pa
     Response: {"added": N}
     """
     con = _connect(db)
-    con.executemany(
+    cur = con.executemany(
         "INSERT OR IGNORE INTO seen_job_ids (user_id, job_id) VALUES (?, ?)",
         [(user_id, job_id) for job_id in payload.job_ids],
     )
-    added = con.total_changes
+    added = cur.rowcount
     con.commit()
     con.close()
     logger.info("seen_ids.added", user_id=user_id, count=added)

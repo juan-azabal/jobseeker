@@ -22,7 +22,8 @@ def _verify_ingest_key(x_ingest_key: str = Header(...)):
 
 class IngestPayload(BaseModel):
     jobs: list[dict]
-    profile_id: str | None = None
+    user_id: int | None = None  # preferred: integer user_id
+    profile_id: str | None = None  # backward compat: resolved to user_id if no user_id
 
 
 @router.get("/status", dependencies=[Depends(_verify_ingest_key)])
@@ -71,18 +72,34 @@ def batch_lookup(payload: BatchLookupPayload):
 def ingest_jobs(payload: IngestPayload):
     """Receive job data from GitHub Actions and ingest into the database.
 
-    When profile_id is provided, per-user scores are stored in user_job_scores.
+    Resolution order for per-user scoring:
+    1. user_id (integer) — used directly if present
+    2. profile_id (string) — resolved to user_id via DB lookup (backward compat)
     """
+    from api.db.queries import get_user_id_by_profile_id
     from api.ingest import ingest_from_list
 
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+
+    # Resolve user_id: prefer explicit int, fall back to profile_id lookup
+    user_id = payload.user_id
+    if user_id is None and payload.profile_id:
+        user_id = get_user_id_by_profile_id(db_path, payload.profile_id)
+        if user_id is None:
+            logger.warning(
+                "Ingest: profile_id=%r not found — RAG scores will NOT be stored",
+                payload.profile_id,
+            )
+        else:
+            logger.info("Ingest: resolved profile_id=%r → user_id=%d", payload.profile_id, user_id)
+
     logger.info(
-        "Ingest request: %d jobs, profile_id=%r, db_path=%s",
+        "Ingest request: %d jobs, user_id=%r, db_path=%s",
         len(payload.jobs),
-        payload.profile_id,
+        user_id,
         db_path,
     )
-    result = ingest_from_list(db_path, payload.jobs, profile_id=payload.profile_id)
+    result = ingest_from_list(db_path, payload.jobs, user_id=user_id)
     logger.info(
         "Ingest complete: inserted=%d updated=%d skipped=%d scored=%d deleted=%d (db=%s)",
         result.get("inserted", 0),

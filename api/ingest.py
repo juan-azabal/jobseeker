@@ -3,7 +3,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import structlog
-from api.db.queries import upsert_job, get_job_by_id, upsert_user_job_score, get_user_id_by_profile_id, cleanup_old_jobs
+from api.db.queries import (
+    cleanup_old_jobs,
+    get_job_by_id,
+    get_user_id_by_profile_id,
+    upsert_job,
+    upsert_user_job_score,
+)
 from api.scoring import compute_tier
 
 logger = structlog.get_logger(__name__)
@@ -18,11 +24,15 @@ def _to_date(date_str: str | None) -> str:
         return datetime.now(timezone.utc).date().isoformat()
 
 
-def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None = None) -> dict:
+def ingest_from_list(
+    db_path: str,
+    raw_jobs: list[dict],
+    user_id: int | None = None,
+) -> dict:
     """Ingest a list of job dicts into the database.
 
     Common job data (title, company, parsed, etc.) goes into the shared `jobs` table.
-    When profile_id is provided, per-user scores go into `user_job_scores`.
+    When user_id is provided, per-user scores go into `user_job_scores`.
     """
     inserted = 0
     updated = 0
@@ -30,20 +40,6 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None 
     scored = 0
 
     now = datetime.now(timezone.utc).isoformat()
-
-    # Resolve profile_id → user_id for per-user score storage
-    user_id = None
-    if profile_id:
-        user_id = get_user_id_by_profile_id(db_path, profile_id)
-        if user_id is None:
-            logger.warning(
-                "profile_id=%r not found in users table — RAG scores will NOT be stored "
-                "(db=%s). User must log in at least once before scores can be saved.",
-                profile_id,
-                db_path,
-            )
-        else:
-            logger.info("Resolved profile_id=%r → user_id=%d", profile_id, user_id)
 
     for raw in raw_jobs:
         job_id = raw.get("id") or raw.get("job_id")
@@ -107,7 +103,7 @@ def ingest_from_list(db_path: str, raw_jobs: list[dict], profile_id: str | None 
         else:
             inserted += 1
 
-        # Store per-user score when profile_id is provided and job has a RAG score
+        # Store per-user score when user_id is provided and job has a RAG score
         if user_id:
             rag = raw.get("rag_score")
             if rag and isinstance(rag, dict):
@@ -173,7 +169,10 @@ def _precompute_skill_embeddings(db_path: str, raw_jobs: list[dict]) -> None:
 
 
 def ingest(db_path: str, jobagent_dir: str, profile_id: str | None = None) -> dict:
-    """File-based ingest: read JSON files from agent/output/ and ingest."""
+    """File-based ingest: read JSON files from agent/output/ and ingest.
+
+    profile_id is kept for CLI backward compat; resolved to user_id internally.
+    """
     output_dir = Path(jobagent_dir) / "output"
     json_files = sorted(output_dir.glob("jobs_*.json"))
 
@@ -184,7 +183,18 @@ def ingest(db_path: str, jobagent_dir: str, profile_id: str | None = None) -> di
         except (json.JSONDecodeError, OSError):
             pass
 
-    return ingest_from_list(db_path, all_jobs, profile_id=profile_id)
+    user_id = None
+    if profile_id:
+        user_id = get_user_id_by_profile_id(db_path, profile_id)
+        if user_id is None:
+            logger.warning(
+                "profile_id=%r not found in users table — RAG scores will NOT be stored.",
+                profile_id,
+            )
+        else:
+            logger.info("Resolved profile_id=%r → user_id=%d", profile_id, user_id)
+
+    return ingest_from_list(db_path, all_jobs, user_id=user_id)
 
 
 if __name__ == "__main__":
