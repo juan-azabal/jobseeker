@@ -474,6 +474,13 @@ Career History UX — Async CV processing (complete: 2026-03-02)
 - Tests: `tests/test_replace_cv_async.py` (5), `tests/test_add_source_async.py` (5), `tests/test_cv_processing_status.py` (new), `tests/test_add_source_text.py` (updated 200→202), `tests/test_replace_cv_master.py` (updated 200→202), `tests/test_profile_e2e.py` (updated 200→202), `tests/test_onboard_add_source_api.py` (updated 200→202)
 - GATE: 892 backend tests passing
 
+### Current
+Phase UID — User ID Migration (in progress, branch: feat/user-id-migration)
+- Replace `profile_id` (TEXT) with `users.id` (INTEGER) as internal FK for seen_job_ids, agent endpoints, digest, ingest
+- `profile_id` remains in users table as editable human-readable label
+- Migration 024: seen_job_ids profile_id→user_id
+- Agent pipeline: --profile flag accepts integer user_id; profile_id used for logs only
+
 ### Pending
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
 - Phase R — Refactor & Test Coverage
