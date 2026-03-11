@@ -122,8 +122,13 @@ def main():
         return
 
     # Determine which profiles to score
+    # --profile accepts integer user_id (preferred) or string profile_id (fallback)
     if requested_profile:
-        profiles_to_score = [(uid, pid, p) for uid, pid, p in all_profiles if pid == requested_profile]
+        try:
+            req_uid = int(requested_profile)
+            profiles_to_score = [(uid, pid, p) for uid, pid, p in all_profiles if uid == req_uid]
+        except (ValueError, TypeError):
+            profiles_to_score = [(uid, pid, p) for uid, pid, p in all_profiles if pid == requested_profile]
         if not profiles_to_score:
             print(f"ERROR: Profile '{requested_profile}' not found or inactive.")
             return
