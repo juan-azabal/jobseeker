@@ -1592,7 +1592,7 @@ async def replace_cv(
 
     # Mark as processing and enqueue background work (master_cv + analytics)
     # Step 2.2: nested master_cv_json takes precedence over top-level body.master_cv_json
-    effective_master_cv_json = body.master_cv_json or nested_master_cv_json
+    effective_master_cv_json = body.master_cv_json or master_cv_json
     set_cv_processing_status(db_path, user["id"], "processing")
     background_tasks.add_task(
         _bg_safe_replace_cv,
