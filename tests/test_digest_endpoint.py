@@ -1,4 +1,4 @@
-"""Tests for GET /api/digest/{profile_id} endpoint."""
+"""Tests for GET /api/digest/{user_id} endpoint (Phase 1.4: integer user_id)."""
 
 import json
 from datetime import date
@@ -70,7 +70,9 @@ MINIMAL_PROFILE = {
 
 @pytest.fixture
 def client_with_profile(tmp_path, monkeypatch):
-    """TestClient with DB seeded: user with profile_id, jobs from today."""
+    """TestClient with DB seeded: user with profile_id, jobs from today.
+    Returns (client, user_id).
+    """
     db_path = str(tmp_path / "test.db")
     init_db(db_path)
     monkeypatch.setenv("DB_PATH", db_path)
@@ -116,14 +118,18 @@ def client_with_profile(tmp_path, monkeypatch):
     # d3 is unscored (heuristic path)
 
     monkeypatch.setattr("api.routes.digest.load_profile_data", lambda pid: MINIMAL_PROFILE)
-    monkeypatch.setattr("api.routes.digest._load_user_geo", lambda pid: (["spain", "barcelona"], ["europe", "eu"]))
+    monkeypatch.setattr(
+        "api.routes.digest._load_user_geo",
+        lambda pid: (["spain", "barcelona"], ["europe", "eu"]),
+    )
 
-    return TestClient(app)
+    return TestClient(app), user["id"]
 
 
 def test_valid_request_returns_200(client_with_profile):
-    resp = client_with_profile.get(
-        "/api/digest/testprofile",
+    client, uid = client_with_profile
+    resp = client.get(
+        f"/api/digest/{uid}",
         headers={"X-Ingest-Key": INGEST_KEY},
     )
     assert resp.status_code == 200
@@ -133,24 +139,27 @@ def test_valid_request_returns_200(client_with_profile):
 
 
 def test_invalid_ingest_key_returns_403(client_with_profile):
-    resp = client_with_profile.get(
-        "/api/digest/testprofile",
+    client, uid = client_with_profile
+    resp = client.get(
+        f"/api/digest/{uid}",
         headers={"X-Ingest-Key": "wrong-key"},
     )
     assert resp.status_code == 403
 
 
-def test_unknown_profile_id_returns_404(client_with_profile):
-    resp = client_with_profile.get(
-        "/api/digest/nonexistent",
+def test_unknown_user_id_returns_404(client_with_profile):
+    client, _ = client_with_profile
+    resp = client.get(
+        "/api/digest/99999",
         headers={"X-Ingest-Key": INGEST_KEY},
     )
     assert resp.status_code == 404
 
 
 def test_response_jobs_have_required_fields(client_with_profile):
-    resp = client_with_profile.get(
-        "/api/digest/testprofile",
+    client, uid = client_with_profile
+    resp = client.get(
+        f"/api/digest/{uid}",
         headers={"X-Ingest-Key": INGEST_KEY},
     )
     assert resp.status_code == 200
@@ -164,8 +173,9 @@ def test_response_jobs_have_required_fields(client_with_profile):
 
 
 def test_summary_tier_a_count_matches_jobs(client_with_profile):
-    resp = client_with_profile.get(
-        "/api/digest/testprofile",
+    client, uid = client_with_profile
+    resp = client.get(
+        f"/api/digest/{uid}",
         headers={"X-Ingest-Key": INGEST_KEY},
     )
     assert resp.status_code == 200
@@ -177,8 +187,9 @@ def test_summary_tier_a_count_matches_jobs(client_with_profile):
 
 
 def test_jobs_sorted_by_score_descending(client_with_profile):
-    resp = client_with_profile.get(
-        "/api/digest/testprofile",
+    client, uid = client_with_profile
+    resp = client.get(
+        f"/api/digest/{uid}",
         headers={"X-Ingest-Key": INGEST_KEY},
     )
     assert resp.status_code == 200
@@ -188,8 +199,9 @@ def test_jobs_sorted_by_score_descending(client_with_profile):
 
 
 def test_response_has_profile_id_and_date(client_with_profile):
-    resp = client_with_profile.get(
-        "/api/digest/testprofile",
+    client, uid = client_with_profile
+    resp = client.get(
+        f"/api/digest/{uid}",
         headers={"X-Ingest-Key": INGEST_KEY},
     )
     assert resp.status_code == 200
