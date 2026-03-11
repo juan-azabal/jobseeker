@@ -1,30 +1,23 @@
 """Tests for 17.6.1 — role_type and role_function returned by load_profile_data.
 
-load_profile_data() must include:
+load_profile_data(user_id: int) must include:
   - role_function: from target.role_function (enum string or None)
   - role_type: from target.role_type (free text string or None)
+
+After Phase 2.4: loads from DB (users.profile_yaml), not filesystem.
 """
 
-import tempfile
-import os
-from pathlib import Path
+import sqlite3
 
 import pytest
 import yaml
 
+from api.db.init import init_db
+from api.db.queries import upsert_user
 from api.scoring import load_profile_data
 
 
-@pytest.fixture()
-def profile_dir(tmp_path, monkeypatch):
-    """Create a temp profiles dir and point JOBAGENT_DIR at it."""
-    profiles = tmp_path / "config" / "profiles"
-    profiles.mkdir(parents=True)
-    monkeypatch.setenv("JOBAGENT_DIR", str(tmp_path))
-    return profiles
-
-
-def _write_profile(profiles_dir: Path, profile_id: str, role_function=None, role_type=None):
+def _make_profile_yaml(role_function=None, role_type=None) -> str:
     data = {
         "user": {"home_locations": ["london"], "location_preference": "a"},
         "target": {
@@ -38,39 +31,63 @@ def _write_profile(profiles_dir: Path, profile_id: str, role_function=None, role
         data["target"]["role_function"] = role_function
     if role_type is not None:
         data["target"]["role_type"] = role_type
+    return yaml.dump(data)
 
-    path = profiles_dir / f"{profile_id}.yaml"
-    path.write_text(yaml.dump(data))
-    return profile_id
+
+def _seed_user(db_path: str, profile_id: str, profile_yaml: str) -> int:
+    """Create a user with stored profile_yaml and return user_id."""
+    user = upsert_user(
+        db_path,
+        {
+            "google_id": f"g_{profile_id}",
+            "email": f"{profile_id}@test.com",
+            "name": profile_id,
+            "avatar_url": None,
+            "profile_id": profile_id,
+        },
+    )
+    con = sqlite3.connect(db_path)
+    con.execute("UPDATE users SET profile_yaml = ? WHERE id = ?", (profile_yaml, user["id"]))
+    con.commit()
+    con.close()
+    return user["id"]
+
+
+@pytest.fixture()
+def db(tmp_path, monkeypatch):
+    db_path = str(tmp_path / "test.db")
+    init_db(db_path)
+    monkeypatch.setenv("DB_PATH", db_path)
+    return db_path
 
 
 class TestProfileRoleFields:
-    def test_role_function_returned(self, profile_dir):
-        """load_profile_data returns role_function from target block."""
-        pid = _write_profile(profile_dir, "testuser", role_function="product")
-        profile = load_profile_data(pid)
+    def test_role_function_returned(self, db):
+        """load_profile_data returns role_function from target block in DB YAML."""
+        uid = _seed_user(db, "tu1", _make_profile_yaml(role_function="product"))
+        profile = load_profile_data(uid)
         assert profile is not None
         assert profile.get("role_function") == "product"
 
-    def test_role_type_returned(self, profile_dir):
-        """load_profile_data returns role_type from target block."""
-        pid = _write_profile(profile_dir, "testuser2", role_type="Head of Product")
-        profile = load_profile_data(pid)
+    def test_role_type_returned(self, db):
+        """load_profile_data returns role_type from target block in DB YAML."""
+        uid = _seed_user(db, "tu2", _make_profile_yaml(role_type="Head of Product"))
+        profile = load_profile_data(uid)
         assert profile is not None
         assert profile.get("role_type") == "Head of Product"
 
-    def test_both_fields_returned(self, profile_dir):
+    def test_both_fields_returned(self, db):
         """load_profile_data returns both role_function and role_type."""
-        pid = _write_profile(profile_dir, "testuser3", role_function="product", role_type="CPO")
-        profile = load_profile_data(pid)
+        uid = _seed_user(db, "tu3", _make_profile_yaml(role_function="product", role_type="CPO"))
+        profile = load_profile_data(uid)
         assert profile is not None
         assert profile["role_function"] == "product"
         assert profile["role_type"] == "CPO"
 
-    def test_missing_fields_return_none(self, profile_dir):
+    def test_missing_fields_return_none(self, db):
         """Profile without role fields returns None for both."""
-        pid = _write_profile(profile_dir, "testuser4")
-        profile = load_profile_data(pid)
+        uid = _seed_user(db, "tu4", _make_profile_yaml())
+        profile = load_profile_data(uid)
         assert profile is not None
         assert profile.get("role_function") is None
         assert profile.get("role_type") is None

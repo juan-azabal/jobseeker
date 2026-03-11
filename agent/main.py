@@ -36,13 +36,13 @@ def _get_api_config() -> tuple[str, str]:
     return railway_url, ingest_key
 
 
-def _union_target_countries(profiles: list[tuple[str, dict]]) -> list[str]:
+def _union_target_countries(profiles: list[tuple[int, str, dict]]) -> list[str]:
     """Collect the union of target countries across all profiles."""
     from geo import derive_target_countries  # noqa: PLC0415
 
     seen: set[str] = set()
     result: list[str] = []
-    for _pid, profile in profiles:
+    for _uid, _pid, profile in profiles:
         home_locs = profile.get("user", {}).get("home_locations", [])
         countries = derive_target_countries(home_locs) or profile.get("target", {}).get("wttj_countries") or []
         for c in countries:
@@ -53,7 +53,7 @@ def _union_target_countries(profiles: list[tuple[str, dict]]) -> list[str]:
 
 
 def _unified_scrape(
-    profiles: list[tuple[str, dict]], watchlist_path: str = "config/watchlist.yaml"
+    profiles: list[tuple[int, str, dict]], watchlist_path: str = "config/watchlist.yaml"
 ) -> tuple[list[dict], int]:
     """Scrape jobs once across all profiles. Returns (jobs_as_dicts, geo_rejected_count)."""
     from search_generator import generate_unified_queries  # noqa: PLC0415
@@ -103,17 +103,17 @@ def main():
 
     # Load all active profiles from Railway DB via API
     railway_url, ingest_key = _get_api_config()
-    all_profile_ids = fetch_profiles(railway_url, ingest_key)
-    if not all_profile_ids:
+    all_profiles_meta = fetch_profiles(railway_url, ingest_key)  # list[tuple[int, str]]
+    if not all_profiles_meta:
         print("ERROR: No profiles found in Railway DB (GET /api/agent/profiles returned empty).")
         return
 
-    all_profiles: list[tuple[str, dict]] = []
-    for pid in all_profile_ids:
+    all_profiles: list[tuple[int, str, dict]] = []
+    for uid, pid in all_profiles_meta:
         try:
-            p = fetch_profile(railway_url, ingest_key, pid)
+            p = fetch_profile(railway_url, ingest_key, uid)
             if is_profile_active(p):
-                all_profiles.append((pid, p))
+                all_profiles.append((uid, pid, p))
         except Exception as e:
             print(f"Warning: could not load profile '{pid}': {e}")
 
@@ -122,8 +122,13 @@ def main():
         return
 
     # Determine which profiles to score
+    # --profile accepts integer user_id (preferred) or string profile_id (fallback)
     if requested_profile:
-        profiles_to_score = [(pid, p) for pid, p in all_profiles if pid == requested_profile]
+        try:
+            req_uid = int(requested_profile)
+            profiles_to_score = [(uid, pid, p) for uid, pid, p in all_profiles if uid == req_uid]
+        except (ValueError, TypeError):
+            profiles_to_score = [(uid, pid, p) for uid, pid, p in all_profiles if pid == requested_profile]
         if not profiles_to_score:
             print(f"ERROR: Profile '{requested_profile}' not found or inactive.")
             return
@@ -143,7 +148,7 @@ def main():
         mode = "full"
 
     # Run per-profile pipeline on shared job pool
-    for profile_id, profile in profiles_to_score:
+    for uid, profile_id, profile in profiles_to_score:
         _load_heuristic_config(profile)
         paths = resolve_profile_paths(profile_id, profile)
         opts = PipelineOptions(
@@ -153,7 +158,7 @@ def main():
             rescore_only=rescore_only,
             send_email=send_email,
         )
-        run_pipeline(profile_id, profile, paths, opts, pre_scraped_jobs=pre_scraped_jobs)
+        run_pipeline(uid, profile_id, profile, paths, opts, pre_scraped_jobs=pre_scraped_jobs)
 
 
 if __name__ == "__main__":

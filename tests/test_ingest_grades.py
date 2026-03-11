@@ -25,6 +25,13 @@ def _make_db(tmp_path, with_user: bool = False):
     return path
 
 
+def _get_uid(db_path: str, profile_id: str = "juan") -> int:
+    con = sqlite3.connect(db_path)
+    row = con.execute("SELECT id FROM users WHERE profile_id=?", (profile_id,)).fetchone()
+    con.close()
+    return row[0]
+
+
 def _base_job(job_id="test-g-001"):
     return {
         "id": job_id,
@@ -56,7 +63,7 @@ class TestIngestV2GradeStorage:
             "talking_points": [],
             "one_line_verdict": "Good fit.",
         }
-        ingest_from_list(db, [job], profile_id="juan")
+        ingest_from_list(db, [job], user_id=_get_uid(db))
         con = sqlite3.connect(db)
         row = con.execute("SELECT technical_grade FROM user_job_scores WHERE job_id LIKE 'v2-001%'").fetchone()
         con.close()
@@ -75,7 +82,7 @@ class TestIngestV2GradeStorage:
             "talking_points": [],
             "one_line_verdict": "Weak fit.",
         }
-        ingest_from_list(db, [job], profile_id="juan")
+        ingest_from_list(db, [job], user_id=_get_uid(db))
         con = sqlite3.connect(db)
         row = con.execute("SELECT profile_grade FROM user_job_scores WHERE job_id LIKE 'v2-002%'").fetchone()
         con.close()
@@ -94,7 +101,7 @@ class TestIngestV2GradeStorage:
             "talking_points": [],
             "one_line_verdict": "Strong fit.",
         }
-        ingest_from_list(db, [job], profile_id="juan")
+        ingest_from_list(db, [job], user_id=_get_uid(db))
         con = sqlite3.connect(db)
         row = con.execute("SELECT scored_v2 FROM user_job_scores WHERE job_id LIKE 'v2-003%'").fetchone()
         con.close()
@@ -117,7 +124,7 @@ class TestIngestV1BackwardCompat:
             "talking_points": [],
             "one_line_verdict": "Good.",
         }
-        ingest_from_list(db, [job], profile_id="juan")
+        ingest_from_list(db, [job], user_id=_get_uid(db))
         con = sqlite3.connect(db)
         row = con.execute(
             "SELECT score, scored_v2, technical_grade FROM user_job_scores WHERE job_id LIKE 'v1-001%'"
@@ -132,7 +139,7 @@ class TestIngestV1BackwardCompat:
         """Jobs without rag_score → no row in user_job_scores."""
         db = _make_db(tmp_path, with_user=True)
         job = _base_job("norag-001")
-        ingest_from_list(db, [job], profile_id="juan")
+        ingest_from_list(db, [job], user_id=_get_uid(db))
         con = sqlite3.connect(db)
         row = con.execute("SELECT 1 FROM user_job_scores WHERE job_id LIKE 'norag-001%'").fetchone()
         con.close()

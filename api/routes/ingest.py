@@ -22,7 +22,7 @@ def _verify_ingest_key(x_ingest_key: str = Header(...)):
 
 class IngestPayload(BaseModel):
     jobs: list[dict]
-    profile_id: str | None = None
+    user_id: int | None = None  # integer user_id for per-user scoring
 
 
 @router.get("/status", dependencies=[Depends(_verify_ingest_key)])
@@ -71,18 +71,20 @@ def batch_lookup(payload: BatchLookupPayload):
 def ingest_jobs(payload: IngestPayload):
     """Receive job data from GitHub Actions and ingest into the database.
 
-    When profile_id is provided, per-user scores are stored in user_job_scores.
+    When user_id is provided, per-user scores are stored in user_job_scores.
     """
     from api.ingest import ingest_from_list
 
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    user_id = payload.user_id
+
     logger.info(
-        "Ingest request: %d jobs, profile_id=%r, db_path=%s",
+        "Ingest request: %d jobs, user_id=%r, db_path=%s",
         len(payload.jobs),
-        payload.profile_id,
+        user_id,
         db_path,
     )
-    result = ingest_from_list(db_path, payload.jobs, profile_id=payload.profile_id)
+    result = ingest_from_list(db_path, payload.jobs, user_id=user_id)
     logger.info(
         "Ingest complete: inserted=%d updated=%d skipped=%d scored=%d deleted=%d (db=%s)",
         result.get("inserted", 0),

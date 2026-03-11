@@ -474,12 +474,23 @@ Career History UX — Async CV processing (complete: 2026-03-02)
 - Tests: `tests/test_replace_cv_async.py` (5), `tests/test_add_source_async.py` (5), `tests/test_cv_processing_status.py` (new), `tests/test_add_source_text.py` (updated 200→202), `tests/test_replace_cv_master.py` (updated 200→202), `tests/test_profile_e2e.py` (updated 200→202), `tests/test_onboard_add_source_api.py` (updated 200→202)
 - GATE: 892 backend tests passing
 
-### Pending
+Phase UID — User ID Migration (complete: 2026-03-11)
+- Migration 024: seen_job_ids profile_id→user_id column rename
+- Agent endpoints (GET/POST/GET seen-ids, GET profiles, GET profile/{id}) use user_id int path params
+- GHA workflow emits "uid:pid" pairs; loop passes integer user_id to main.py --profile
+- Ingest: IngestPayload.user_id (int); profile_id backward compat removed (Phase 2.3)
+- Admin: ResetSeenIdsRequest.user_id (int); trigger_pipeline normalizes profile string → user_id
+- load_profile_data(user_id: int | None): DB-only load via get_profile_yaml_by_user_id; _load_user_geo removed
+- All scoring call sites use user["id"] directly; 975 backend tests passing
+
+### Current
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
 - Phase R — Refactor & Test Coverage
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
+- load_profile_data signature (2026-03-11): accepts `user_id: int | None`, reads `profile_yaml` from `users` table via `get_profile_yaml_by_user_id`. Removed filesystem fallback and `_load_profile_yaml_from_db`. `_load_user_geo` removed from `api/routes/jobs.py` (redundant — `load_profile_data` already returns `home_locations` + `home_regions`). All call sites use `user["id"]` directly.
+- User-id migration scope (2026-03-11): `profile_id` stays in `users` table as human-readable label for GH file paths (cv.md, seen_ids txt), display, and logging. All DB FK relationships use `users.id` (int). No migration of `profile_id` column planned — it's a stable editable label.
 - Agent profile listing (2026-03-10): list-profiles GHA job calls GET /api/agent/profiles (Railway DB) instead of reading YAML files from repo. Active profile = user has profile_id + profile_yaml in DB AND yaml.user.active != false. Fallback to agent/scripts/list_active_profiles.py if Railway unreachable. get_active_profile_ids() in api/db/queries.py is the single source of truth for this filter.
 - Staging gate middleware (Phase Staging): `StagingGateMiddleware` is registered after `CorrelationIdMiddleware` so the correlation ID is already set when 403 is returned. Non-admin users on staging see 403 on every request. Admin users and health check routes pass through. `/api/health` is whitelisted (no auth check).
 - Staging DB snapshot (Phase Staging): `download_prod_snapshot()` re-raises `httpx.TimeoutException` so the admin route can return 502 (upstream unreachable) vs 400 (bad response). Startup auto-seed catches all exceptions so a failed download never aborts startup.

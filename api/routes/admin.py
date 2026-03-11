@@ -150,12 +150,12 @@ def env_check(admin: dict = Depends(get_current_admin)):
 
 
 class ResetSeenIdsRequest(BaseModel):
-    profile_id: str  # profile_id used for seen_ids filename (e.g. "juan", not "juanAza")
+    user_id: int  # integer user_id (preferred); resolved to profile_id for GH file path
 
 
 @router.post("/reset-seen-ids")
 async def reset_seen_ids(body: ResetSeenIdsRequest, admin: dict = Depends(get_current_admin)):
-    """Clear a profile's seen_ids file on GitHub so all jobs are re-scraped on next run.
+    """Clear a user's seen_ids file on GitHub so all jobs are re-scraped on next run.
 
     The seen_ids file tracks which jobs have already been processed. Clearing it
     forces a full re-scrape, useful when previous syncs failed and jobs were
@@ -164,6 +164,11 @@ async def reset_seen_ids(body: ResetSeenIdsRequest, admin: dict = Depends(get_cu
     Requires env vars: GH_ACTIONS_TOKEN, GH_REPO, GH_REF.
     """
     import base64
+
+    from api.db.queries import get_profile_id_by_user_id
+
+    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    profile_id = get_profile_id_by_user_id(db_path, body.user_id)
 
     gh_token = os.environ.get("GH_ACTIONS_TOKEN", "")
     gh_repo = os.environ.get("GH_REPO", "")
@@ -175,63 +180,59 @@ async def reset_seen_ids(body: ResetSeenIdsRequest, admin: dict = Depends(get_cu
             detail="GH_ACTIONS_TOKEN / GH_REPO not configured",
         )
 
-    headers = {
-        "Authorization": f"Bearer {gh_token}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-
-    file_path = f"agent/config/seen_ids/{body.profile_id}.txt"
-    api_url = f"https://api.github.com/repos/{gh_repo}/contents/{file_path}"
-
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        # Get current file SHA (required for update)
-        get_resp = await client.get(api_url, headers=headers, params={"ref": gh_ref})
-        if get_resp.status_code == 404:
-            logger.info("No seen_ids file for %s — nothing to reset", body.profile_id)
-            return {"status": "not_found", "profile_id": body.profile_id}
-
-        if get_resp.status_code != 200:
-            raise HTTPException(
-                status_code=502,
-                detail=f"GitHub API GET returned {get_resp.status_code}: {get_resp.text[:200]}",
-            )
-
-        current_sha = get_resp.json()["sha"]
-
-        # Overwrite with empty content
-        put_resp = await client.put(
-            api_url,
-            json={
-                "message": f"chore: reset seen_ids for {body.profile_id} [skip ci]",
-                "content": base64.b64encode(b"").decode(),
-                "sha": current_sha,
-                "branch": gh_ref,
-            },
-            headers=headers,
-        )
-
-    if put_resp.status_code not in (200, 201):
-        raise HTTPException(
-            status_code=502,
-            detail=f"GitHub API PUT returned {put_resp.status_code}: {put_resp.text[:200]}",
-        )
-
-    # Also clear seen_job_ids DB table (new source of truth — replaces file over time)
-    db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+    # Clear seen_job_ids in DB (primary store post-migration)
     con = sqlite3.connect(db_path)
-    con.execute("DELETE FROM seen_job_ids WHERE profile_id = ?", (body.profile_id,))
-    db_deleted = con.total_changes
+    cur = con.execute("DELETE FROM seen_job_ids WHERE user_id = ?", (body.user_id,))
+    db_deleted = cur.rowcount
     con.commit()
     con.close()
 
+    # Clear legacy GitHub file if we have a profile_id to build the path
+    if profile_id:
+        headers = {
+            "Authorization": f"Bearer {gh_token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
+        file_path = f"agent/config/seen_ids/{profile_id}.txt"
+        api_url = f"https://api.github.com/repos/{gh_repo}/contents/{file_path}"
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            get_resp = await client.get(api_url, headers=headers, params={"ref": gh_ref})
+            if get_resp.status_code == 404:
+                logger.info("No seen_ids file for user_id=%d — skipping GitHub reset", body.user_id)
+            elif get_resp.status_code != 200:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"GitHub API GET returned {get_resp.status_code}: {get_resp.text[:200]}",
+                )
+            else:
+                current_sha = get_resp.json()["sha"]
+                put_resp = await client.put(
+                    api_url,
+                    json={
+                        "message": f"chore: reset seen_ids for {profile_id} [skip ci]",
+                        "content": base64.b64encode(b"").decode(),
+                        "sha": current_sha,
+                        "branch": gh_ref,
+                    },
+                    headers=headers,
+                )
+                if put_resp.status_code not in (200, 201):
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"GitHub API PUT returned {put_resp.status_code}: {put_resp.text[:200]}",
+                    )
+
     logger.info(
-        "seen_ids reset for %s by admin %s (db_deleted=%d)",
-        body.profile_id,
+        "seen_ids reset for user_id=%d (profile_id=%r) by admin %s (db_deleted=%d)",
+        body.user_id,
+        profile_id,
         admin["email"],
         db_deleted,
     )
-    return {"status": "reset", "profile_id": body.profile_id, "db_deleted": db_deleted}
+    return {"status": "reset", "user_id": body.user_id, "db_deleted": db_deleted}
 
 
 @router.get("/embedding-diagnostics")
@@ -248,7 +249,7 @@ def embedding_diagnostics(admin: dict = Depends(get_current_admin)):
     from api.skill_matcher import match_skills
 
     db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
-    profile = load_profile_data(admin.get("profile_id"))
+    profile = load_profile_data(admin.get("id"))
     if not profile or not profile.get("skills"):
         raise HTTPException(status_code=400, detail="Admin has no profile or no skills configured")
 
@@ -488,7 +489,17 @@ async def trigger_pipeline(body: TriggerRequest = TriggerRequest(), admin: dict 
     dispatch_url = f"https://api.github.com/repos/{gh_repo}/actions/workflows/{gh_workflow}/dispatches"
     inputs: dict = {}
     if body.profile:
-        inputs["profile"] = body.profile
+        # Normalize: prefer integer user_id in GHA --profile flag.
+        # If already an integer string, pass as-is; otherwise resolve profile_id → user_id.
+        try:
+            int(body.profile)  # already a valid integer string
+            inputs["profile"] = body.profile
+        except ValueError:
+            from api.db.queries import get_user_id_by_profile_id
+
+            db_path = os.environ.get("DB_PATH", "data/jobseeker.db")
+            uid = get_user_id_by_profile_id(db_path, body.profile)
+            inputs["profile"] = str(uid) if uid is not None else body.profile
     if body.mode:
         inputs["mode"] = body.mode
 

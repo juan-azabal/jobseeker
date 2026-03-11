@@ -15,8 +15,11 @@ PROFILE_YAML = "user:\n  name: Noura\n  active: true\nskills:\n  - Python\n"
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    """Seeded TestClient — same pattern as test_agent_routes.py."""
+def client_and_uid(tmp_path, monkeypatch):
+    """Seeded TestClient — same pattern as test_agent_routes.py.
+
+    Returns (TestClient, user_id) tuple.
+    """
     db_path = str(tmp_path / "test.db")
     monkeypatch.setenv("DB_PATH", db_path)
     monkeypatch.setenv("INGEST_API_KEY", INGEST_KEY)
@@ -34,9 +37,10 @@ def client(tmp_path, monkeypatch):
         (PROFILE_YAML,),
     )
     con.commit()
+    uid = con.execute("SELECT id FROM users WHERE profile_id = 'noura'").fetchone()[0]
     con.close()
 
-    return TestClient(app)
+    return TestClient(app), uid
 
 
 # ---------------------------------------------------------------------------
@@ -44,25 +48,29 @@ def client(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_list_profiles_shape(client):
-    """GET /api/agent/profiles returns list of {profile_id} dicts."""
+def test_list_profiles_shape(client_and_uid):
+    """GET /api/agent/profiles returns list of {user_id, profile_id} dicts."""
+    client, uid = client_and_uid
     r = client.get("/api/agent/profiles", headers={"X-Ingest-Key": INGEST_KEY})
     assert r.status_code == 200
     data = r.json()
     assert isinstance(data, list)
     assert len(data) == 1
-    # profile_client.fetch_profiles reads data[i]["profile_id"]
+    # profile_client.fetch_profiles reads data[i]["user_id"] and data[i]["profile_id"]
+    assert data[0]["user_id"] == uid
     assert data[0]["profile_id"] == "noura"
 
 
-def test_get_profile_shape(client):
-    """GET /api/agent/profile/{id} returns {profile_id, profile_yaml} dict."""
-    r = client.get("/api/agent/profile/noura", headers={"X-Ingest-Key": INGEST_KEY})
+def test_get_profile_shape(client_and_uid):
+    """GET /api/agent/profile/{user_id} returns {user_id, profile_id, profile_yaml}."""
+    client, uid = client_and_uid
+    r = client.get(f"/api/agent/profile/{uid}", headers={"X-Ingest-Key": INGEST_KEY})
     assert r.status_code == 200
     data = r.json()
-    # profile_client.fetch_profile reads data["profile_yaml"] and yaml.safe_load it
+    # profile_client.fetch_profile reads data["user_id"], data["profile_id"], data["profile_yaml"]
+    assert data["user_id"] == uid
+    assert data["profile_id"] == "noura"
     assert "profile_yaml" in data
-    assert "profile_id" in data
     import yaml
 
     parsed = yaml.safe_load(data["profile_yaml"])
@@ -70,10 +78,11 @@ def test_get_profile_shape(client):
     assert "Python" in parsed["skills"]
 
 
-def test_seen_ids_post_shape(client):
-    """POST /api/agent/seen-ids/{id} returns {added: N}."""
+def test_seen_ids_post_shape(client_and_uid):
+    """POST /api/agent/seen-ids/{user_id} returns {added: N}."""
+    client, uid = client_and_uid
     r = client.post(
-        "/api/agent/seen-ids/noura",
+        f"/api/agent/seen-ids/{uid}",
         json={"job_ids": ["a", "b", "c"]},
         headers={"X-Ingest-Key": INGEST_KEY},
     )
@@ -83,15 +92,16 @@ def test_seen_ids_post_shape(client):
     assert data["added"] == 3
 
 
-def test_seen_ids_get_shape(client):
-    """GET /api/agent/seen-ids/{id} returns {profile_id, job_ids: [...]}."""
+def test_seen_ids_get_shape(client_and_uid):
+    """GET /api/agent/seen-ids/{user_id} returns {user_id, job_ids: [...]}."""
+    client, uid = client_and_uid
     # Seed some IDs first
     client.post(
-        "/api/agent/seen-ids/noura",
+        f"/api/agent/seen-ids/{uid}",
         json={"job_ids": ["x", "y"]},
         headers={"X-Ingest-Key": INGEST_KEY},
     )
-    r = client.get("/api/agent/seen-ids/noura", headers={"X-Ingest-Key": INGEST_KEY})
+    r = client.get(f"/api/agent/seen-ids/{uid}", headers={"X-Ingest-Key": INGEST_KEY})
     assert r.status_code == 200
     data = r.json()
     # profile_client.fetch_seen_ids reads data["job_ids"]
@@ -99,9 +109,10 @@ def test_seen_ids_get_shape(client):
     assert set(data["job_ids"]) == {"x", "y"}
 
 
-def test_duplicate_seen_ids_returns_zero_added(client):
+def test_duplicate_seen_ids_returns_zero_added(client_and_uid):
     """Second POST with same IDs returns added=0 (INSERT OR IGNORE)."""
+    client, uid = client_and_uid
     headers = {"X-Ingest-Key": INGEST_KEY}
-    client.post("/api/agent/seen-ids/noura", json={"job_ids": ["dup"]}, headers=headers)
-    r = client.post("/api/agent/seen-ids/noura", json={"job_ids": ["dup"]}, headers=headers)
+    client.post(f"/api/agent/seen-ids/{uid}", json={"job_ids": ["dup"]}, headers=headers)
+    r = client.post(f"/api/agent/seen-ids/{uid}", json={"job_ids": ["dup"]}, headers=headers)
     assert r.json()["added"] == 0

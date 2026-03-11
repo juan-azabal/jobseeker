@@ -104,11 +104,7 @@ def client(tmp_path, monkeypatch):
             "profile_id": "ew_user",
         },
     )
-    monkeypatch.setattr("api.routes.jobs.load_profile_data", lambda pid: _PROFILE_BARCELONA)
-    monkeypatch.setattr(
-        "api.routes.jobs._load_user_geo",
-        lambda pid: (["barcelona"], []),
-    )
+    monkeypatch.setattr("api.routes.jobs.load_profile_data", lambda uid: _PROFILE_BARCELONA)
     create_session(db_path, "tok-ew", user["id"], "2099-01-01T00:00:00")
     c = TestClient(app)
     c.cookies.set("jsk", "tok-ew")

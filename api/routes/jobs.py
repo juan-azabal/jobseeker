@@ -10,7 +10,6 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
-import yaml
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -30,7 +29,6 @@ from api.db.queries import (
     get_all_domain_overrides,
 )
 from api.geo import (
-    derive_home_regions,
     UNIVERSAL_TERMS,
     build_region_pattern,
     matches_region,
@@ -59,22 +57,6 @@ def _period_to_date_from(period: str | None) -> str | None:
     if days == 0:
         return date.today().isoformat()
     return (date.today() - timedelta(days=days)).isoformat()
-
-
-def _load_user_geo(profile_id: str | None) -> tuple[list[str], list[str]]:
-    """Return (home_locations, home_regions) from the user's profile YAML."""
-    if not profile_id:
-        return [], []
-    jobagent_dir = os.environ.get("JOBAGENT_DIR", "agent")
-
-    profile_path = Path(jobagent_dir) / "config" / "profiles" / f"{profile_id}.yaml"
-    try:
-        data = yaml.safe_load(profile_path.read_text())
-        home_locs = [loc.lower() for loc in data.get("user", {}).get("home_locations", [])]
-        home_regions = derive_home_regions(home_locs)
-        return home_locs, home_regions
-    except Exception:
-        return [], []
 
 
 def _is_remote_requiring_reloc(job: dict, home_locations: list[str], home_regions: list[str]) -> bool:
@@ -281,9 +263,9 @@ def list_jobs(
         limit=limit,
     )
 
-    profile_id = user.get("profile_id")
-    profile = load_profile_data(profile_id)
-    home_locations, home_regions = _load_user_geo(profile_id)
+    profile = load_profile_data(user["id"])
+    home_locations = profile.get("home_locations", []) if profile else []
+    home_regions = profile.get("home_regions", []) if profile else []
 
     jobs = _score_and_tier_jobs(jobs, profile, home_locations, home_regions, user_id=user["id"])
 
@@ -374,8 +356,9 @@ def get_job(job_id: str, user: dict = Depends(get_current_user)):
 
     # Per-user score
     ujs = get_user_job_score(_db_path(), user["id"], job_id)
-    profile = load_profile_data(user.get("profile_id"))
-    home_locations, home_regions = _load_user_geo(user.get("profile_id"))
+    profile = load_profile_data(user["id"])
+    home_locations = profile.get("home_locations", []) if profile else []
+    home_regions = profile.get("home_regions", []) if profile else []
     is_reloc = _compute_reloc(row, home_locations, home_regions) if home_locations else False
     domain_override = get_domain_override(_db_path(), user["id"], job_id)
 
@@ -507,7 +490,7 @@ def _compute_skill_matches(row: dict, user: dict) -> dict | None:
 
     Returns None if user has no profile or job has no parsed skills.
     """
-    profile = load_profile_data(user.get("profile_id"))
+    profile = load_profile_data(user["id"])
     if not profile:
         return None
 
@@ -673,7 +656,7 @@ def generate_cv_endpoint(
 
     # Plan is built from the job data + the user's CV (from DB) — no disk files
     plan = build_cv_plan(row, user_cv_markdown)
-    profile_data = load_profile_data(user.get("profile_id"))
+    profile_data = load_profile_data(user["id"])
 
     # ── Master CV two-step pipeline (Phase 4) ──────────────────────────────
     cv_plan_header: str | None = None

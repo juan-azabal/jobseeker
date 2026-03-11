@@ -86,10 +86,10 @@ def generate_queries(profile: dict) -> list[dict]:
     return indeed_queries + linkedin_queries
 
 
-def generate_unified_queries(profiles: list[tuple[str, dict]]) -> list[dict]:
+def generate_unified_queries(profiles: list[tuple[int, str, dict]]) -> list[dict]:
     """Generate deduplicated queries across all profiles.
 
-    profiles: list of (profile_id, profile_dict) tuples.
+    profiles: list of (user_id, profile_id, profile_dict) tuples.
     Deduplicates by (term.lower(), location.lower(), site).
     Returns Indeed queries first, then LinkedIn.
     """
@@ -97,7 +97,7 @@ def generate_unified_queries(profiles: list[tuple[str, dict]]) -> list[dict]:
     indeed_queries: list[dict] = []
     linkedin_queries: list[dict] = []
 
-    for _profile_id, profile in profiles:
+    for _uid, _profile_id, profile in profiles:
         for query in generate_queries(profile):
             key = (query["term"].lower(), query["location"].lower(), query["site"])
             if key in seen:

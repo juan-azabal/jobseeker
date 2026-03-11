@@ -84,9 +84,8 @@ def parity_client(tmp_path, monkeypatch):
     # User corrects domain: "other" → "saas" (preferred domain, weight 10)
     set_domain_override(db_path, user["id"], "parity-001", "saas")
 
-    # Patch profile loading so no YAML file is needed on disk
-    monkeypatch.setattr("api.routes.jobs.load_profile_data", lambda pid: _PROFILE)
-    monkeypatch.setattr("api.routes.jobs._load_user_geo", lambda pid: ([], []))
+    # Patch profile loading so no DB lookup is needed
+    monkeypatch.setattr("api.routes.jobs.load_profile_data", lambda uid: _PROFILE)
 
     c = TestClient(app)
     c.cookies.set("jsk", "parity_tok")

@@ -40,7 +40,7 @@ jobs:
             profiles=$(curl -sf \
               -H "X-Ingest-Key: $INGEST_API_KEY" \
               "$RAILWAY_URL/api/agent/profiles" \
-              | python3 -c 'import json,sys; print(json.dumps([p["profile_id"] for p in json.load(sys.stdin)]))') \
+              | python3 -c 'import json,sys; print(json.dumps(["{}:{}".format(p["user_id"], p["profile_id"]) for p in json.load(sys.stdin)]))') \
               || {
                 echo "⚠ Railway API unreachable — falling back to local YAML profiles"
                 profiles=$(python agent/scripts/list_active_profiles.py)
@@ -95,18 +95,33 @@ jobs:
           fi
 
           any_failed=false
-          for profile in $(echo "$profiles" | python3 -c "import json,sys; [print(p) for p in json.load(sys.stdin)]"); do
+          for entry in $(echo "$profiles" | python3 -c "import json,sys; [print(p) for p in json.load(sys.stdin)]"); do
+            # Parse "uid:pid" pair (Railway path) or plain profile_id (fallback path)
+            if echo "$entry" | grep -q ':'; then
+              uid="${entry%%:*}"
+              pid="${entry#*:}"
+              profile_arg="$uid"   # main.py --profile accepts integer user_id
+            else
+              uid=""
+              pid="$entry"
+              profile_arg="$entry" # fallback: string profile_id
+            fi
+
             echo ""
             echo "╔══════════════════════════════════════════════════════════════╗"
-            echo "║  Profile: $profile"
+            if [ -n "$uid" ]; then
+              echo "║  Profile: $pid (user_id=$uid)"
+            else
+              echo "║  Profile: $pid"
+            fi
             echo "╚══════════════════════════════════════════════════════════════╝"
 
             # --- Run agent ---
             cd "$GITHUB_WORKSPACE/agent"
-            if python main.py $notify_flag --profile "$profile"; then
-              echo "✅ Agent completed for $profile"
+            if python main.py $notify_flag --profile "$profile_arg"; then
+              echo "✅ Agent completed for $pid"
             else
-              echo "❌ Agent failed for $profile — skipping sync"
+              echo "❌ Agent failed for $pid — skipping sync"
               rm -f output/jobs_*.json
               any_failed=true
               continue
@@ -118,12 +133,12 @@ jobs:
             # --- Optional: reparse + rescore cached jobs with v1.4/v2 ---
             if [ "$mode" = "reparse_rescore" ]; then
               echo ""
-              echo "── Reparse + Rescore for $profile (v1.4 parser + rubric v2)..."
+              echo "── Reparse + Rescore for $pid (v1.4 parser + rubric v2)..."
               cd "$GITHUB_WORKSPACE/agent"
-              if python scripts/reparse_rescore.py --profile "$profile"; then
-                echo "✅ Reparse+rescore completed for $profile"
+              if python scripts/reparse_rescore.py --profile "$pid"; then
+                echo "✅ Reparse+rescore completed for $pid"
               else
-                echo "⚠  Reparse+rescore failed for $profile — continuing"
+                echo "⚠  Reparse+rescore failed for $pid — continuing"
                 any_failed=true
               fi
             fi

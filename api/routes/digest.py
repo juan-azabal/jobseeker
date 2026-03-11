@@ -1,7 +1,9 @@
-"""GET /api/digest/{profile_id} — machine-to-machine endpoint for the email notifier.
+"""GET /api/digest/{user_id} — machine-to-machine endpoint for the email notifier.
 
-Returns today's scored and tiered jobs for a profile, using the exact same
+Returns today's scored and tiered jobs for a user, using the exact same
 scoring path as list_jobs(period="today"). Auth: X-Ingest-Key header.
+
+Phase 1.4: path param changed from profile_id (str) to user_id (int).
 """
 
 import os
@@ -10,9 +12,9 @@ from datetime import date
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
 
-from api.db.queries import get_jobs, get_user_id_by_profile_id
+from api.db.queries import get_jobs, get_profile_id_by_user_id
 from api.routes.ingest import _verify_ingest_key
-from api.routes.jobs import _load_user_geo, _score_and_tier_jobs
+from api.routes.jobs import _score_and_tier_jobs
 from api.scoring import load_profile_data
 
 logger = structlog.get_logger(__name__)
@@ -64,23 +66,24 @@ def _strip_job(job: dict) -> dict:
     return {k: v for k, v in job.items() if k in _RESPONSE_FIELDS}
 
 
-@router.get("/{profile_id}", dependencies=[Depends(_verify_ingest_key)])
-def get_digest(profile_id: str):
-    """Return today's scored jobs for the given profile.
+@router.get("/{user_id}", dependencies=[Depends(_verify_ingest_key)])
+def get_digest(user_id: int):
+    """Return today's scored jobs for the given user_id.
 
     Used by the agent notifier (Step 11) to ensure email and web scores match.
     """
     db_path = _db_path()
     today = date.today().isoformat()
 
-    user_id = get_user_id_by_profile_id(db_path, profile_id)
-    if user_id is None:
-        raise HTTPException(status_code=404, detail=f"Profile not found: {profile_id}")
+    profile_id = get_profile_id_by_user_id(db_path, user_id)
+    if profile_id is None:
+        raise HTTPException(status_code=404, detail=f"User not found: {user_id}")
 
     jobs = get_jobs(db_path, date_from=today, user_id=user_id)
 
-    profile = load_profile_data(profile_id)
-    home_locations, home_regions = _load_user_geo(profile_id)
+    profile = load_profile_data(user_id)
+    home_locations = profile.get("home_locations", []) if profile else []
+    home_regions = profile.get("home_regions", []) if profile else []
 
     jobs = _score_and_tier_jobs(jobs, profile, home_locations, home_regions, user_id=user_id)
 
@@ -96,6 +99,7 @@ def get_digest(profile_id: str):
     logger.info(
         "Digest served",
         profile_id=profile_id,
+        user_id=user_id,
         total=summary["total"],
         tier_a=summary["tier_a"],
         tier_b=summary["tier_b"],

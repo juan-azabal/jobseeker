@@ -1536,15 +1536,17 @@ async def replace_cv(
     with open(yaml_path) as f:
         raw = ry.load(f)
 
-    # Synchronous merge: fast pure Python, updates profile YAML immediately
-    existing_flat = _yaml_to_flat_profile(raw)
-    # Step 2.1: Unpack nested payload (frontend may send full generate-profile response)
+    # Extract master_cv_json if the frontend sent the full generate-profile response
+    # (frontend sends extracted_profile = {profile: {...}, master_cv_json: {...}})
     incoming_profile = body.extracted_profile
-    nested_master_cv_json: dict | None = None
+    master_cv_json = None
     if "master_cv_json" in incoming_profile:
-        nested_master_cv_json = incoming_profile["master_cv_json"]
+        master_cv_json = incoming_profile["master_cv_json"]
     if "profile" in incoming_profile:
         incoming_profile = incoming_profile["profile"]
+
+    # Normalize existing YAML to flat dict, merge with new extraction, write back
+    existing_flat = _yaml_to_flat_profile(raw)
     merged = merge_profiles(existing_flat, incoming_profile)
     diff = compute_diff(existing_flat, merged)
 
@@ -1568,7 +1570,11 @@ async def replace_cv(
         with open(os.path.join(knowledge_dir, "cv.md"), "w") as f:
             f.write(body.cv_markdown)
 
-    # GitHub push (fire-and-forget, non-blocking)
+    # Persist master_cv_json (was missing before — bug 1.1)
+    if master_cv_json:
+        _persist_master_cv(db_path, user["id"], profile_id, jobagent_dir, master_cv_json)
+
+    # Push to GitHub (fire-and-forget)
     try:
         await _push_file_to_github(
             f"agent/config/profiles/{profile_id}.yaml",
@@ -1586,7 +1592,7 @@ async def replace_cv(
 
     # Mark as processing and enqueue background work (master_cv + analytics)
     # Step 2.2: nested master_cv_json takes precedence over top-level body.master_cv_json
-    effective_master_cv_json = body.master_cv_json or nested_master_cv_json
+    effective_master_cv_json = body.master_cv_json or master_cv_json
     set_cv_processing_status(db_path, user["id"], "processing")
     background_tasks.add_task(
         _bg_safe_replace_cv,
