@@ -34,7 +34,7 @@ def _make_response(status_code: int) -> MagicMock:
 def test_successful_post_returns_true():
     mock_resp = _make_response(200)
     with patch("httpx.post", return_value=mock_resp) as mock_post:
-        result = agent_main._sync_to_railway(SAMPLE_JOBS, "juan", "https://app.railway.app", "secret")
+        result = agent_main._sync_to_railway(SAMPLE_JOBS, 42, "juan", "https://app.railway.app", "secret")
     assert result is True
     mock_post.assert_called_once()
 
@@ -43,7 +43,7 @@ def test_server_error_returns_false():
     mock_resp = _make_response(500)
     mock_resp.raise_for_status.side_effect = Exception("Server Error")
     with patch("httpx.post", side_effect=Exception("Server Error")):
-        result = agent_main._sync_to_railway(SAMPLE_JOBS, "juan", "https://app.railway.app", "secret")
+        result = agent_main._sync_to_railway(SAMPLE_JOBS, 42, "juan", "https://app.railway.app", "secret")
     assert result is False
 
 
@@ -51,11 +51,11 @@ def test_timeout_returns_false():
     import httpx
 
     with patch("httpx.post", side_effect=httpx.TimeoutException("timed out")):
-        result = agent_main._sync_to_railway(SAMPLE_JOBS, "juan", "https://app.railway.app", "secret")
+        result = agent_main._sync_to_railway(SAMPLE_JOBS, 42, "juan", "https://app.railway.app", "secret")
     assert result is False
 
 
-def test_payload_contains_jobs_and_profile_id():
+def test_payload_contains_jobs_and_user_id():
     mock_resp = _make_response(200)
     captured_payload = {}
 
@@ -64,10 +64,10 @@ def test_payload_contains_jobs_and_profile_id():
         return mock_resp
 
     with patch("httpx.post", side_effect=fake_post):
-        agent_main._sync_to_railway(SAMPLE_JOBS, "juan", "https://app.railway.app", "secret")
+        agent_main._sync_to_railway(SAMPLE_JOBS, 42, "juan", "https://app.railway.app", "secret")
 
     assert "jobs" in captured_payload
-    assert captured_payload["profile_id"] == "juan"
+    assert captured_payload["user_id"] == 42
     assert len(captured_payload["jobs"]) == len(SAMPLE_JOBS)
 
 
@@ -80,7 +80,7 @@ def test_http_url_is_upgraded_to_https():
         return mock_resp
 
     with patch("httpx.post", side_effect=fake_post):
-        agent_main._sync_to_railway(SAMPLE_JOBS, "juan", "http://app.railway.app", "secret")
+        agent_main._sync_to_railway(SAMPLE_JOBS, 42, "juan", "http://app.railway.app", "secret")
 
     assert len(captured_urls) == 1
     assert captured_urls[0].startswith("https://")

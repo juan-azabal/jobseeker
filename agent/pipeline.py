@@ -1,6 +1,6 @@
 """Agent pipeline: scrape → prefilter → parse → score → notify.
 
-Public API:  run_pipeline(profile_id, profile, paths, opts)
+Public API:  run_pipeline(user_id, profile_id, profile, paths, opts)
              PipelineOptions  — pipeline options dataclass
              save_results(jobs, folder, profile_id)
              _to_dicts(jobs)  — RawJob list → dict list shim
@@ -317,8 +317,8 @@ def _early_exit(profile_id: str, mode: str, start_time: float, status: str) -> N
     _capture(profile_id, "agent_pipeline_complete", ev)
 
 
-def _sync_to_railway(jobs: list, profile_id: str, railway_url: str, ingest_key: str) -> bool:
-    """POST jobs to /api/ingest so GET /api/digest/{profile_id} has today's data (Step 10b).
+def _sync_to_railway(jobs: list, user_id: int, profile_id: str, railway_url: str, ingest_key: str) -> bool:
+    """POST jobs to /api/ingest so GET /api/digest/{user_id} has today's data (Step 10b).
 
     Returns True on success, False on failure. Caller continues regardless.
     """
@@ -329,26 +329,26 @@ def _sync_to_railway(jobs: list, profile_id: str, railway_url: str, ingest_key: 
     try:
         resp = httpx.post(
             endpoint,
-            json={"jobs": jobs, "profile_id": profile_id},
+            json={"jobs": jobs, "user_id": user_id},
             headers={"X-Ingest-Key": ingest_key},
             timeout=30.0,
         )
         resp.raise_for_status()
-        logger.info("railway_sync_ok", profile_id=profile_id, jobs=len(jobs), status=resp.status_code)
+        logger.info("railway_sync_ok", user_id=user_id, profile_id=profile_id, jobs=len(jobs), status=resp.status_code)
         print(f"   Railway sync: {len(jobs)} jobs → {resp.status_code}")
         return True
     except httpx.TimeoutException as exc:
-        logger.warning("railway_sync_timeout", profile_id=profile_id, error=str(exc))
+        logger.warning("railway_sync_timeout", user_id=user_id, profile_id=profile_id, error=str(exc))
         print("⚠  Railway sync timeout — email digest may have stale data")
         return False
     except Exception as exc:
-        logger.warning("railway_sync_failed", profile_id=profile_id, error=str(exc))
+        logger.warning("railway_sync_failed", user_id=user_id, profile_id=profile_id, error=str(exc))
         print(f"⚠  Railway sync failed ({exc}) — email digest may have stale data")
         return False
 
 
 def _send_digest(
-    profile_id: str, paths: dict, profile: dict, prefilter_stats: dict, duration_s: int, cost_usd: float
+    user_id: int, profile_id: str, paths: dict, profile: dict, prefilter_stats: dict, duration_s: int, cost_usd: float
 ) -> bool:
     """Step 11: fetch digest from API and send email. Returns True if sent."""
     import yaml  # noqa: PLC0415
@@ -379,6 +379,7 @@ def _send_digest(
     }
     return send_digest(
         railway_url=railway_url,
+        user_id=user_id,
         profile_id=profile_id,
         ingest_key=ingest_key,
         rejected_stats=prefilter_stats,
@@ -388,6 +389,7 @@ def _send_digest(
 
 
 def run_pipeline(
+    user_id: int,
     profile_id: str,
     profile: dict,
     paths: dict,
@@ -438,10 +440,10 @@ def run_pipeline(
     seen_ids: set[str] = set()
     if railway_url and ingest_key:
         try:
-            seen_ids = fetch_seen_ids(railway_url, ingest_key, profile_id)
-            logger.info("seen_ids_loaded", profile_id=profile_id, count=len(seen_ids))
+            seen_ids = fetch_seen_ids(railway_url, ingest_key, user_id)
+            logger.info("seen_ids_loaded", user_id=user_id, profile_id=profile_id, count=len(seen_ids))
         except RuntimeError as e:
-            logger.warning("seen_ids_load_failed", profile_id=profile_id, error=str(e))
+            logger.warning("seen_ids_load_failed", user_id=user_id, profile_id=profile_id, error=str(e))
             print(f"⚠  Failed to load seen IDs from Railway (will show all jobs): {e}")
 
     passed, rejected, prefilter_stats = _run_prefilter(jobs, profile, paths, target_countries, geo_rejected, seen_ids)
@@ -469,26 +471,26 @@ def run_pipeline(
     if rejected:
         save_results(rejected, folder="output/rejected", profile_id=profile_id)
 
-    # Step 10b: sync to Railway before email so GET /api/digest/{profile_id} has today's data.
+    # Step 10b: sync to Railway before email so GET /api/digest/{user_id} has today's data.
     if railway_url and ingest_key:
-        _sync_to_railway(all_parsed, profile_id, railway_url, ingest_key)
+        _sync_to_railway(all_parsed, user_id, profile_id, railway_url, ingest_key)
 
     # Step 10c: persist seen IDs to Railway DB (replaces file-based seen_ids)
     if railway_url and ingest_key:
         new_ids = [j["id"] for j in all_parsed if j.get("id")]
         if new_ids:
             try:
-                added = post_seen_ids(railway_url, ingest_key, profile_id, new_ids)
-                logger.info("seen_ids_synced", profile_id=profile_id, count=added)
+                added = post_seen_ids(railway_url, ingest_key, user_id, new_ids)
+                logger.info("seen_ids_synced", user_id=user_id, profile_id=profile_id, count=added)
                 print(f"   Seen IDs: +{added} new IDs persisted to Railway DB")
             except RuntimeError as e:
-                logger.warning("seen_ids_sync_failed", profile_id=profile_id, error=str(e))
+                logger.warning("seen_ids_sync_failed", user_id=user_id, profile_id=profile_id, error=str(e))
                 print(f"⚠  Seen IDs sync failed (non-fatal): {e}")
 
     email_sent = False
     if opts.send_email:
         try:
-            email_sent = _send_digest(profile_id, paths, profile, prefilter_stats, duration_s, cost_usd)
+            email_sent = _send_digest(user_id, profile_id, paths, profile, prefilter_stats, duration_s, cost_usd)
             if not email_sent:
                 logger.warning("email_skipped", profile_id=profile_id)
                 print("⚠  Email not sent — check GMAIL_*, RAILWAY_URL, and INGEST_API_KEY env vars")

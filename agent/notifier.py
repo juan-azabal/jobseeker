@@ -1,13 +1,13 @@
 """
 Email digest notifier using Gmail SMTP + Jinja2.
 
-Fetches today's scored jobs from GET /api/digest/{profile_id} (Railway API)
+Fetches today's scored jobs from GET /api/digest/{user_id} (Railway API)
 and renders them into the HTML email template. Zero local scoring logic —
 all tiers and scores come from the same code path used by the web app.
 
 Usage (called from pipeline.py with --notify):
     from notifier import send_digest
-    sent = send_digest(railway_url, profile_id, ingest_key,
+    sent = send_digest(railway_url, user_id, profile_id, ingest_key,
                        rejected_stats, run_meta, profile)
 
 Template variables populated by _build_context_from_api():
@@ -56,8 +56,8 @@ TEMPLATE_NAME = os.getenv("DIGEST_TEMPLATE", "email_digest.html.j2")
 _APP_BASE_URL_DEFAULT = "https://jobseeker-production.up.railway.app"
 
 
-def fetch_digest(railway_url: str, profile_id: str, ingest_key: str) -> dict | None:
-    """GET /api/digest/{profile_id} from the Railway API.
+def fetch_digest(railway_url: str, user_id: int, ingest_key: str) -> dict | None:
+    """GET /api/digest/{user_id} from the Railway API.
 
     Returns the parsed JSON response dict, or None on any failure.
     Upgrades http:// to https:// automatically.
@@ -65,7 +65,7 @@ def fetch_digest(railway_url: str, profile_id: str, ingest_key: str) -> dict | N
     url = railway_url.rstrip("/")
     if url.startswith("http://"):
         url = "https://" + url[len("http://") :]
-    endpoint = f"{url}/api/digest/{profile_id}"
+    endpoint = f"{url}/api/digest/{user_id}"
     try:
         resp = httpx.get(
             endpoint,
@@ -154,6 +154,7 @@ def _build_context_from_api(data: dict, rejected_stats: dict, run_meta: dict) ->
 
 def send_digest(
     railway_url: str,
+    user_id: int,
     profile_id: str,
     ingest_key: str,
     rejected_stats: dict,
@@ -164,7 +165,8 @@ def send_digest(
 
     Args:
         railway_url:    Base URL of the Railway API.
-        profile_id:     User profile ID — used in GET /api/digest/{profile_id}.
+        user_id:        Integer user ID — used in GET /api/digest/{user_id}.
+        profile_id:     String profile ID — used for logging only.
         ingest_key:     Value for X-Ingest-Key header.
         rejected_stats: Counts by rejection reason from prefilter_jobs().
         run_meta:       {"duration_s", "cost_usd", "n_searches", "n_watchlist", "date"}.
@@ -194,7 +196,7 @@ def send_digest(
         print("⚠  No recipient email (set user.email in profile or NOTIFY_EMAIL) — skipping")
         return False
 
-    data = fetch_digest(railway_url, profile_id, ingest_key)
+    data = fetch_digest(railway_url, user_id, ingest_key)
     if data is None:
         print("⚠  Could not fetch digest from API — skipping email")
         return False

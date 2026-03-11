@@ -105,20 +105,20 @@ def _make_digest_jobs(tier_a=1, tier_b=1, tier_c=0):
 
 
 class TestFetchDigest:
-    """fetch_digest(): GET /api/digest/{profile_id} via httpx."""
+    """fetch_digest(): GET /api/digest/{user_id} via httpx."""
 
     def test_returns_json_on_success(self):
         from notifier import fetch_digest
 
         with patch("httpx.get", return_value=_make_mock_response(_DIGEST_RESPONSE)):
-            result = fetch_digest("https://example.com", "juan", "secret")
+            result = fetch_digest("https://example.com", 1, "secret")
         assert result == _DIGEST_RESPONSE
 
     def test_returns_none_on_connection_error(self):
         from notifier import fetch_digest
 
         with patch("httpx.get", side_effect=httpx.ConnectError("boom")):
-            result = fetch_digest("https://example.com", "juan", "secret")
+            result = fetch_digest("https://example.com", 1, "secret")
         assert result is None
 
     def test_returns_none_on_http_error(self):
@@ -127,14 +127,14 @@ class TestFetchDigest:
         mock = MagicMock()
         mock.raise_for_status.side_effect = httpx.HTTPStatusError("404", request=MagicMock(), response=MagicMock())
         with patch("httpx.get", return_value=mock):
-            result = fetch_digest("https://example.com", "juan", "secret")
+            result = fetch_digest("https://example.com", 1, "secret")
         assert result is None
 
     def test_uses_ingest_key_header(self):
         from notifier import fetch_digest
 
         with patch("httpx.get", return_value=_make_mock_response(_DIGEST_RESPONSE)) as mock_get:
-            fetch_digest("https://example.com", "juan", "mykey")
+            fetch_digest("https://example.com", 1, "mykey")
         headers = mock_get.call_args[1]["headers"]
         assert headers["X-Ingest-Key"] == "mykey"
 
@@ -142,7 +142,7 @@ class TestFetchDigest:
         from notifier import fetch_digest
 
         with patch("httpx.get", return_value=_make_mock_response(_DIGEST_RESPONSE)) as mock_get:
-            fetch_digest("http://example.com", "juan", "key")
+            fetch_digest("http://example.com", 1, "key")
         url_called = mock_get.call_args[0][0]
         assert url_called.startswith("https://")
 
@@ -150,9 +150,9 @@ class TestFetchDigest:
         from notifier import fetch_digest
 
         with patch("httpx.get", return_value=_make_mock_response(_DIGEST_RESPONSE)) as mock_get:
-            fetch_digest("https://example.com", "juan", "key")
+            fetch_digest("https://example.com", 1, "key")
         url_called = mock_get.call_args[0][0]
-        assert url_called == "https://example.com/api/digest/juan"
+        assert url_called == "https://example.com/api/digest/1"
 
 
 # ── TestFlattenApiJob ─────────────────────────────────────────────────────────
