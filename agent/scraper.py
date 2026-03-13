@@ -173,6 +173,7 @@ def run_scraper(config_path="config/searches.yaml") -> list[RawJob]:
 
                 if job_id not in all_jobs:
                     source = _sanitize_str(row.get("site", "")) or "unknown"
+                    emails_raw = _or_none(row.get("emails"))
                     all_jobs[job_id] = RawJob(
                         id=job_id,
                         title=title,
@@ -203,9 +204,7 @@ def run_scraper(config_path="config/searches.yaml") -> list[RawJob]:
                         job_level=_or_none(row.get("job_level")),
                         job_function=_or_none(row.get("job_function")),
                         # Contact
-                        emails=(
-                            [e.strip() for e in row["emails"].split(",") if e.strip()] if row.get("emails") else None
-                        ),
+                        emails=([e.strip() for e in emails_raw.split(",") if e.strip()] if emails_raw else None),
                     )
 
             print(f"   Found {len(results)} results ({len(all_jobs)} unique total)")
@@ -265,6 +264,7 @@ def run_scraper_from_queries(queries: list[dict]) -> list[RawJob]:
                 job_id = make_job_id(title, company)
                 if job_id not in all_jobs:
                     source = _sanitize_str(row.get("site", "")) or "unknown"
+                    emails_raw = _or_none(row.get("emails"))
                     all_jobs[job_id] = RawJob(
                         id=job_id,
                         title=title,
@@ -289,9 +289,7 @@ def run_scraper_from_queries(queries: list[dict]) -> list[RawJob]:
                         company_logo=_or_none(row.get("company_logo")),
                         job_level=_or_none(row.get("job_level")),
                         job_function=_or_none(row.get("job_function")),
-                        emails=(
-                            [e.strip() for e in row["emails"].split(",") if e.strip()] if row.get("emails") else None
-                        ),
+                        emails=([e.strip() for e in emails_raw.split(",") if e.strip()] if emails_raw else None),
                     )
             print(f"   Found {len(results)} results ({len(all_jobs)} unique total)")
         except Exception as e:
