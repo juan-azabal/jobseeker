@@ -640,6 +640,7 @@ Phase UID — User ID Migration (complete: 2026-03-11)
 ### Known Bugs
 
 ### Resolved
+- **P23** (2026-03-16) — Empty email digests for Juan and Noura for 2+ days. Root cause: Phase UID migration (024) moved only ~50/84 seen_job_ids from DB; file-based history (`config/seen_ids/*.txt`) was never loaded into DB. Old jobs passed prefilter daily, re-synced to Railway with original `first_seen` dates → digest `first_seen >= today` returned 0. Fixed by migration 025: seeds `seen_job_ids` with all current jobs for every active user (has existing seen_ids OR user_job_scores).
 - **P22** (2026-02-28) — Agent `_heuristic_score()` location block used only `"europe" in restriction` for eligibility but not `_HOME_REGIONS` — "EU only" gave +2 instead of +8 for EU users. Fixed: now mirrors API's `any(r.lower() in restriction_lower for r in _HOME_REGIONS)` check.
 - **P21** (2026-02-28) — API `_compute_eligibility_penalty()` and `_is_geo_restricted_remote` lacked `is_pure_timezone()` check — "CET timezone hours" triggered -20 penalty + +2 location (score 0) instead of +10. Fixed by adding `is_pure_timezone()` guard in both.
 - **P20** (2026-02-27) — CV Replace was destructive: `POST /replace-cv` endpoint overwrote existing profile with LLM extraction. Fixed: new `PATCH /replace-cv` does server-side additive merge via `merge_profiles()`; weights/skills/domains from existing profile never lost.

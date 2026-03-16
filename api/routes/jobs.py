@@ -2,7 +2,7 @@ import json
 import os
 import re
 import tempfile
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -54,9 +54,10 @@ def _period_to_date_from(period: str | None) -> str | None:
     days = PERIOD_DAYS.get(period)
     if days is None:
         return None
+    utc_today = datetime.now(timezone.utc).date()
     if days == 0:
-        return date.today().isoformat()
-    return (date.today() - timedelta(days=days)).isoformat()
+        return utc_today.isoformat()
+    return (utc_today - timedelta(days=days)).isoformat()
 
 
 def _is_remote_requiring_reloc(job: dict, home_locations: list[str], home_regions: list[str]) -> bool:
