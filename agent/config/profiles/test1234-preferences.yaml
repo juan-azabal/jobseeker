@@ -33,13 +33,12 @@ prefilter:
   - GetApp
   - Software Advice
   - G2
-  - OldCorp
   location:
     accept_remote: true
     accept_hybrid: true
     accept_onsite_cities:
-    - France
-    reject_if_requires_relocation_outside: France
+    - Spain
+    reject_if_requires_relocation_outside: Spain
 scoring:
   auto_generate_package: 65
   manual_review: 50
