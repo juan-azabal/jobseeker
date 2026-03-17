@@ -38,6 +38,6 @@ scoring:
   manual_review: 50
   auto_reject: 50
 salary:
-  min_eur: 60000
-  max_eur: 100000
+  min_eur: 50000
+  max_eur: 90000
   currency: EUR
