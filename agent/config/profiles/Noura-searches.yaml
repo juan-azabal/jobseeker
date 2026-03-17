@@ -1,0 +1,47 @@
+searches:
+- term: Product Manager SaaS B2B
+  location: Spain
+  sites:
+  - indeed
+  - google
+  results_wanted: 20
+  hours_old: 72
+- term: Product Manager fintech payments
+  location: Spain
+  sites:
+  - indeed
+  - google
+  results_wanted: 20
+  hours_old: 72
+- term: Product Manager ecommerce marketplace
+  location: Spain
+  sites:
+  - indeed
+  - google
+  results_wanted: 20
+  hours_old: 72
+- term: Product Manager remote
+  location: Spain
+  sites:
+  - linkedin
+  results_wanted: 15
+  hours_old: 72
+- term: Product Manager SaaS B2B
+  location: ''
+  sites:
+  - linkedin
+  results_wanted: 10
+  hours_old: 72
+- term: Senior Product Manager remote
+  location: Spain
+  sites:
+  - linkedin
+  results_wanted: 15
+  hours_old: 72
+- term: Product Manager Product Management
+  location: Spain
+  sites:
+  - linkedin
+  results_wanted: 15
+  hours_old: 72
+is_remote: true
