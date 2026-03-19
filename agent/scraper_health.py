@@ -247,7 +247,7 @@ def health_report_to_dict(report: HealthReport) -> dict:
 def send_health_alert(report: HealthReport) -> bool:
     """Send health alert email if any source is warning or critical.
 
-    Recipient: ADMIN_EMAIL env var, falls back to NOTIFY_EMAIL.
+    Recipient: ADMIN_EMAILS env var, falls back to NOTIFY_EMAIL.
     Returns True if sent, False if skipped or failed. Never raises.
     """
     import os
@@ -255,7 +255,7 @@ def send_health_alert(report: HealthReport) -> bool:
     if report.overall == OK:
         return False
 
-    to_email = os.getenv("ADMIN_EMAIL") or os.getenv("NOTIFY_EMAIL")
+    to_email = os.getenv("ADMIN_EMAILS") or os.getenv("NOTIFY_EMAIL")
     if not to_email:
         return False
 

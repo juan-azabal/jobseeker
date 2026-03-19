@@ -287,14 +287,14 @@ class TestSendHealthAlert:
     def test_returns_false_when_no_recipient(self, monkeypatch):
         from scraper_health import send_health_alert
 
-        monkeypatch.delenv("ADMIN_EMAIL", raising=False)
+        monkeypatch.delenv("ADMIN_EMAILS", raising=False)
         monkeypatch.delenv("NOTIFY_EMAIL", raising=False)
         assert send_health_alert(self._report()) is False
 
     def test_calls_send_smtp_with_subject(self, monkeypatch):
         from scraper_health import send_health_alert
 
-        monkeypatch.setenv("ADMIN_EMAIL", "admin@example.com")
+        monkeypatch.setenv("ADMIN_EMAILS", "admin@example.com")
         monkeypatch.setenv("GMAIL_ADDRESS", "sender@gmail.com")
         monkeypatch.setenv("GMAIL_APP_PASSWORD", "secret")
 
@@ -310,7 +310,7 @@ class TestSendHealthAlert:
     def test_falls_back_to_notify_email(self, monkeypatch):
         from scraper_health import send_health_alert
 
-        monkeypatch.delenv("ADMIN_EMAIL", raising=False)
+        monkeypatch.delenv("ADMIN_EMAILS", raising=False)
         monkeypatch.setenv("NOTIFY_EMAIL", "fallback@example.com")
         monkeypatch.setenv("GMAIL_ADDRESS", "sender@gmail.com")
         monkeypatch.setenv("GMAIL_APP_PASSWORD", "secret")

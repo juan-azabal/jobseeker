@@ -56,7 +56,7 @@
 
 ## Scraper Health
 - `agent/scraper_health.py`: pure collection + evaluation functions; `send_health_alert()` is best-effort (never raises)
-- Alert recipient: `ADMIN_EMAIL` env var, falls back to `NOTIFY_EMAIL`
+- Alert recipient: `ADMIN_EMAILS` env var (pre-existing), falls back to `NOTIFY_EMAIL`
 - GHA annotations printed to stdout (`::warning::` / `::error::`) — no workflow file changes needed
 - Exit 1 only when ALL sources are critical (entire scrape failed, not a single source)
 - Thresholds: `THRESHOLDS` dict in `scraper_health.py` — change there, tests will catch regressions
