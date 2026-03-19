@@ -39,7 +39,7 @@ Job search platform: web CRM (browse, filter, manage scored jobs) + autonomous s
   - `api/geo.py` — geographic region utilities (API-side copy of agent/geo.py)
   - `api/onboard_utils.py` — CV parsing + profile YAML generation (extracted from agent/onboard.py)
   - `api/prompts/` — LLM prompts for API-side features (onboard-extraction.md)
-  - `api/cv/` — CV generation pipeline (plan, prompt, llm, validator, docx_builder, ats_audit, select, render, rewrite)
+  - `api/cv/` — CV generation pipeline (plan, prompt, llm, validator, content_checks, docx_builder, ats_audit, select, render, rewrite)
   - `api/analytics.py` — PostHog Python client (init, capture, identify_user, capture_exception)
   - `api/logging_config.py` — structlog configuration (JSON in CI, ConsoleRenderer locally)
   - `api/db/snapshot.py` — async `download_prod_snapshot()`: streams SQLite backup from prod, validates magic bytes, atomic replace
@@ -483,12 +483,21 @@ Phase UID — User ID Migration (complete: 2026-03-11)
 - load_profile_data(user_id: int | None): DB-only load via get_profile_yaml_by_user_id; _load_user_geo removed
 - All scoring call sites use user["id"] directly; 975 backend tests passing
 
+Phase QC — Deterministic Quality Checks (complete: 2026-03-19)
+- Phase 1: CV content assertions — `api/cv/content_checks.py` with company hallucination check (error) + length bounds (warning); Master CV path wired with real `validate_cv()` + fix loop (was hardcoded `passed: True`); Legacy path enriched with content checks; PostHog `cv_generated` enriched with `warning_codes`, `error_codes`, `cv_line_count`; structlog warnings/errors post-validation
+- Phase 2: Parse quality monitoring — `agent/parse_quality.py` with `compute_parse_metrics()` (null_field_rates for domain/seniority/location_type/skills, parse_error_rate); wired into pipeline after parse step; structlog `parse_batch_quality` event + PostHog `agent_parse_batch_quality`; alert thresholds (error_rate > 0.2, null_rate > 0.3)
+- Phase 3: Golden prompt tests — 3 scenario fixtures in `tests/fixtures/cv_golden.py`; 17 regression tests in `tests/test_cv_golden.py` covering plan structure, prompt content, validator edge cases; CI-safe (no LLM env vars)
+- GATE QC: 1011 backend tests + 7 agent parse_quality tests passing
+
 ### Current
 - Phase N — Onboarding UX for new profile fields (role_type, geography, searches, preferences)
 - Phase R — Refactor & Test Coverage
 - Phase F — Ship: Dockerfile, README, deploy
 
 ### Decisions
+- Content checks in separate file (Phase QC): `api/cv/content_checks.py` instead of extending `validator.py` (at 394 lines). `extract_cv_companies()` duplicates regex from `plan.py:_parse_companies_from_experience()` — SYNC RULE: update both if regex changes. Endpoint merges results from `validate_cv()` + content check functions.
+- Master CV validation (Phase QC): `validate_cv(markdown, None)` fires slop + gerund checks only (no plan dict in Master CV path). Content checks (hallucination, length) are plan-independent and provide the main value. Known companies sourced from `master_cv["work"][*]["company"]`.
+- Parse quality as standalone module (Phase QC): `agent/parse_quality.py` with pure functions called from pipeline.py after `parse_all()`. No return type change on `parse_all()`. Skills backward compat: checks `truly_required` first, falls back to `must_have_skills`.
 - load_profile_data signature (2026-03-11): accepts `user_id: int | None`, reads `profile_yaml` from `users` table via `get_profile_yaml_by_user_id`. Removed filesystem fallback and `_load_profile_yaml_from_db`. `_load_user_geo` removed from `api/routes/jobs.py` (redundant — `load_profile_data` already returns `home_locations` + `home_regions`). All call sites use `user["id"]` directly.
 - User-id migration scope (2026-03-11): `profile_id` stays in `users` table as human-readable label for GH file paths (cv.md, seen_ids txt), display, and logging. All DB FK relationships use `users.id` (int). No migration of `profile_id` column planned — it's a stable editable label.
 - Agent profile listing (2026-03-10): list-profiles GHA job calls GET /api/agent/profiles (Railway DB) instead of reading YAML files from repo. Active profile = user has profile_id + profile_yaml in DB AND yaml.user.active != false. Fallback to agent/scripts/list_active_profiles.py if Railway unreachable. get_active_profile_ids() in api/db/queries.py is the single source of truth for this filter.

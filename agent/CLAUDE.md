@@ -47,6 +47,7 @@ list-profiles → digest (sequential loop per profile) → persist-seen-ids → 
 ├── scorer.py            # gpt-4o: scores job fit against CV via ChromaDB knowledge base.
 ├── notifier.py          # Gmail SMTP digest sender via Jinja2 template.
 ├── gap_tracker.py       # Persists gap/strength data to data/gap_history/.
+├── parse_quality.py     # Batch parse metrics: null rates, error rates, alert thresholds.
 ├── onboard.py           # CV (.docx) → profile YAML + knowledge/cv.md.
 ├── user_config.py       # Profile loading + seniority weight computation.
 ├── geo.py               # Geographic region detection, timezone classification, language mapping.
