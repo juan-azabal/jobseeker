@@ -453,6 +453,17 @@ def run_pipeline(
 
     cache = {} if opts.full_refresh else load_cache()
     cached_jobs, new_jobs, cache, n_parsed = _load_and_parse(passed, cache, opts.full_refresh, opts.rescore_only)
+    if n_parsed > 0:
+        from parse_quality import compute_parse_metrics  # noqa: PLC0415
+
+        pq = compute_parse_metrics(new_jobs)
+        logger.info("parse_batch_quality", **pq)
+        _capture(profile_id, "agent_parse_batch_quality", pq)
+        if pq["parse_error_rate"] > 0.2:
+            logger.error("parse_error_rate_high", rate=pq["parse_error_rate"])
+        for _fld, _rate in pq.get("null_field_rates", {}).items():
+            if _rate > 0.3:
+                logger.warning("null_field_rate_high", field=_fld, rate=_rate)
     scored_jobs, heuristic_only, n_scored = _gate_and_score(new_jobs, profile, opts.skip_scoring)
 
     all_new = scored_jobs + heuristic_only
