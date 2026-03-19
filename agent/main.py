@@ -24,6 +24,25 @@ from pipeline import run_pipeline, PipelineOptions, _to_dicts, _log_merge_stats
 configure_logging()
 logger = structlog.get_logger("agent.main")
 
+_ph_client = None
+
+
+def _capture(event: str, props: dict) -> None:
+    """Fire a PostHog server-side event from main. No-op when POSTHOG_API_KEY is absent."""
+    global _ph_client
+    key = os.environ.get("POSTHOG_API_KEY")
+    if not key:
+        return
+    try:
+        if _ph_client is None:
+            from posthog import Posthog  # noqa: PLC0415
+
+            host = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com")
+            _ph_client = Posthog(key, host=host)
+        _ph_client.capture("system", event, props)
+    except Exception:
+        pass
+
 
 def _get_api_config() -> tuple[str, str]:
     """Return (railway_url, ingest_key) from env. Raises if missing."""
@@ -54,8 +73,12 @@ def _union_target_countries(profiles: list[tuple[int, str, dict]]) -> list[str]:
 
 def _unified_scrape(
     profiles: list[tuple[int, str, dict]], watchlist_path: str = "config/watchlist.yaml"
-) -> tuple[list[dict], int]:
-    """Scrape jobs once across all profiles. Returns (jobs_as_dicts, geo_rejected_count)."""
+) -> tuple[list[dict], int, list, dict[str, str]]:
+    """Scrape jobs once across all profiles.
+
+    Returns (jobs_as_dicts, geo_rejected_count, raw_jobs_before_merge, scrape_errors).
+    scrape_errors maps source name to exception message for failed scrapers.
+    """
     from search_generator import generate_unified_queries  # noqa: PLC0415
     from scraper import run_scraper_from_queries  # noqa: PLC0415
     from ats_scraper import run_watchlist_scraper  # noqa: PLC0415
@@ -66,6 +89,7 @@ def _unified_scrape(
     queries = generate_unified_queries(profiles)
     print(f"\nUnified scraping: {len(queries)} queries across {len(profiles)} profile(s)")
 
+    scrape_errors: dict[str, str] = {}
     all_raw = run_scraper_from_queries(queries)
     geo_rejected = 0
     try:
@@ -73,11 +97,13 @@ def _unified_scrape(
         all_raw.extend(ats_jobs)
         geo_rejected += ats_geo
     except Exception as e:
+        scrape_errors["ats"] = str(e)
         print(f"\nWatchlist error (continuing without): {e}")
     try:
         wttj_countries = target_countries or ["ES"]
         all_raw.extend(run_wttj_scraper(target_countries=wttj_countries))
     except Exception as e:
+        scrape_errors["wttj"] = str(e)
         print(f"\nWTTJ error (continuing without): {e}")
 
     raw_jobs = merge_jobs(all_raw)
@@ -85,7 +111,45 @@ def _unified_scrape(
     jobs = _to_dicts(raw_jobs)
     logger.info("unified_scrape_complete", total_jobs=len(jobs), n_queries=len(queries))
     print(f"\nCombined: {len(jobs)} total jobs")
-    return jobs, geo_rejected
+    return jobs, geo_rejected, all_raw, scrape_errors
+
+
+def _health_report_summary(report) -> dict:
+    """Serialize HealthReport fields for structlog."""
+    return {
+        "overall": report.overall,
+        "n_ok": sum(1 for s in report.sources if s.verdict == "ok"),
+        "n_warning": sum(1 for s in report.sources if s.verdict == "warning"),
+        "n_critical": sum(1 for s in report.sources if s.verdict == "critical"),
+    }
+
+
+def _emit_health_alerts(health_report) -> None:
+    """Print GHA annotations, send alert email, and exit 1 if all sources critical.
+
+    Best-effort: never raises, never fails the pipeline.
+    """
+    try:
+        from scraper_health import (  # noqa: PLC0415
+            format_gha_annotations,
+            send_health_alert,
+            CRITICAL,
+        )
+
+        for line in format_gha_annotations(health_report):
+            print(line)
+
+        if health_report.overall != "ok":
+            send_health_alert(health_report)
+
+        all_critical = health_report.sources and all(s.verdict == CRITICAL for s in health_report.sources)
+        if all_critical:
+            logger.error("all_scrapers_critical", overall=health_report.overall)
+            sys.exit(1)
+    except SystemExit:
+        raise
+    except Exception as e:
+        logger.warning("health_alert_failed", error=str(e))
 
 
 def main():
@@ -136,7 +200,20 @@ def main():
         profiles_to_score = all_profiles
 
     # Run unified scraping ONCE across all active profiles
-    pre_scraped_jobs, _geo_rejected = _unified_scrape(all_profiles)
+    pre_scraped_jobs, _geo_rejected, raw_jobs, scrape_errors = _unified_scrape(all_profiles)
+
+    # Evaluate scraper health immediately after scraping
+    health_report = None
+    try:
+        from scraper_health import collect_source_meta, evaluate_health, health_report_to_dict  # noqa: PLC0415
+
+        metas = collect_source_meta(raw_jobs, scrape_errors)
+        health_report = evaluate_health(metas)
+        summary = _health_report_summary(health_report)
+        logger.info("scraper_health", **summary)
+        _capture("scraper_health_check", health_report_to_dict(health_report))
+    except Exception as e:
+        logger.warning("scraper_health_check_failed", error=str(e))
 
     if full_refresh:
         mode = "refresh"
@@ -159,6 +236,10 @@ def main():
             send_email=send_email,
         )
         run_pipeline(uid, profile_id, profile, paths, opts, pre_scraped_jobs=pre_scraped_jobs)
+
+    # Post-loop: surface health issues and alert
+    if health_report is not None:
+        _emit_health_alerts(health_report)
 
 
 if __name__ == "__main__":
