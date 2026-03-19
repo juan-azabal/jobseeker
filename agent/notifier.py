@@ -152,6 +152,38 @@ def _build_context_from_api(data: dict, rejected_stats: dict, run_meta: dict) ->
     }
 
 
+def send_smtp(to: str, subject: str, html_body: str) -> bool:
+    """Send an HTML email via Gmail SMTP. Returns True on success, False on failure. Never raises.
+
+    Reads GMAIL_ADDRESS and GMAIL_APP_PASSWORD from env.
+    """
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    gmail_address = os.getenv("GMAIL_ADDRESS")
+    gmail_password = os.getenv("GMAIL_APP_PASSWORD")
+    if not gmail_address or not gmail_password:
+        print("⚠  GMAIL_ADDRESS or GMAIL_APP_PASSWORD not set — skipping email")
+        return False
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"JobSeeker <{gmail_address}>"
+        msg["To"] = to
+        msg.attach(MIMEText(html_body, "html"))
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(gmail_address, gmail_password)
+            server.sendmail(gmail_address, to, msg.as_string())
+        print(f"\n📧 Email sent → {to}")
+        return True
+    except Exception as e:
+        print(f"⚠  Gmail SMTP error: {e}")
+        return False
+
+
 def send_digest(
     railway_url: str,
     user_id: int,
@@ -176,20 +208,13 @@ def send_digest(
     Returns:
         True if email sent, False on any failure. Never raises.
     """
-    import smtplib
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
-
-    gmail_address = os.getenv("GMAIL_ADDRESS")
-    gmail_password = os.getenv("GMAIL_APP_PASSWORD")
-
     to_email = None
     if profile:
         to_email = (profile.get("user") or {}).get("email")
     if not to_email:
         to_email = os.getenv("NOTIFY_EMAIL")
 
-    if not gmail_address or not gmail_password:
+    if not os.getenv("GMAIL_ADDRESS") or not os.getenv("GMAIL_APP_PASSWORD"):
         print("⚠  GMAIL_ADDRESS or GMAIL_APP_PASSWORD not set — skipping email notification")
         return False
     if not to_email:
@@ -215,21 +240,4 @@ def send_digest(
     headline = context["headline"]
     subject = f"JobSeeker · {n_apply} nuevos roles · {headline} — {run_date}"
 
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"JobSeeker <{gmail_address}>"
-        msg["To"] = to_email
-        msg.attach(MIMEText(html_body, "html"))
-
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(gmail_address, gmail_password)
-            server.sendmail(gmail_address, to_email, msg.as_string())
-
-        print(f"\n📧 Email sent → {to_email}")
-        return True
-    except Exception as e:
-        print(f"⚠  Gmail SMTP error: {e}")
-        return False
+    return send_smtp(to_email, subject, html_body)

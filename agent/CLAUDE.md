@@ -47,6 +47,8 @@ list-profiles → digest (sequential loop per profile) → persist-seen-ids → 
 ├── scorer.py            # gpt-4o: scores job fit against CV via ChromaDB knowledge base.
 ├── notifier.py          # Gmail SMTP digest sender via Jinja2 template.
 ├── gap_tracker.py       # Persists gap/strength data to data/gap_history/.
+├── parse_quality.py     # Batch parse metrics: null rates, error rates, alert thresholds.
+├── scraper_health.py    # Scraper health monitoring: per-source metrics, thresholds, GHA annotations, alert email.
 ├── onboard.py           # CV (.docx) → profile YAML + knowledge/cv.md.
 ├── user_config.py       # Profile loading + seniority weight computation.
 ├── geo.py               # Geographic region detection, timezone classification, language mapping.
@@ -69,7 +71,8 @@ list-profiles → digest (sequential loop per profile) → persist-seen-ids → 
 ├── docs/decisions/      # ADRs (001-007) — architectural trade-off reasoning
 ├── data/gap_history/    # Runtime JSONL gap data (gitignored)
 ├── templates/
-│   └── email_digest.html.j2  # DO NOT regenerate — design is final
+│   ├── email_digest.html.j2          # DO NOT regenerate — design is final
+│   └── scraper_health_alert.html.j2  # Ops alert email for scraper degradation
 ├── scripts/
 │   ├── build_ingest_payload.py  # Build JSON payload for Railway ingest
 │   ├── list_active_profiles.py  # List active profiles for GHA matrix
