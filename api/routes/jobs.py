@@ -623,6 +623,7 @@ def generate_cv_endpoint(
     from api.cv.docx_builder import build_docx
     from api.cv.ats_audit import audit_docx
     from api.cv.validator import validate_cv, build_fix_prompt
+    from api.cv.content_checks import check_company_hallucination, check_length_bounds
 
     row = get_job_by_id(_db_path(), job_id)
     if row is None:
@@ -694,15 +695,47 @@ def generate_cv_endpoint(
                     user_id=user["id"],
                     entries=len(selected["work"]),
                 )
+                known_companies = [e.get("company", "") for e in master_cv.get("work", []) if e.get("company")]
+                validation = validate_cv(cv_markdown, None)
+                validation["errors"].extend(check_company_hallucination(cv_markdown, known_companies))
+                validation["warnings"].extend(check_length_bounds(cv_markdown))
                 fix_applied = False
-                validation = {"passed": True, "warnings": []}
+                if not validation["passed"]:
+                    try:
+                        fix_sys, fix_usr = build_fix_prompt(cv_markdown, validation["errors"])
+                        cv_markdown = generate_cv(fix_sys, fix_usr, distinct_id=str(user["id"]))
+                        fix_applied = True
+                    except Exception:
+                        pass
+                    validation = validate_cv(cv_markdown, None)
+                    validation["errors"].extend(check_company_hallucination(cv_markdown, known_companies))
+                    validation["warnings"].extend(check_length_bounds(cv_markdown))
+                if validation.get("warnings"):
+                    logger.warning(
+                        "cv_validation_warnings",
+                        job_id=job_id,
+                        pipeline="master_cv",
+                        codes=[w["code"] for w in validation["warnings"]],
+                    )
+                if validation.get("errors") and not validation["passed"]:
+                    logger.error(
+                        "cv_validation_errors",
+                        job_id=job_id,
+                        pipeline="master_cv",
+                        codes=[e["code"] for e in validation["errors"]],
+                    )
                 tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
                 tmp_path = tmp.name
                 tmp.close()
                 build_docx(cv_markdown, tmp_path)
                 audit_result = audit_docx(tmp_path)
                 ats_header = "pass" if audit_result["passed"] else f"fail:{len(audit_result['violations'])} violations"
-                cv_validation_header = _json.dumps({"passed": True, "warning_count": 0})
+                cv_validation_header = _json.dumps(
+                    {
+                        "passed": validation["passed"],
+                        "warning_count": len(validation.get("warnings", [])),
+                    }
+                )
                 company_slug = _slugify(row.get("company", "company"))
                 title_slug = _slugify(row.get("title", "cv"), max_len=20)
                 filename = f"cv-{company_slug}-{title_slug}.docx"
@@ -719,16 +752,19 @@ def generate_cv_endpoint(
                         "provider": provider,
                         "model": model,
                         "pipeline": "master_cv",
-                        "validation_passed": True,
-                        "fix_applied": False,
+                        "validation_passed": validation["passed"],
+                        "fix_applied": fix_applied,
                         "ats_passed": audit_result["passed"],
                         "ats_violation_count": len(audit_result.get("violations", [])),
+                        "warning_codes": [w["code"] for w in validation.get("warnings", [])],
+                        "error_codes": [e["code"] for e in validation.get("errors", [])],
+                        "cv_line_count": len([ln for ln in cv_markdown.splitlines() if ln.strip()]),
                     },
                 )
                 response_headers = {
                     "X-ATS-Audit": ats_header,
                     "X-CV-Validation": cv_validation_header,
-                    "X-CV-Fix-Applied": "false",
+                    "X-CV-Fix-Applied": "true" if fix_applied else "false",
                 }
                 if cv_plan_header:
                     response_headers["X-CV-Plan"] = cv_plan_header
@@ -767,7 +803,10 @@ def generate_cv_endpoint(
         )
 
     fix_applied = False
+    known_companies = list((plan or {}).get("bullet_allocation", {}).keys())
     validation = validate_cv(cv_markdown, plan)
+    validation["errors"].extend(check_company_hallucination(cv_markdown, known_companies))
+    validation["warnings"].extend(check_length_bounds(cv_markdown))
 
     if not validation["passed"]:
         try:
@@ -778,6 +817,20 @@ def generate_cv_endpoint(
             pass
 
         validation = validate_cv(cv_markdown, plan)
+        validation["errors"].extend(check_company_hallucination(cv_markdown, known_companies))
+        validation["warnings"].extend(check_length_bounds(cv_markdown))
+
+    if validation.get("warnings"):
+        logger.warning(
+            "cv_validation_warnings",
+            job_id=job_id,
+            pipeline="legacy",
+            codes=[w["code"] for w in validation["warnings"]],
+        )
+    if validation.get("errors") and not validation["passed"]:
+        logger.error(
+            "cv_validation_errors", job_id=job_id, pipeline="legacy", codes=[e["code"] for e in validation["errors"]]
+        )
 
     tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
     tmp_path = tmp.name
@@ -814,6 +867,9 @@ def generate_cv_endpoint(
             "fix_applied": fix_applied,
             "ats_passed": audit_result["passed"],
             "ats_violation_count": len(audit_result.get("violations", [])),
+            "warning_codes": [w["code"] for w in validation.get("warnings", [])],
+            "error_codes": [e["code"] for e in validation.get("errors", [])],
+            "cv_line_count": len([ln for ln in cv_markdown.splitlines() if ln.strip()]),
         },
     )
 
